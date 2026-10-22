@@ -1,0 +1,27 @@
+#include <windows.h>
+#include "mlash_version.h"
+1 ICON "mlash.ico"
+1 VERSIONINFO
+ FILEVERSION MLASH_FILE_VERSION
+ PRODUCTVERSION MLASH_FILE_VERSION
+ FILEOS VOS_NT_WINDOWS32
+ FILETYPE VFT_APP
+BEGIN
+ BLOCK "StringFileInfo"
+ BEGIN
+  BLOCK "040904b0"
+  BEGIN
+   VALUE "CompanyName", "Mlash\0"
+   VALUE "FileDescription", "Mlash\0"
+   VALUE "FileVersion", MLASH_FILE_VERSION_STRING
+   VALUE "InternalName", "Mlash\0"
+   VALUE "OriginalFilename", "Mlash.exe\0"
+   VALUE "ProductName", "Mlash\0"
+   VALUE "ProductVersion", MLASH_FILE_VERSION_STRING
+  END
+ END
+ BLOCK "VarFileInfo"
+ BEGIN
+  VALUE "Translation", 0x409, 1200
+ END
+END

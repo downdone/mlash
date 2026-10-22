@@ -1,0 +1,100 @@
+{
+  "files": [
+    {
+      "id": "youtube",
+      "url": "https://raw.githubusercontent.com/simple-icons/simple-icons/13.21.0/icons/youtube.svg",
+      "source": "source/youtube.svg",
+      "source_sha256": "5038808acbbc4e6edda16cbeb1cc6dec80e4e4ee4e227e039c41229fa222aa8c",
+      "license": "CC0-1.0",
+      "sha256": "7aa332f16ba0035d30658d1d93175173424471a32d63119285b63e625e4a0ed1"
+    },
+    {
+      "id": "chatgpt",
+      "url": "https://raw.githubusercontent.com/simple-icons/simple-icons/13.21.0/icons/openai.svg",
+      "source": "source/chatgpt.svg",
+      "source_sha256": "2b4a04ddc2395b20d168694d3850ce2050a702c4a0cdeb4d8b31b9a970481a8c",
+      "license": "CC0-1.0",
+      "sha256": "eb36a09e3efdef2743ac0a324b23f11299cb57dc3caeabd57b613c80fbbfa7fe"
+    },
+    {
+      "id": "google",
+      "url": "https://www.gstatic.com/images/branding/product/1x/googleg_48dp.png",
+      "source": "source/google.png",
+      "source_sha256": "07720415844812cd39f10d2cfb6943092539552f8308c9fad970ed75eb08bbe2",
+      "license": "Respective brand owner; destination identifier",
+      "sha256": "55bbd703c352287cbe1e6a30b89acbea93f3db153574b0be714825601b7d991e"
+    },
+    {
+      "id": "github",
+      "url": "https://raw.githubusercontent.com/simple-icons/simple-icons/13.21.0/icons/github.svg",
+      "source": "source/github.svg",
+      "source_sha256": "3bf8cceead820aec50d4ee825a3fd02c5a1cd6665cc9cf4cbf3d9c8861a204bb",
+      "license": "CC0-1.0",
+      "sha256": "b8de68c7217253a5c4c418e5d7f0aa3e08f8cc246ce23bf6c70da37c84c19bc7"
+    },
+    {
+      "id": "x",
+      "url": "https://raw.githubusercontent.com/simple-icons/simple-icons/13.21.0/icons/x.svg",
+      "source": "source/x.svg",
+      "source_sha256": "be03adbfce4a46c4e42eae5ee7b5e676b59627fa25e15a317e453bb18153ff5f",
+      "license": "CC0-1.0",
+      "sha256": "2c21c451a86f82c2c12d29880294f1747056575a00e0fcfa1c8504b65492b024"
+    },
+    {
+      "id": "netflix",
+      "url": "https://raw.githubusercontent.com/simple-icons/simple-icons/13.21.0/icons/netflix.svg",
+      "source": "source/netflix.svg",
+      "source_sha256": "953016177fafc83dc8a51868a584600b39dfeff652a07be028a61283915df547",
+      "license": "CC0-1.0",
+      "sha256": "2d373172d6506899e6f381a1b713b409255d4bf44165307456b10c9d29246101"
+    },
+    {
+      "id": "disney",
+      "url": "https://www.disneyplus.com/favicon.ico",
+      "source": "source/disney.ico",
+      "source_sha256": "9ed7d0dea2d3bdf1e60430939e9d99e5f8cdfec196def106c56c486b4d743e21",
+      "license": "Respective brand owner; destination identifier",
+      "sha256": "cd8032b6499d0828d5dfd381b224f940fec9afb17594e570ba658c1ab2821e80"
+    },
+    {
+      "id": "tiktok",
+      "url": "https://raw.githubusercontent.com/simple-icons/simple-icons/13.21.0/icons/tiktok.svg",
+      "source": "source/tiktok.svg",
+      "source_sha256": "6f54ac8d325faacea8935bdc44cbed60206a6b408641799e5fea1cba7c1a0af7",
+      "license": "CC0-1.0",
+      "sha256": "d0b87493e2de446e006d05305cd5c58fea6d34f36936b129efee47ccdf41a4fa"
+    },
+    {
+      "id": "facebook",
+      "url": "https://raw.githubusercontent.com/simple-icons/simple-icons/13.21.0/icons/facebook.svg",
+      "source": "source/facebook.svg",
+      "source_sha256": "b06d18d844ed621b89faffb1a33440cc0ec4f1ffea9f36191f50db19a47c59a6",
+      "license": "CC0-1.0",
+      "sha256": "76d9a9e3790e5ddd30e8dc949b622e1cbe8eaab3c612714c2fb7480ca4fcea6e"
+    },
+    {
+      "id": "instagram",
+      "url": "https://raw.githubusercontent.com/simple-icons/simple-icons/13.21.0/icons/instagram.svg",
+      "source": "source/instagram.svg",
+      "source_sha256": "f53af2d1fc5292ba1433b5c1faf50005ce6a997fa302d1816989929f379a59dc",
+      "license": "CC0-1.0",
+      "sha256": "f1ea563348da6a07699e8af1271840c93e9187a6d0183e0504cb0ce6454e5d96"
+    },
+    {
+      "id": "telegram",
+      "url": "https://raw.githubusercontent.com/simple-icons/simple-icons/13.21.0/icons/telegram.svg",
+      "source": "source/telegram.svg",
+      "source_sha256": "147fd8f8923e7e5f463fe98c0eb9913bead6b2ae59935728cda141002ec8a7c9",
+      "license": "CC0-1.0",
+      "sha256": "b56080284ec9eb5507f455b1f2ac8860f230d24315dc72b18372d94ecb238545"
+    },
+    {
+      "id": "cloudflare",
+      "url": "https://raw.githubusercontent.com/simple-icons/simple-icons/13.21.0/icons/cloudflare.svg",
+      "source": "source/cloudflare.svg",
+      "source_sha256": "408096d99907fd99e0863cb5d73f77a72537c6a85fd8d5e2704178a83a891f08",
+      "license": "CC0-1.0",
+      "sha256": "eed95b184cb6df17c4dfdf84f486bbdde036d0c0bf07cdcc455b2798ee0940a4"
+    }
+  ]
+}

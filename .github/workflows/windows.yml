@@ -1,0 +1,130 @@
+name: Windows build and prerelease
+
+on:
+  push:
+    branches: [main]
+    tags: ['v*']
+  pull_request:
+  workflow_dispatch:
+    inputs:
+      release_tag:
+        description: '发布预发布版本，例如 v1.17.0；必须匹配 CMake 版本'
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: windows-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: windows-2022
+    timeout-minutes: 60
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+    defaults:
+      run:
+        shell: pwsh
+    env:
+      RELEASE_TAG: ${{ github.event_name == 'workflow_dispatch' && inputs.release_tag || (startsWith(github.ref, 'refs/tags/') && github.ref_name || '') }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: '3.12'
+      - name: Validate version and release tag
+        id: version
+        run: python scripts/ci_release_check.py
+      - name: Check distributable document privacy
+        run: |
+          python scripts/check_docs.py
+          python scripts/check_document_privacy.py
+          python -m unittest discover -s tests -p test_documentation_tools.py
+      - name: Prepare pinned public toolchain, core and source
+        run: python scripts/ci_prepare.py
+      - name: Build
+        run: ./scripts/build.ps1 -Preset windows-ci
+      - name: Default isolated regression tests
+        run: ./scripts/test.ps1 -Preset windows-ci
+      - name: Package and isolated native smoke
+        run: |
+          $PSNativeCommandUseErrorActionPreference=$true
+          $version='${{ steps.version.outputs.version }}'
+          $package="dist/Mlash-$version-windows-x64-portable"
+          ./scripts/package.ps1 -Preset windows-ci -OutputName "Mlash-$version-windows-x64-portable"
+          ./scripts/ci_smoke.ps1 -PackageDirectory $package -EvidenceDirectory build/ci-evidence
+          python scripts/ci_release_check.py --package $package --output build/ci-evidence/package-verification.json
+          python scripts/verify-exe-icon.py "$package/Mlash.exe" --report build/ci-evidence/app-icon.json
+          python scripts/verify-exe-icon.py "$package/MlashTunService.exe" --report build/ci-evidence/service-icon.json
+          ./scripts/package-source.ps1 -CoreRepository build/_deps/mihomo-source -OutputName "Mlash-$version-source"
+          New-Item -ItemType Directory -Force build/release-assets | Out-Null
+          Copy-Item dist/Mlash-*.zip,dist/Mlash-*.sha256,dist/Mlash-*-source.json build/release-assets
+          Copy-Item "resources/releases/$version.md" build/release-assets/release-notes.md
+          Copy-Item build/ci-evidence/package-verification.json build/release-assets
+      - name: Upload verified version assets
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: release-assets
+          path: build/release-assets/*
+          if-no-files-found: error
+          retention-days: 14
+          compression-level: 0
+      - name: Upload diagnostics even on failure
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: verification-evidence
+          path: |
+            build/windows-ci/*.xml
+            build/windows-ci/Testing/Temporary/LastTest.log
+            build/ci-evidence/*.json
+            build/ci-evidence/version.txt
+            build/ci-evidence/screenshots/
+          if-no-files-found: warn
+          retention-days: 14
+
+  publish:
+    if: github.event_name == 'workflow_dispatch' || startsWith(github.ref, 'refs/tags/')
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+      RELEASE_TAG: ${{ github.event_name == 'workflow_dispatch' && inputs.release_tag || github.ref_name }}
+      BUILD_SHA: ${{ github.sha }}
+    steps:
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: release-assets
+          path: assets
+      - name: Bind tag to the build and publish as prerelease
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$RELEASE_TAG" = "v${{ needs.build.outputs.version }}"
+          if gh api "repos/$GH_REPO/git/ref/tags/$RELEASE_TAG" > tag.json 2>/dev/null; then
+            type=$(jq -r '.object.type' tag.json)
+            sha=$(jq -r '.object.sha' tag.json)
+            if [ "$type" = tag ]; then
+              sha=$(gh api "repos/$GH_REPO/git/tags/$sha" --jq '.object.sha')
+            fi
+            test "$sha" = "$BUILD_SHA"
+          else
+            gh api "repos/$GH_REPO/git/refs" -f "ref=refs/tags/$RELEASE_TAG" -f "sha=$BUILD_SHA"
+          fi
+          if gh release view "$RELEASE_TAG" --json isPrerelease > release.json 2>/dev/null; then
+            test "$(jq -r '.isPrerelease' release.json)" = true
+            gh release upload "$RELEASE_TAG" assets/*.zip assets/*.sha256 assets/*-source.json assets/package-verification.json --clobber
+            gh release edit "$RELEASE_TAG" --prerelease --latest=false --notes-file assets/release-notes.md
+          else
+            gh release create "$RELEASE_TAG" assets/*.zip assets/*.sha256 assets/*-source.json assets/package-verification.json --verify-tag --title "Mlash $RELEASE_TAG · 预发布" --notes-file assets/release-notes.md --prerelease --latest=false
+          fi

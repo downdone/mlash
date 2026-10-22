@@ -1,0 +1,12 @@
+<?xml version='1.0' encoding='utf-8'?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64">
+  <ellipse id="ear-left" cx="13" cy="30" rx="12.25" ry="18" fill="#779bb7" />
+  <ellipse id="ear-right" cx="51" cy="30" rx="12.25" ry="18" fill="#779bb7" />
+  <ellipse id="inner-left" cx="12" cy="30" rx="7" ry="12" fill="#cfe0ed" />
+  <ellipse id="inner-right" cx="52" cy="30" rx="7" ry="12" fill="#cfe0ed" />
+  <ellipse id="head" cx="32" cy="26" rx="19.5" ry="23" fill="#9cbbd2" />
+  <polyline id="trunk" points="32,35 32,46 39,53 48,49 54,42" fill="none" stroke="#9cbbd2" stroke-width="10" stroke-linecap="round" stroke-linejoin="round" />
+  <ellipse id="cheek-left" cx="22.5" cy="35" rx="3.5" ry="2" fill="#d6cad7" />
+  <ellipse id="cheek-right" cx="41.5" cy="35" rx="3.5" ry="2" fill="#d6cad7" />
+  <ellipse id="shine" cx="28" cy="12" rx="4" ry="2" fill="#c9dae6" />
+<circle cx="26" cy="27" r="2.35" fill="#203247" /><circle cx="41" cy="27" r="2.35" fill="#203247" /><circle cx="51" cy="51" r="9" fill="#327fad" /><circle cx="51" cy="51" r="5" fill="none" stroke="#ffffff" stroke-width="2" /></svg>

@@ -1,0 +1,96 @@
+{
+  "schema": 1,
+  "deployed_files": [
+    "libgcc_s_seh-1.dll",
+    "libstdc++-6.dll",
+    "libwinpthread-1.dll",
+    "Mlash.exe",
+    "MlashTunService.exe",
+    "networkinformation/qnetworklistmanager.dll",
+    "platforms/qwindows.dll",
+    "Qt6Core.dll",
+    "Qt6Gui.dll",
+    "Qt6Network.dll",
+    "Qt6Widgets.dll",
+    "styles/qmodernwindowsstyle.dll",
+    "tls/qcertonlybackend.dll",
+    "tls/qschannelbackend.dll"
+  ],
+  "assets": [
+    {
+      "source": "cores/mihomo.exe",
+      "target": "cores/mihomo.exe"
+    },
+    {
+      "source": "resources/portable/README.zh-CN.txt",
+      "target": "README.txt",
+      "template": true
+    },
+    {
+      "source": "LICENSE",
+      "target": "LICENSE"
+    },
+    {
+      "source": "COPYRIGHT",
+      "target": "COPYRIGHT"
+    },
+    {
+      "source": "resources/portable/THIRD-PARTY.md",
+      "target": "licenses/README.md",
+      "template": true
+    },
+    {
+      "source": "licenses/GCC-Runtime-Exception.txt",
+      "target": "licenses/GCC-Runtime-Exception.txt"
+    },
+    {
+      "source": "licenses/GPL-3.0.txt",
+      "target": "licenses/GPL-3.0.txt"
+    },
+    {
+      "source": "licenses/LGPL-3.0.txt",
+      "target": "licenses/LGPL-3.0.txt"
+    },
+    {
+      "source": "licenses/mihomo-GPL-3.0.txt",
+      "target": "licenses/mihomo-GPL-3.0.txt"
+    },
+    {
+      "source": "licenses/qrcodegen-MIT.txt",
+      "target": "licenses/qrcodegen-MIT.txt"
+    },
+    {
+      "source": "licenses/simple-icons-CC0.txt",
+      "target": "licenses/simple-icons-CC0.txt"
+    },
+    {
+      "source": "licenses/twemoji-graphics.txt",
+      "target": "licenses/twemoji-graphics.txt"
+    },
+    {
+      "source": "licenses/winpthreads.txt",
+      "target": "licenses/winpthreads.txt"
+    },
+    {
+      "source": "licenses/yaml-cpp-MIT.txt",
+      "target": "licenses/yaml-cpp-MIT.txt"
+    },
+    {
+      "source": "licenses/zstd-BSD.txt",
+      "target": "licenses/zstd-BSD.txt"
+    },
+    {
+      "source": "resources/flags/NOTICE.md",
+      "target": "licenses/twemoji-NOTICE.md"
+    },
+    {
+      "source": "resources/services/NOTICE.md",
+      "target": "licenses/services-NOTICE.md"
+    }
+  ],
+  "generated_files": [
+    "qt.conf",
+    "cores/manifest.json",
+    "package-manifest.json"
+  ]
+}

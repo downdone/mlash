@@ -1,0 +1,11 @@
+{
+  "version": "v1.19.32-halfclose.1",
+  "origin": "local-source-pinned",
+  "source": "https://github.com/downdone/mihomo/releases/download/v1.19.32-halfclose.1/mihomo-windows-amd64-v1.19.32-halfclose.1.exe",
+  "source_commit": "4ec827bcef5df96560a00dfe71d6945527a07ee3",
+  "executable_sha256": "951bfd2f513ac7de486e53f2bbf1bf804e0a903bb19b237a744d11ca49023755",
+  "reported_version": [
+    "Mihomo Meta v1.19.32-halfclose.1 windows amd64 with go1.26.8 2026-10-19",
+    "Use tags: with_gvisor"
+  ]
+}

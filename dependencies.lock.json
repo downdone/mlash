@@ -1,0 +1,61 @@
+{
+  "qt": {
+    "version": "6.10.2",
+    "modules": [
+      "Core",
+      "Widgets",
+      "Network"
+    ]
+  },
+  "compiler": {
+    "verifiedKit": "MinGW-w64 13.1.0 x64",
+    "archive_url": "https://download.qt.io/online/qtsdkrepository/windows_x86/desktop/tools_mingw1310/qt.tools.win64_mingw1310/13.1.0-202407240918mingw1310.7z",
+    "archive_sha256": "a7b502294a903b64fccd4a41ba39f48d3f6c9a5ece167f0cfaeac920d15b344f"
+  },
+  "yaml-cpp": {
+    "version": "0.8.0",
+    "repository": "https://github.com/jbeder/yaml-cpp.git",
+    "commit": "f7320141120f720aecc4c32be25586e7da9eb978"
+  },
+  "mihomo": {
+    "version": "v1.19.32",
+    "asset": "mihomo-windows-amd64-v1-v1.19.32.zip",
+    "url": "https://github.com/MetaCubeX/mihomo/releases/download/v1.19.32/mihomo-windows-amd64-v1-v1.19.32.zip",
+    "sha256": "00549b347d8e124600e46cac67d59293358454f465e9d86d2511567da56b7029"
+  },
+  "twemoji-flags": {
+    "version": "v14.0.2",
+    "repository": "https://github.com/twitter/twemoji",
+    "license": "CC-BY-4.0",
+    "manifest": "resources/flags/manifest.json",
+    "count": 51
+  },
+  "zstd": {
+    "version": "1.5.7",
+    "repository": "https://github.com/facebook/zstd",
+    "commit": "ac66b19e6bd6b83238bf008eecc1298105298532",
+    "source_sha256": "566ea800f5df33b0b76e3fb2b93f95ffb58e82449074341b11ff2882b10cbc64",
+    "linkage": "static",
+    "license": "BSD-3-Clause"
+  },
+  "qrcodegen": {
+    "version": "1.8.0",
+    "repository": "https://github.com/nayuki/QR-Code-generator",
+    "commit": "720f62bddb7226106071d4728c292cb1df519ceb",
+    "source_sha256": "d80795686f3e58448c7b76830bb5c40847b7eaae1996c28f0422a029b66c2bb0",
+    "linkage": "static",
+    "license": "MIT"
+  },
+  "mihomo-release": {
+    "version": "v1.19.32-halfclose.1",
+    "origin": "local-source-pinned",
+    "source_commit": "4ec827bcef5df96560a00dfe71d6945527a07ee3",
+    "executable_sha256": "951bfd2f513ac7de486e53f2bbf1bf804e0a903bb19b237a744d11ca49023755",
+    "tags": [
+      "with_gvisor"
+    ],
+    "go": "go1.26.8",
+    "asset_url": "https://github.com/downdone/mihomo/releases/download/v1.19.32-halfclose.1/mihomo-windows-amd64-v1.19.32-halfclose.1.exe",
+    "repository": "https://github.com/downdone/mihomo.git"
+  }
+}

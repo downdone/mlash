@@ -1,0 +1,48 @@
+#include "app/OutboundDiagnostics.h"
+#include "ui/OutboundDialog.h"
+#include "ui/MainWindow.h"
+#include "MockHttp.h"
+#include <QtTest>
+#include <QTemporaryDir>
+#include <QPushButton>
+#include <QComboBox>
+#include <QJsonDocument>
+#include <QTabWidget>
+#include <QTableWidget>
+#include <QLabel>
+#include <QLayout>
+#include <QPlainTextEdit>
+#include <QScrollArea>
+#include <QScrollBar>
+#include "ui/HomeMetricsView.h"
+#include "storage/Storage.h"
+using namespace mlash;
+class OutboundTests final : public QObject {
+    Q_OBJECT
+    const QByteArray payload="{\"ip\":\"8.8.8.8\",\"country\":\"Fixture country\",\"country_code\":\"US\",\"region\":\"Fixture region\",\"asn\":15169,\"asn_organization\":\"Fixture ASN\"}";
+private slots:
+    void homeSummaryRetainsOnlyVisibleSnapshotAndServiceEvidenceIsExplicit() {
+        // Isolated presentation fixture; real core readiness and first-screen geometry are covered by UiTests.
+        QTemporaryDir root; AppController c(root.path(),true); QSignalSpy init(&c,&AppController::initialized); c.initialize(); QTRY_COMPARE(init.size(),1); auto& presentation=const_cast<AppState&>(c.state()); presentation.activeProfile=newId(); presentation.ready=true; presentation.core=CoreState::Running; MainWindow window(&c); window.resize(840,560); window.show(); QTest::qWait(50); auto* summary=window.findChild<QLabel*>("homeOutboundSummary"); QVERIFY(summary); QVERIFY(summary->text().contains("尚未检测")); auto* metrics=window.findChild<QWidget*>("homeMetrics"); HomeMetricsView baseline(c.homeMetrics()); baseline.ensurePolished(); baseline.layout()->activate(); QCOMPARE(metrics->minimumSizeHint().height(),baseline.minimumSizeHint().height()); auto* scroll=window.findChild<QScrollArea*>("homeScroll"); scroll->ensureWidgetVisible(metrics,0,0); QCoreApplication::processEvents(); QVERIFY(scroll->viewport()->rect().contains(metrics->mapTo(scroll->viewport(),metrics->rect().bottomRight()))); const auto height=metrics->height(); auto* diagnostics=const_cast<OutboundDiagnostics*>(c.outboundDiagnostics()); QVERIFY(diagnostics->result().isEmpty());
+        window.findChild<QPushButton*>("openOutboundDiagnostics")->click(); QPointer<OutboundDialog> parent=window.findChild<OutboundDialog*>("outboundDialog"); QVERIFY(parent); auto& result=const_cast<QJsonObject&>(diagnostics->result()); result={{"ip","8.8.8.8"},{"country","Fixture country"},{"region","Fixture region"},{"asn","AS15169"},{"route","direct"},{"measured_utc","2026-10-17T01:02:03.000Z"}}; diagnostics->changed(); QVERIFY(summary->text().contains("上次出口：8.8.8.8")); QVERIFY(summary->text().contains("AS15169")); QVERIFY(summary->toolTip().contains("指定叶子")); QCoreApplication::processEvents(); QCOMPARE(metrics->height(),height); parent->close(); QTRY_VERIFY(parent.isNull()); QVERIFY(diagnostics->result().isEmpty()); QVERIFY(summary->text().contains("8.8.8.8")); const auto output=qEnvironmentVariable("MLASH_UI_SCREENSHOTS"); if (!output.isEmpty()) { QVERIFY(QDir().mkpath(output)); QVERIFY(window.grab().save(output+"/home-outbound-summary.png")); }
+        auto& state=const_cast<AppState&>(c.state()); ++state.generation; c.stateChanged(); QVERIFY(summary->text().contains("尚未检测")); result={{"ip","8.8.4.4"},{"route","direct"}}; diagnostics->changed(); QVERIFY(summary->text().contains("8.8.4.4")); state.ready=false; c.stateChanged(); QVERIFY(!summary->text().contains("8.8.4.4")); state.ready=true; c.stateChanged(); result={{"ip","8.8.4.4"},{"route","direct"}}; diagnostics->changed(); QVERIFY(summary->text().contains("8.8.4.4")); window.hide(); QVERIFY(!summary->text().contains("8.8.4.4")); window.show(); QVERIFY(summary->text().contains("尚未检测"));
+        window.findChild<QPushButton*>("openOutboundDiagnostics")->click(); parent=window.findChild<OutboundDialog*>("outboundDialog"); QVERIFY(parent); parent->findChild<QTabWidget*>("outboundTabs")->setCurrentIndex(1); result={{"kind","services"},{"route","direct"},{"services",QJsonArray{QJsonObject{{"id","youtube"},{"name","YouTube"},{"state","unknown"},{"evidence","HTTP 403; no region evidence"},{"http_status",403},{"target","https://example.test/feature"},{"destination_ip","192.0.2.1"},{"measured_utc","2026-10-17T01:02:03.000Z"}}}}}; diagnostics->changed(); auto* table=parent->findChild<QTableWidget*>("serviceDiagnosticsTable"); QCOMPARE(table->rowCount(),1); table->selectRow(0); auto* show=parent->findChild<QPushButton*>("viewServiceEvidence"); QVERIFY(show->isEnabled()); show->click(); QPointer<QDialog> evidence=parent->findChild<QDialog*>("serviceEvidenceSnapshot"); QVERIFY(evidence); auto* text=evidence->findChild<QPlainTextEdit*>("serviceEvidenceText"); QVERIFY(text->isReadOnly()); QVERIFY(text->toPlainText().contains("HTTP 状态：403")); QVERIFY(text->toPlainText().contains("结果：未知")); QVERIFY(text->toPlainText().contains("https://example.test/feature")); QVERIFY(text->toPlainText().contains("192.0.2.1")); QVERIFY(text->toPlainText().contains("核心返回链：未知")); QCOMPARE(text->horizontalScrollBarPolicy(),Qt::ScrollBarAlwaysOff); QCOMPARE(text->wordWrapMode(),QTextOption::WrapAnywhere); const auto frozen=text->toPlainText(); auto changed=result.value("services").toArray()[0].toObject(); changed["http_status"]=204; result["services"]=QJsonArray{changed}; diagnostics->changed(); QCOMPARE(text->toPlainText(),frozen); if (!output.isEmpty()) QVERIFY(evidence->grab().save(output+"/service-evidence.png")); diagnostics->cancel(); QTRY_VERIFY(evidence.isNull()); QVERIFY(summary->text().contains("尚未检测")); parent->close(); QTRY_VERIFY(parent.isNull());
+        QByteArray persisted; if (QFile::exists(root.path()+"/state.dat")) { QVERIFY(readFile(root.path()+"/state.dat",persisted).ok); QVERIFY(!persisted.contains("8.8.8.8")); QVERIFY(!persisted.contains("Fixture country")); } QVERIFY(!diagnostics->busy());
+    }
+    void schemaUnknownAndPublicIp() {
+        const auto result=OutboundDiagnostics::parseIp(payload); QVERIFY(result.ok); QCOMPARE(result.data.value("asn").toString(),QString("AS15169")); for (const auto& bytes:QList<QByteArray>{"{}","[]","broken","{\"ip\":\"127.0.0.1\"}",QByteArray(65537,'x')}) QVERIFY(!OutboundDiagnostics::parseIp(bytes).ok);
+        auto object=QJsonDocument::fromJson(payload).object(); object["asn"]=-1; object["ip"]="2001:4860:4860::8888"; const auto partial=OutboundDiagnostics::parseIp(QJsonDocument(object).toJson()); QVERIFY(partial.ok); QVERIFY(!partial.data.contains("asn")); object["country"]=QString(1000,'x'); QVERIFY(OutboundDiagnostics::parseIp(QJsonDocument(object).toJson()).data["country"].toString().size()<=128);
+    }
+    void directProxyCancellationAndNoFallback() {
+        MockHttp target,proxy; QVERIFY(target.listen(QHostAddress::LocalHost)); QVERIFY(proxy.listen(QHostAddress::LocalHost)); int delay=0; target.handler=[&](const QByteArray&) { return HttpResponse{200,payload,delay}; }; proxy.handler=[&](const QByteArray& request) { if (request.startsWith("CONNECT ")) { HttpResponse response; response.tunnel=true; return response; } return HttpResponse{200,payload}; }; OutboundDiagnostics diagnostics(nullptr,true,QUrl("http://127.0.0.1:"+QString::number(target.serverPort())+"/geoip"));
+        auto token=diagnostics.prepare({{"route","direct"}}); diagnostics.runIp(token,0); QTRY_VERIFY(!diagnostics.busy()); QCOMPARE(diagnostics.result().value("ip").toString(),QString("8.8.8.8")); QCOMPARE(diagnostics.result().value("destination_ip").toString(),QString("127.0.0.1")); QCOMPARE(target.requests.size(),1); QCOMPARE(proxy.requests.size(),0); QVERIFY(QDateTime::fromString(diagnostics.result().value("measured_utc").toString(),Qt::ISODateWithMs).isValid());
+        token=diagnostics.prepare({{"route","core"},{"mode","rule"},{"mixed_port",proxy.serverPort()},{"chain","未观测"}}); diagnostics.runIp(token,proxy.serverPort()); QTRY_VERIFY(!diagnostics.busy()); QCOMPARE(proxy.requests.size(),2); QCOMPARE(target.requests.size(),1); QVERIFY(proxy.requests[0].startsWith("CONNECT 127.0.0.1:")); QVERIFY(proxy.requests[1].startsWith("GET /geoip ")); QCOMPARE(diagnostics.result().value("chain").toString(),QString("未观测"));
+        const auto port=proxy.serverPort(); proxy.close(); token=diagnostics.prepare({{"route","core"}}); diagnostics.runIp(token,port); QTRY_VERIFY_WITH_TIMEOUT(!diagnostics.busy(),18000); QVERIFY(diagnostics.result().contains("error")); QCOMPARE(target.requests.size(),1);
+        delay=200; token=diagnostics.prepare({{"route","direct"}}); diagnostics.runIp(token,0); QTRY_COMPARE(target.requests.size(),2); diagnostics.cancel(); QTest::qWait(300); QVERIFY(diagnostics.result().isEmpty()); QVERIFY(!diagnostics.busy()); diagnostics.fail(token,"late"); QVERIFY(diagnostics.result().isEmpty()); token=diagnostics.prepare({{"route","direct"}}); diagnostics.runIp(token,0); QTRY_VERIFY(!diagnostics.busy()); QVERIFY(diagnostics.result().contains("ip"));
+    }
+    void uiExplicitPathAndHideCleanup() {
+        QTemporaryDir root; AppController controller(root.path(),true); MainWindow window(&controller); window.show(); window.findChild<QPushButton*>("openOutboundDiagnostics")->click(); QTRY_VERIFY(window.findChild<OutboundDialog*>("outboundDialog")); auto* dialog=window.findChild<OutboundDialog*>("outboundDialog"); QVERIFY(!dialog->findChild<QPushButton*>("startIpProbe")->isEnabled()); QVERIFY(controller.outboundDiagnostics()->result().isEmpty()); dialog->findChild<QTabWidget*>("outboundTabs")->setCurrentIndex(1); QCOMPARE(dialog->findChild<QPushButton*>("startIpProbe")->text(),QString("检测全部服务")); window.hide(); QTRY_VERIFY(!window.findChild<OutboundDialog*>("outboundDialog")); QVERIFY(!controller.outboundDiagnostics()->busy());
+    }
+};
+QTEST_MAIN(OutboundTests)
+#include "OutboundTests.moc"

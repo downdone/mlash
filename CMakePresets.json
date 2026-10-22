@@ -1,0 +1,140 @@
+{
+  "version": 6,
+  "cmakeMinimumRequired": {
+    "major": 3,
+    "minor": 24,
+    "patch": 0
+  },
+  "configurePresets": [
+    {
+      "name": "windows-mingw",
+      "displayName": "Qt 6.10.2 / MinGW 13.1 x64",
+      "generator": "Ninja",
+      "binaryDir": "${sourceDir}/build/windows-mingw",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release",
+        "CMAKE_PREFIX_PATH": "$env{MLASH_QT}",
+        "CMAKE_C_COMPILER": "$env{MLASH_MINGW}/bin/gcc.exe",
+        "CMAKE_CXX_COMPILER": "$env{MLASH_MINGW}/bin/g++.exe",
+        "BUILD_TESTING": "ON"
+      },
+      "environment": {
+        "PATH": "$env{MLASH_MINGW}/bin;$env{MLASH_QT}/bin;$penv{PATH}"
+      }
+    },
+    {
+      "name": "windows-mingw-open",
+      "displayName": "Pinned public Qt 6.10.2 / MinGW 13.1",
+      "generator": "Ninja",
+      "binaryDir": "${sourceDir}/build/windows-mingw-open",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release",
+        "CMAKE_PREFIX_PATH": "${sourceDir}/build/_deps/qt-open",
+        "CMAKE_C_COMPILER": "$env{MLASH_MINGW}/bin/gcc.exe",
+        "CMAKE_CXX_COMPILER": "$env{MLASH_MINGW}/bin/g++.exe",
+        "BUILD_TESTING": "ON"
+      },
+      "environment": {
+        "PATH": "$env{MLASH_MINGW}/bin;${sourceDir}/build/_deps/qt-open/bin;$penv{PATH}",
+        "QT_PLUGIN_PATH": "${sourceDir}/build/_deps/qt-open/plugins"
+      }
+    },
+    {
+      "name": "windows-msvc",
+      "displayName": "MSVC developer shell / MSVC Qt kit",
+      "generator": "Ninja",
+      "binaryDir": "${sourceDir}/build/windows-msvc",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release",
+        "CMAKE_PREFIX_PATH": "$env{MLASH_QT_MSVC}",
+        "BUILD_TESTING": "ON"
+      }
+    },
+    {
+      "name": "portable",
+      "displayName": "Explicit Qt prefix / native toolchain",
+      "generator": "Ninja",
+      "binaryDir": "${sourceDir}/build/portable",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release",
+        "BUILD_TESTING": "ON"
+      }
+    },
+    {
+      "name": "windows-ci",
+      "displayName": "Portable pinned public Qt / MinGW CI",
+      "generator": "Ninja",
+      "binaryDir": "${sourceDir}/build/windows-ci",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release",
+        "CMAKE_PREFIX_PATH": "${sourceDir}/build/_deps/qt-open",
+        "CMAKE_C_COMPILER": "$env{MLASH_MINGW}/bin/gcc.exe",
+        "CMAKE_CXX_COMPILER": "$env{MLASH_MINGW}/bin/g++.exe",
+        "BUILD_TESTING": "ON"
+      },
+      "environment": {
+        "PATH": "$env{MLASH_MINGW}/bin;${sourceDir}/build/_deps/qt-open/bin;$penv{PATH}",
+        "QT_PLUGIN_PATH": "${sourceDir}/build/_deps/qt-open/plugins"
+      }
+    }
+  ],
+  "buildPresets": [
+    {
+      "name": "windows-mingw",
+      "configurePreset": "windows-mingw"
+    },
+    {
+      "name": "windows-mingw-open",
+      "configurePreset": "windows-mingw-open"
+    },
+    {
+      "name": "windows-msvc",
+      "configurePreset": "windows-msvc"
+    },
+    {
+      "name": "portable",
+      "configurePreset": "portable"
+    },
+    {
+      "name": "windows-ci",
+      "configurePreset": "windows-ci"
+    }
+  ],
+  "testPresets": [
+    {
+      "name": "windows-mingw",
+      "configurePreset": "windows-mingw",
+      "output": {
+        "outputOnFailure": true
+      },
+      "environment": {
+        "PATH": "$env{MLASH_MINGW}/bin;$env{MLASH_QT}/bin;$penv{PATH}",
+        "QT_QPA_PLATFORM": "offscreen"
+      }
+    },
+    {
+      "name": "windows-mingw-open",
+      "configurePreset": "windows-mingw-open",
+      "output": {
+        "outputOnFailure": true
+      },
+      "environment": {
+        "PATH": "$env{MLASH_MINGW}/bin;${sourceDir}/build/_deps/qt-open/bin;$penv{PATH}",
+        "QT_PLUGIN_PATH": "${sourceDir}/build/_deps/qt-open/plugins",
+        "QT_QPA_PLATFORM": "offscreen"
+      }
+    },
+    {
+      "name": "windows-ci",
+      "configurePreset": "windows-ci",
+      "output": {
+        "outputOnFailure": true
+      },
+      "environment": {
+        "PATH": "$env{MLASH_MINGW}/bin;${sourceDir}/build/_deps/qt-open/bin;$penv{PATH}",
+        "QT_PLUGIN_PATH": "${sourceDir}/build/_deps/qt-open/plugins",
+        "QT_QPA_PLATFORM": "offscreen"
+      }
+    }
+  ]
+}
