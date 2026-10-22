@@ -57,6 +57,7 @@
       "binaryDir": "${sourceDir}/build/portable",
       "cacheVariables": {
         "CMAKE_BUILD_TYPE": "Release",
+        "FETCHCONTENT_BASE_DIR": "${sourceDir}/build/_deps/sources",
         "BUILD_TESTING": "ON"
       }
     },
@@ -101,6 +102,16 @@
     }
   ],
   "testPresets": [
+    {
+      "name": "portable",
+      "configurePreset": "portable",
+      "output": {
+        "outputOnFailure": true
+      },
+      "environment": {
+        "QT_QPA_PLATFORM": "offscreen"
+      }
+    },
     {
       "name": "windows-mingw",
       "configurePreset": "windows-mingw",

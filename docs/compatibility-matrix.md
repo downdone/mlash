@@ -10,7 +10,8 @@
 | Windows 自动化 | Windows Server 2022 构建/测试及隔离冒烟已通过 |
 | Windows 10/11 | 目标平台；干净机器与系统级验收待完成 |
 | MSVC | 提供配置入口，须使用 MSVC Qt kit；未验证 |
-| macOS/Linux | 尚未实际构建/系统集成，系统适配显式 Unsupported |
+| macOS | arm64 Release 已实际构建，部分隔离组件测试通过；GUI 冒烟退出超时，系统适配显式 Unsupported，见验证报告 |
+| Linux | 尚未实际构建/系统集成，系统适配显式 Unsupported |
 
 Qt 和编译器路径使用 MLASH_QT、MLASH_MINGW 环境变量，官方依赖缓存位于 build/_deps。开发工作站安装信息不属于项目基线。
 

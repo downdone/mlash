@@ -7,7 +7,11 @@
 #include <QJsonDocument>
 #include <QTemporaryDir>
 #include <QCryptographicHash>
+#ifdef Q_OS_WIN
 #include <QtZlib/zlib.h>
+#else
+#include <zlib.h>
+#endif
 
 using namespace mlash;
 namespace {
