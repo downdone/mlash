@@ -2,7 +2,21 @@
 
 本文只记录实际结果，区分本轮执行、历史匿名汇总与尚未验证的资格。原始配置、私人环境、真实订阅及原始诊断不进入公开文档。
 
-## 本轮：D03 文档与新仓库
+## 本轮：B01 本机 portable 构建（2026-10-23）
+
+构建完成：使用 Qt 6.10.2 官方 macOS SDK、Apple Clang 15.0.0、CMake 3.31.10、Ninja 1.13.2 和 PowerShell 7.6.7，经 `scripts/build.ps1 -Preset portable` 成功生成 Mlash 1.17.0 arm64 Release 及全部测试目标。产物为 `build/portable/bin/Mlash`；`--version` 实际输出 Mlash 1.17.0。依赖位于 `build/_deps/`，构建记录为 `build/portable-build.log`，不纳入源码分发。
+
+首次配置发现 macOS Qt 不提供 ZlibPrivate，非 Windows 构建已改用系统 ZLIB::ZLIB；Windows 继续使用 Qt6::ZlibPrivate。CMake 4 默认移除旧策略兼容，使锁定 yaml-cpp 无法配置，本次选择 CMake 3.31.10 后完整构建通过。编译有四处已有初始化写法警告，无编译/链接错误。
+
+已执行：仓库测试脚本筛选运行五组 CTest，其中 proxy_bypass_tests、connection_view_tests、service_tests、home_metrics_tests 四组通过；gui_smoke 启动后在 15 秒预算内未退出，记为失败。日志确认初始化和退出时的代理观测均返回“此平台的系统代理尚未支持”，退出保护流程未发出 exitReady。该限制未通过放宽代理恢复检查规避。完整 CTest 未执行，不能宣称 macOS 完整回归通过。
+
+额外运行 OfficialCoreTests 的 metadataRejectsUntrustedOrIncompleteAssets、archiveChecksHashPathsBoundsAndCrc、cancellationIgnoresLateMetadata 三项，全部通过，包含系统 zlib 的压缩/非压缩 ZIP、哈希、路径、CRC、截断及取消验证。test_documentation_tools.py 四项通过。test_release_tools.py 首轮因缺少固定 Windows 内核而有四项错误；按锁下载并验证 SHA256 后复测十七项全通过，未在 macOS 执行该 Windows 内核。
+
+首次构建输入是无 Git 元数据的源码快照，文档检查脚本直接入口的 git ls-files 失败；改用源码文件清单调用相同检查函数，74 份 Markdown 链接/导航和 81 份文档隐私检查均零问题。系统代理、自启、机密存储、受控进程、端口身份和 TUN 的非 Windows 适配保持 Unsupported；未执行系统写入、Windows 构建、原生人工验收或发行打包。
+
+后续经同一构建脚本增量构建成功，以 Cocoa 后端和隔离数据目录启动。首次原生启动未能创建本地导入通道；本次进程使用较短临时目录后，日志确认 Mlash 1.17.0 初始化完成且进程保持运行。该启动记录不替代人工前台操作或退出验收，代理观测仍明确报告 Unsupported。提交前接回原仓库 Git 历史后，再以文档检查脚本的标准入口复核，74 份 Markdown 链接/导航和 81 份文档隐私均零问题，git diff --check 通过。
+
+## 此前：D03 文档与新仓库
 
 状态：文档重整、针对性检查、新仓库构建和预发布全部完成。
 
@@ -37,6 +51,6 @@
 
 ## 未完成的正式验收
 
-Windows 10/11 干净部署、真实代理/PAC 与冲突恢复、强杀恢复、登录/Explorer/休眠、TUN 服务/驱动/路由/DNS、跨账户实际迁移、72 小时稳定性、完整资源预算和第三方完整源码/分发确认未完成。MSVC、macOS/Linux 未实际构建验证；其他平台系统适配返回 Unsupported。
+Windows 10/11 干净部署、真实代理/PAC 与冲突恢复、强杀恢复、登录/Explorer/休眠、TUN 服务/驱动/路由/DNS、跨账户实际迁移、72 小时稳定性、完整资源预算和第三方完整源码/分发确认未完成。MSVC、Linux 未实际构建验证；macOS 仅有上述构建及部分组件证据，其他平台系统适配返回 Unsupported。
 
 预发布保持 release_qualified=false。没有真实运行证据的场景不能标为通过，不能从语言、架构或短期样本推导正式资格。

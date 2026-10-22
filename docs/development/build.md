@@ -35,6 +35,25 @@ bootstrap 要求 `cores/mihomo.exe` 是发布锁匹配产物；首次准备可�
 
 仅使用公开 Qt SDK、沿用已安装编译器时，可执行 `python scripts/prepare_open_qt.py` 后使用 windows-mingw-open 预设。MSVC 入口要求 Developer Shell 和 MLASH_QT_MSVC，尚未实际验证，不能混用 MinGW 库。
 
+## 非 Windows 本机构建
+
+`portable` 预设使用本机 C++20 编译器和 Qt 6.10.2 EXACT。需要 CMake、Ninja、PowerShell 7 以及包含 Core/Widgets/Network/Test 的对应 Qt SDK；工具及 SDK 可放在 `build/_deps/`，并将工具目录加入当前进程 PATH、将 SDK 路径设置为 CMAKE_PREFIX_PATH。Windows 继续使用 Qt 的 ZlibPrivate；非 Windows 使用系统 zlib 开发库及 CMake 的 ZLIB::ZLIB，供内核 ZIP 解码与对应测试共用。
+
+```powershell
+./scripts/build.ps1 -Preset portable
+./scripts/test.ps1 -Preset portable -TestRegex '^(service_tests|home_metrics_tests|proxy_bypass_tests|connection_view_tests)$'
+```
+
+示例只运行所列组件测试；省略 TestRegex 会执行该预设的完整测试集。这一路径仅验证本机构建及可执行的隔离测试。非 Windows 的系统代理、自启、机密存储、受控进程和端口身份核验仍返回 Unsupported；依赖 Windows 固定内核或原生 API 的用例不能作为本机平台验收。GUI 冒烟的退出流程要求代理观测成功，当前非 Windows 适配会使其超时，不能宣称完整回归通过。Windows 便携包仍使用上述 Windows 工具链及打包流程。锁定的 yaml-cpp 使用较早 CMake 策略，本机可采用 CMake 3.31，避免 CMake 4 默认移除旧策略兼容所致的配置失败。
+
+macOS 可在终端启动本机构建，并用独立目录保存本次运行数据：
+
+```sh
+TMPDIR=/tmp/ QT_QPA_PLATFORM=cocoa ./build/portable/bin/Mlash --data-dir ./build/portable/manual-data
+```
+
+较长的 macOS 默认临时目录可能超过本地导入通道的 Unix socket 路径限制；上述命令仅为本次进程选择较短临时目录，不改变系统设置。此方式依赖本机 Qt SDK，不是已部署的独立应用包，也不代表代理或内核已就绪。
+
 ## 文档与发布工具检查
 
 ```powershell
