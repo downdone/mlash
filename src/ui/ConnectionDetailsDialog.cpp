@@ -42,7 +42,7 @@ QJsonArray ConnectionDetailsDialog::ruleSuggestions(const QJsonObject& row) {
 ConnectionDetailsDialog::ConnectionDetailsDialog(AppController* controller,QJsonObject row,QString profile,QString version,QWidget* parent)
     :QDialog(parent),controller_(controller),row_(std::move(row)),profile_(std::move(profile)),version_(std::move(version)) {
     setObjectName("connectionDetails"); setAttribute(Qt::WA_DeleteOnClose); setWindowTitle("连接详情 · 打开时快照"); resize(620,510);
-    auto* layout=new QVBoxLayout(this); auto* note=new QLabel("查看打开时的连接记录；字段不会跟随刷新改变。缺失信息显示为未知。"); note->setWordWrap(true); layout->addWidget(note);
+    auto* layout=new QVBoxLayout(this); auto* note=new QLabel("打开时的连接快照"); note->setWordWrap(true); layout->addWidget(note);
     auto* scroll=new DetailViewport; scroll->setWidgetResizable(true); scroll->setFrameShape(QFrame::NoFrame); auto* body=new QWidget; auto* fields=new QVBoxLayout(body); fields->setContentsMargins(4,4,4,4);
     QFormLayout* form=nullptr;
     const auto section=[&](const QString& title) { auto* label=new QLabel(title); label->setObjectName("sectionTitle"); fields->addWidget(label); form=new QFormLayout; form->setFieldGrowthPolicy(QFormLayout::AllNonFixedFieldsGrow); fields->addLayout(form); };

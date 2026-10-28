@@ -1,11 +1,12 @@
 #include "ProtocolSettingsDialog.h"
+#include "ContextNote.h"
 #include <QDialogButtonBox>
 #include <QLabel>
 #include <QPushButton>
 #include <QVBoxLayout>
 namespace mlash {
 ProtocolSettingsDialog::ProtocolSettingsDialog(AppController* controller,QWidget* parent):QDialog(parent),controller_(controller) {
-    setAttribute(Qt::WA_DeleteOnClose); setObjectName("protocolSettingsDialog"); setWindowTitle("Mlash链接导入"); resize(460,250); auto* layout=new QVBoxLayout(this); auto* note=new QLabel("为当前账户关联 mlash://import 链接。来自网站的订阅先进入确认框，确认后才下载；不抢占其他客户端的协议，关联属于其他程序路径时保留现状。"); note->setWordWrap(true); layout->addWidget(note); status_=new QLabel; status_->setObjectName("urlProtocolStatus"); status_->setTextFormat(Qt::PlainText); status_->setWordWrap(true); layout->addWidget(status_);
+    setAttribute(Qt::WA_DeleteOnClose); setObjectName("protocolSettingsDialog"); setWindowTitle("Mlash链接导入"); resize(460,250); auto* layout=new QVBoxLayout(this); layout->addWidget(contextNote("让 Mlash 打开订阅导入链接。","为当前账户关联 mlash://import 链接。来自网站的订阅先进入确认框，确认后才下载；不抢占其他客户端的协议，关联属于其他程序路径时保留现状。")); status_=new QLabel; status_->setObjectName("urlProtocolStatus"); status_->setTextFormat(Qt::PlainText); status_->setWordWrap(true); layout->addWidget(status_);
     auto* row=new QHBoxLayout; enable_=new QPushButton("关联到此程序"); disable_=new QPushButton("移除此程序关联"); enable_->setObjectName("enableUrlProtocol"); disable_->setObjectName("disableUrlProtocol"); row->addWidget(enable_); row->addWidget(disable_); layout->addLayout(row); auto* buttons=new QDialogButtonBox(QDialogButtonBox::Close); buttons->button(QDialogButtonBox::Close)->setText("关闭"); layout->addWidget(buttons); connect(buttons,&QDialogButtonBox::rejected,this,&QDialog::reject);
     const auto set=[this](bool enabled) { saving_=true; enable_->setEnabled(false); disable_->setEnabled(false); controller_->setUrlProtocol(enabled); }; connect(enable_,&QPushButton::clicked,this,[set] { set(true); }); connect(disable_,&QPushButton::clicked,this,[set] { set(false); }); connect(controller,&AppController::stateChanged,this,[this] { if (controller_->state().busy) { enable_->setEnabled(false); disable_->setEnabled(false); } else if (!saving_&&!reading_) refresh(); }); connect(controller,&AppController::operationFinished,this,[this](bool ok,const QString& message) { if (!saving_) return; saving_=false; refresh(ok?QString():message); }); refresh();
 }

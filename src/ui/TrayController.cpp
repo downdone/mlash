@@ -127,7 +127,7 @@ void TrayController::rebuildMenu() {
         connect(action, &QAction::triggered, this, [this, entry] { controller_->setMode(entry.second); });
     }
     auto* groups = menu_.addMenu("策略组"); groups->setEnabled(enabled && state.ready);
-    auto* automatic=groups->addAction("展开时自动测速"); automatic->setObjectName("trayAutoTestGroups"); automatic->setCheckable(true); automatic->setChecked(autoTestGroups_); automatic->setToolTip("本次启动有效；停留 300ms 后测速，复用 60 秒结果，关闭菜单停止");
+    auto* automatic=groups->addAction("展开时测延迟"); automatic->setObjectName("trayAutoTestGroups"); automatic->setCheckable(true); automatic->setChecked(autoTestGroups_); automatic->setToolTip("本次启动有效；停留 300ms 后测速，复用 60 秒结果，关闭菜单停止");
     connect(automatic,&QAction::toggled,this,[this](bool checked) { autoTestGroups_=checked; if (!checked) { groupDwell_.stop(); controller_->cancelTrayTests(); } }); groups->addSeparator();
     const auto& proxies = controller_->proxies();
     auto names=proxies.keys(); const auto common=controller_->nodePreferences().value("common_groups").toArray(); std::stable_sort(names.begin(),names.end(),[common](const QString& a,const QString& b) { return common.contains(a)&&!common.contains(b); });
@@ -144,12 +144,12 @@ void TrayController::rebuildMenu() {
                 if (!menuIcons_.contains(iconKey)) menuIcons_.insert(iconKey,NodePresentation::icon(value,nested)); action->setIcon(menuIcons_.value(iconKey));
                 connect(action, &QAction::triggered, this, [this, name, value] { controller_->selectMember(name, value); });
             }
-            sub->addSeparator(); auto* retest=sub->addAction("重新测速本组"); retest->setObjectName("trayRetestGroup"); connect(retest,&QAction::triggered,this,[this,sub,name] { groupDwell_.stop(); if (activeGroupMenu_==sub && sub->isVisible()) controller_->testTrayGroup(name,true); });
+            sub->addSeparator(); auto* retest=sub->addAction("重测本组延迟"); retest->setObjectName("trayRetestGroup"); connect(retest,&QAction::triggered,this,[this,sub,name] { groupDwell_.stop(); if (activeGroupMenu_==sub && sub->isVisible()) controller_->testTrayGroup(name,true); });
             updateGroupMenu(); if (autoTestGroups_) groupDwell_.start();
         });
         connect(sub,&QMenu::aboutToHide,this,[this,sub] { if (activeGroupMenu_!=sub) return; groupDwell_.stop(); activeGroupMenu_=nullptr; controller_->cancelTrayTests(); });
     }
-    groups->addSeparator(); auto* browse=groups->addAction("打开代理页 / 筛选…"); connect(browse,&QAction::triggered,this,[this] { emit showPage(2); });
+    groups->addSeparator(); auto* browse=groups->addAction("打开节点页…"); connect(browse,&QAction::triggered,this,[this] { emit showPage(2); });
     auto* subscriptions = menu_.addMenu("订阅"); subscriptions->setEnabled(enabled);
     for (const auto& profile : controller_->profiles()) {
         auto* action = subscriptions->addAction(profile.name); action->setCheckable(true); action->setChecked(profile.id == state.activeProfile);
@@ -162,10 +162,10 @@ void TrayController::rebuildMenu() {
     auto* core = menu_.addAction(state.core == CoreState::Running ? "停止内核" : "启动内核"); core->setEnabled(enabled);
     connect(core, &QAction::triggered, this, [this] { if (controller_->state().core == CoreState::Running) controller_->stopCore(); else controller_->startCore(); });
     menu_.addSeparator(); connect(menu_.addAction("打开主窗口"), &QAction::triggered, this, &TrayController::showWindow);
-    connect(menu_.addAction("代理 / 节点"), &QAction::triggered, this, [this] { emit showPage(2); });
+    connect(menu_.addAction("节点"), &QAction::triggered, this, [this] { emit showPage(2); });
     connect(menu_.addAction("连接"), &QAction::triggered, this, [this] { emit showPage(4); });
     auto* pages=menu_.addMenu("更多页面"); pages->setObjectName("trayMorePages");
-    for (const auto& page:QList<QPair<QString,int>>{{"测速",7},{"订阅管理",1},{"规则",3},{"日志",5}}) connect(pages->addAction(page.first),&QAction::triggered,this,[this,page] { emit showPage(page.second); });
+    for (const auto& page:QList<QPair<QString,int>>{{"网站测试",7},{"订阅管理",1},{"规则",3},{"日志",5}}) connect(pages->addAction(page.first),&QAction::triggered,this,[this,page] { emit showPage(page.second); });
     connect(menu_.addAction("设置"), &QAction::triggered, this, [this] { emit showPage(6); });
     menu_.addSeparator();
     connect(menu_.addAction("退出 Mlash"), &QAction::triggered, this, &TrayController::exitRequested);

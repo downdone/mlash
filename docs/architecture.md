@@ -6,7 +6,7 @@
 
 ```mermaid
 flowchart TD
-  UI[Qt Widgets 八页 / 按需创建窗口] --> C[AppController 唯一状态写入者]
+  UI[Qt Widgets 四分区 / 八任务视图 / 按需创建窗口] --> C[AppController 唯一状态写入者]
   Tray[托盘 / 按需菜单] --> C
   C --> API[MihomoClient / Qt Network NoProxy]
   C --> CM[CoreManager / 普通进程或服务会话]
@@ -29,7 +29,7 @@ flowchart TD
 便携包包含客户端、按需安装的 MlashTunService 和所管理的 mihomo；测试程序、Qt Test 和 yaml-cpp 源码不打包。
 Mlash.exe 的 FileDescription 和 ProductName 均为 Mlash。mihomo 仍是 QProcess 启动的独立子进程，
 普通模式使用 Windows Job 管理生命周期；TUN 模式由单独 SCM 权限服务拥有 Job。服务保留安装但核心绑定客户端心跳/管道，不能脱离客户端无限运行。任务管理器分组显示不是父子进程契约。
-界面不持有 Windows 句柄、文件事务或子进程；所有动作通过 Controller 方法。
+界面不持有 Windows 句柄、文件事务或子进程；所有动作通过 Controller 方法。一级导航按首页/配置/数据/设置组织，域内使用原八个视图 ID；窗口只保存有限分区浏览位置，跨页导航同步页签及分区，不增加持久化字段。
 
 ## 2. 模块契约
 
@@ -62,8 +62,8 @@ Mlash.exe 的 FileDescription 和 ProductName 均为 Mlash。mihomo 仍是 QProc
 - worker 捕获值和共享服务，完成结果经 queued invoke 返回主线程；QPointer 检测接收者是否存活。
 - 写命令以 busy 串行化，不排无界队列；拒绝重复状态写入。generation 丢弃过时只读结果。
 - UI 将 busy 与浏览分开：策略组/节点可选中、过滤/排序/查看，只有 Controller 写动作锁定；测速进度/取消直接显示。settingsDirty 统一应用/还原/关闭草稿判断，未修改不提交，失败规则保存恢复编辑。
-- 首页汇总 Controller 状态并路由业务页面；可见时的运行指标由 HomeMetrics 有界采样；组卡片由 QListWidget 委托绘制，连接页签复用有界快照模型。设置行只组织现有命令与字段，未增加持久化 schema；鼠标/键盘焦点绘制分开，保留键盘语义。
-- MainWindow 的应用事件过滤器仅处理自身对象树（含所属弹窗），按输入方式维护 keyboardFocus，销毁时移除。组合控件同步编辑器与外壳；鼠标不绘制残留焦点框，键盘保留提示。WidgetStyle 共用 Fusion 代理样式，在应用入口安装，Tray/MainWindow 入口幂等兜底；不以主窗口创建改变托盘风格。组合框配置已有视图与委托，不在样式遍历中替换 view，弹出面板绘制/屏幕范围过滤器由该弹窗拥有，随窗口/菜单树销毁；应用样式不持有窗口引用，不增加轮询或部署模块。首页主次卡片和设置两列只改变布局，命令与生命周期不变。
+- 首页汇总 Controller 状态并路由业务页面；可见时的运行指标由 HomeMetrics 有界采样；组卡片由 QListWidget 委托绘制，连接页签复用有界快照模型。设置以常规、网络与内核、备份与工具分类组织单列有界阅读宽度的滚动分组；搜索先显示分类再异步定位，分类间共享未提交草稿。订阅配置、节点操作、规则和网站/出口诊断按任务页面归属；首页节点预选须显式提交，规则列表和文本共享现有草稿。只组织现有命令与字段，未增加持久化 schema；鼠标/键盘焦点绘制分开，保留键盘语义。
+- 应用级输入来源由 WidgetStyle 的 InputSource 维护 keyboardFocus；MainWindow 不再为已取消的双列设置重排安装应用级事件过滤器。组合控件同步编辑器与外壳；鼠标不绘制残留焦点框，键盘保留提示。WidgetStyle 共用 Fusion 代理样式，在应用入口安装，Tray/MainWindow 入口幂等兜底；不以主窗口创建改变托盘风格。组合框配置已有视图与委托，不在样式遍历中替换 view，弹出面板绘制/屏幕范围过滤器由该弹窗拥有，随窗口/菜单树销毁；应用样式不持有窗口引用，不增加轮询或部署模块。单一接受按钮的 visualPrimary 仅控制外观，不改变默认按钮或快捷键；首页主次卡片、连续侧栏、设置分组和规则/连接/日志工具带重排只改变布局，命令与生命周期不变。
 - 节点表格与卡片复用同一模型、筛选代理与选择模型；卡片委托按宽度分列，NodePresentation 仅从名称推断地区提示。有限图标缓存由窗口委托拥有，GuiHost 的会话书签保存视图索引，重建恢复；不增加后台网络或存储字段。
 - 组列表按需展开，当前组标题常驻；卡片延迟区域由视图处理鼠标命中，QPersistentModelIndex 验证按下/释放目标一致，避免排序/过滤后的误测。单节点命令复用 Controller.testNodes，延迟点击不进入选择/激活流程，忙碌仍允许浏览。
 - API configure/cancelAll 增加网络代次，旧内核响应不能写回新运行态。

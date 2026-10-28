@@ -21,6 +21,7 @@
 #include <QPushButton>
 #include <QKeyEvent>
 #include <QDialog>
+#include <QDialogButtonBox>
 
 namespace mlash {
 namespace {
@@ -31,6 +32,15 @@ protected:
     bool eventFilter(QObject* watched,QEvent* event) override {
         auto* widget=qobject_cast<QWidget*>(watched); if (!widget) return false;
         if (event->type()==QEvent::Show) if (auto* dialog=qobject_cast<QDialog*>(widget);dialog&&!dialog->inherits("QMessageBox")&&!dialog->inherits("QFileDialog")&&!dialog->inherits("QInputDialog")) {
+            // Style the single accepting action without changing its default,
+            // shortcut, enabled state, or the dialog's transaction semantics.
+            for (auto* box:dialog->findChildren<QDialogButtonBox*>()) {
+                QList<QAbstractButton*> accepting;
+                for (auto* button:box->buttons()) if (box->buttonRole(button)==QDialogButtonBox::AcceptRole&&!button->property("danger").toBool()) accepting.append(button);
+                if (accepting.size()==1&&!accepting.first()->property("visualPrimary").toBool()) {
+                    auto* button=accepting.first(); button->setProperty("visualPrimary",true); button->style()->unpolish(button); button->style()->polish(button);
+                }
+            }
             QList<QPushButton*> primary;
             const auto buttons=dialog->findChildren<QPushButton*>();
             for (auto* button:buttons) if (button->window()==dialog&&button->isVisibleTo(dialog)&&button->property("primary").toBool()) primary.append(button);

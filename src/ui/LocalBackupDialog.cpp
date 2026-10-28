@@ -1,4 +1,5 @@
 #include "LocalBackupDialog.h"
+#include "ContextNote.h"
 #include "BackupDialog.h"
 #include "DialogDraftGuard.h"
 #include "UiTheme.h"
@@ -25,8 +26,7 @@ LocalBackupDialog::LocalBackupDialog(AppController* controller,QWidget* parent)
     setAttribute(Qt::WA_DeleteOnClose); setObjectName("localBackupDialog");
     setWindowTitle("本地备份与保护"); resize(660,540);
     auto* outer=new QVBoxLayout(this); auto* scroll=new QScrollArea; scroll->setFrameShape(QFrame::NoFrame); scroll->setWidgetResizable(true); auto* surface=new QWidget; auto* layout=new QVBoxLayout(surface); layout->setContentsMargins(0,0,0,0); scroll->setWidget(surface); outer->addWidget(scroll,1);
-    auto* description=new QLabel("计划在托盘中继续执行。快照使用备份密码加密，恢复时需要此密码；修改密码仅影响之后的快照，请保存旧密码。");
-    description->setWordWrap(true); description->setProperty("secondary",true); layout->addWidget(description);
+    layout->addWidget(contextNote("请保管备份密码；修改密码后仍需保留旧密码。","计划在托盘中继续执行。快照使用备份密码加密，恢复时需要此密码；修改密码仅影响之后的快照，请保存旧密码。"));
     auto* form=new QFormLayout;
     enabled_=new QCheckBox("按计划自动备份"); enabled_->setObjectName("localBackupEnabled");
     before_=new QCheckBox("重大变更前创建快照"); before_->setObjectName("localBackupBeforeChanges");

@@ -10,6 +10,9 @@ public:
     explicit WebsiteTestsPage(AppController* controller,QWidget* parent=nullptr);
     void setActive(bool active,const QString& suggestedGroup={});
     void suggestGroup(const QString& group);
+signals:
+    void pageRequested(int page);
+    void diagnosticsRequested();
 protected:
     void resizeEvent(QResizeEvent* event) override;
     bool eventFilter(QObject* watched,QEvent* event) override;

@@ -22,7 +22,8 @@
 | [总体架构](architecture.md) | 进程、模块、线程、状态、存储事务和 OS 恢复 |
 | [功能模块契约](development/feature-contracts.md) | 有界字段、计划、并发、快照与取消细则 |
 | [内核 API 契约](api-contracts.md) | 固定内核行为、错误/超时和实际回读 |
-| [当前交互契约](ui-interactions.md) | 八页、托盘、反馈、视觉与完整操作链 |
+| [当前交互契约](ui-interactions.md) | 四分区八视图、托盘、反馈、视觉与完整操作链 |
+| [界面精修审视](ui-apple-review.md) | Apple 风格精修的逐页、控件、按钮与密度设计及复核 |
 | [原始产品规格](Mlash_Codex_Design_Spec_v2.0.md) | 需求和验收基线；接受的偏差由 ADR 说明 |
 | [架构决策索引](adr/README.md) | 编号 ADR、后续替代关系和设计理由 |
 

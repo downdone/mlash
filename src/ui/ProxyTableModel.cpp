@@ -4,6 +4,7 @@
 #include <QFont>
 #include <QBrush>
 #include <QColor>
+#include <QGuiApplication>
 
 namespace mlash {
 int ProxyTableModel::rowCount(const QModelIndex& parent) const { return parent.isValid() ? 0 : names_.size(); }
@@ -29,7 +30,7 @@ QVariant ProxyTableModel::data(const QModelIndex& index, int role) const {
         return index.column() == 0 ? name : proxies_.value(name).toObject().value("type").toString();
     }
     if (role == Qt::ToolTipRole) return name + "\n类型：" + proxies_.value(name).toObject().value("type").toString("未知") + (measured_.contains(name)?"\n测于："+measured_.value(name).toLocalTime().toString("yyyy-MM-dd HH:mm:ss")+" · 60 秒后视为旧结果":QString()) + (errors_.value(name).isEmpty() ? QString() : "\n" + errors_.value(name));
-    if (role == Qt::FontRole && name == now_) { QFont font; font.setFamilies({"Segoe UI","Microsoft YaHei UI"}); font.setPointSize(UiTheme::BodyPoints); font.setBold(true); return font; }
+    if (role == Qt::FontRole && name == now_) { auto font=QGuiApplication::font(); font.setBold(true); return font; }
     if (role != Qt::DisplayRole) return {};
     if (index.column() == 0) return (name == now_ ? "● " : "   ") + (favorites_.contains(name)?QString("★ "):QString()) + name;
     if (index.column() == 1) return group ? "策略组 ›" : proxies_.value(name).toObject().value("type").toString("未知");

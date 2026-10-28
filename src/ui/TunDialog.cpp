@@ -1,4 +1,5 @@
 #include "TunDialog.h"
+#include "ContextNote.h"
 #include "CompactComboBox.h"
 #include "DialogDraftGuard.h"
 #include "core/TunPolicy.h"
@@ -18,7 +19,7 @@ namespace mlash {
 TunDialog::TunDialog(AppController* c,QWidget* parent):QDialog(parent),controller_(c),initial_(c->settings()) {
     setAttribute(Qt::WA_DeleteOnClose); setObjectName("tunDialog"); setWindowTitle("TUN 与权限服务"); resize(640,500);
     auto* outer=new QVBoxLayout(this); auto* scroll=new QScrollArea; scroll->setWidgetResizable(true); scroll->setFrameShape(QFrame::NoFrame); auto* body=new QWidget; auto* layout=new QVBoxLayout(body); layout->setContentsMargins(4,4,4,4); layout->setSpacing(10);
-    auto* note=new QLabel("通过虚拟网卡接管流量，界面保持普通权限。安装、修复和移除服务需要 Windows 管理员授权。"); note->setWordWrap(true); layout->addWidget(note);
+    layout->addWidget(contextNote("Windows 服务管理需要管理员授权。","通过虚拟网卡接管流量，界面保持普通权限。安装、修复和移除服务需要 Windows 管理员授权。"));
     status_=new QLabel("正在读取服务…"); status_->setTextFormat(Qt::PlainText); status_->setWordWrap(true); status_->setObjectName("tunServiceStatus"); layout->addWidget(status_);
     auto* tools=new QHBoxLayout; install_=new QPushButton("安装服务…"); install_->setObjectName("installTunService"); repair_=new QPushButton("修复服务…"); repair_->setObjectName("repairTunService"); remove_=new QPushButton("移除服务…"); remove_->setObjectName("removeTunService"); refresh_=new QPushButton("刷新"); refresh_->setObjectName("refreshTunService"); tools->addWidget(install_); tools->addWidget(repair_); tools->addWidget(remove_); tools->addStretch(); tools->addWidget(refresh_); layout->addLayout(tools);
     auto* form=new QFormLayout; form->setVerticalSpacing(10); enabled_=new QCheckBox("启用 TUN"); enabled_->setObjectName("tunEnabledDraft"); enabled_->setChecked(initial_.tunEnabled); form->addRow("流量接管",enabled_);
@@ -28,11 +29,11 @@ TunDialog::TunDialog(AppController* c,QWidget* parent):QDialog(parent),controlle
     mtu_=new QSpinBox; mtu_->setObjectName("tunMtu"); mtu_->setRange(1280,9000); mtu_->setButtonSymbols(QAbstractSpinBox::NoButtons); mtu_->setValue(initial_.tunMtu); mtu_->setMaximumWidth(130); advancedForm->addRow("MTU",mtu_);
     dnsHijack_=new QCheckBox("接管 DNS 53 端口（推荐）"); dnsHijack_->setObjectName("tunDnsHijack"); dnsHijack_->setChecked(initial_.tunDnsHijack); advancedForm->addRow("DNS",dnsHijack_);
     routes_=new QPlainTextEdit(initial_.tunExcludeRoutes.join('\n')); routes_->setObjectName("tunExcludeRoutes"); routes_->setPlaceholderText("每行一个网段，如 192.168.0.0/16 或 fd00::/8"); routes_->setFixedHeight(80); advancedForm->addRow("排除网段",routes_); advancedLayout->addLayout(advancedForm);
-    auto* routeNote=new QLabel("排除的网段由原网络路由处理，可用于局域网/企业 VPN。最多64项，不能排除 /0；这与系统代理排除列表不同。"); routeNote->setWordWrap(true); advancedLayout->addWidget(routeNote);
+    auto* routeNote=new QLabel("这些网段不经过 TUN，沿用原网络路由。"); routeNote->setWordWrap(true); advancedLayout->addWidget(routeNote);
     auto* operations=new QHBoxLayout; auto* interfaces=new QPushButton("查看网络接口…"); interfaces->setObjectName("inspectNetworkInterfaces"); operations->addWidget(interfaces); cleanup_=new QPushButton("重试确认清理"); cleanup_->setObjectName("retryTunCleanup"); operations->addWidget(cleanup_); operations->addStretch(); advancedLayout->addLayout(operations);
     details_=new QPlainTextEdit; details_->setObjectName("tunServiceDetails"); details_->setReadOnly(true); details_->setMinimumHeight(100); advancedLayout->addWidget(details_); layout->addWidget(advanced); advanced->hide(); connect(advancedToggle,&QPushButton::toggled,advanced,&QWidget::setVisible);
     validation_=new QLabel; validation_->setObjectName("tunValidationError"); validation_->setTextFormat(Qt::PlainText); validation_->setWordWrap(true); layout->addWidget(validation_);
-    hint_=new QLabel("关闭窗口后继续运行，退出 Mlash 时结束会话。TUN 与系统代理独立，设备名固定为 Mlash。"); hint_->setTextFormat(Qt::PlainText); hint_->setWordWrap(true); hint_->setObjectName("secondaryText"); layout->addWidget(hint_); layout->addStretch(); scroll->setWidget(body); outer->addWidget(scroll,1);
+    hint_=new QLabel("TUN 与系统代理可独立开启。"); hint_->setTextFormat(Qt::PlainText); hint_->setWordWrap(true); hint_->setObjectName("secondaryText"); layout->addWidget(hint_); layout->addStretch(); scroll->setWidget(body); outer->addWidget(scroll,1);
     auto* buttons=new QDialogButtonBox(QDialogButtonBox::Close); buttons->button(QDialogButtonBox::Close)->setText("关闭"); apply_=buttons->addButton("应用",QDialogButtonBox::AcceptRole); apply_->setObjectName("applyTunOptions"); apply_->setProperty("primary",true); outer->addWidget(buttons);
     connect(buttons,&QDialogButtonBox::rejected,this,&QDialog::reject); connect(refresh_,&QPushButton::clicked,this,&TunDialog::inspect);
     connect(install_,&QPushButton::clicked,this,[this] { waiting_=true; updateActions(); controller_->manageTunService(true); }); connect(repair_,&QPushButton::clicked,this,[this] { waiting_=true; updateActions(); controller_->repairTunService(); }); connect(remove_,&QPushButton::clicked,this,[this] { waiting_=true; updateActions(); controller_->manageTunService(false); }); connect(cleanup_,&QPushButton::clicked,this,[this] { waiting_=true; cleaning_=true; updateActions(); controller_->retryTunCleanup(); });

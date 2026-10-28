@@ -88,7 +88,7 @@ else()
     target_compile_options(mlash_engine PRIVATE -Wall -Wextra -Wpedantic)
 endif()
 
-add_library(mlash_ui STATIC src/ui/SettingsSearch.h src/ui/SettingsSearch.cpp src/ui/HomeSummaryDialog.h src/ui/HomeSummaryDialog.cpp src/ui/MainWindow.h src/ui/MainWindow.cpp src/ui/MainWindowHome.cpp src/ui/MainWindowSettings.cpp src/ui/MainWindowProxy.cpp src/ui/MainWindowProfiles.cpp src/ui/MainWindowParts.h src/ui/NodeFilter.cpp
+add_library(mlash_ui STATIC src/ui/ContextNote.h src/ui/SettingsSearch.h src/ui/SettingsSearch.cpp src/ui/HomeSummaryDialog.h src/ui/HomeSummaryDialog.cpp src/ui/MainWindow.h src/ui/MainWindow.cpp src/ui/MainWindowHome.cpp src/ui/MainWindowSettings.cpp src/ui/MainWindowProxy.cpp src/ui/MainWindowProfiles.cpp src/ui/MainWindowParts.h src/ui/NodeFilter.cpp
     src/ui/ProviderDefinitionDialog.h src/ui/YamlFormEditor.h src/ui/YamlFormEditor.cpp
     src/ui/ConnectionDetailsDialog.h src/ui/ConnectionDetailsDialog.cpp src/ui/ProviderDefinitionDialog.cpp src/ui/ProviderPolicyDialog.cpp
     src/ui/DialogDraftGuard.h src/ui/DialogDraftGuard.cpp
@@ -182,7 +182,7 @@ if(BUILD_TESTING)
         providerAndCompatibilityDialogsRespectVersions
         trayGroupDwellCacheAndSelection trayAppearancePriorityAndResources lightweightLifecycleAndQuickReopen
         importValidationAndSecretVisibility failedImportRetainsDraftUntilExplicitRetry unchangedSnapshotsPreserveRowsAndChoices refinedTaskGeometryAndSemantics refinedContextFitsAutomaticGroupsAndLargeText emptyStateCannotIssueInvalidCommands fileProfileOffersSourceSyncAndReplacement
-        coherentActionsAndBilingualRuleTokens nodeLocationHints dashboardTabsAndSettingsFocus quietMouseFocusAndTwoColumnSettings
+        coherentActionsAndBilingualRuleTokens nodeLocationHints dashboardTabsAndSettingsFocus quietMouseFocusAndGroupedSettings
         -o "${CMAKE_BINARY_DIR}/ui-components.xml,xml")
     set_tests_properties(ui_components PROPERTIES TIMEOUT 30 ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
     add_test(NAME status_bar_tests COMMAND mlash_ui_tests persistentStatusBarDoesNotMovePages -o "${CMAKE_BINARY_DIR}/status-bar-tests.xml,xml")
@@ -311,6 +311,15 @@ if(BUILD_TESTING)
     target_compile_definitions(mlash_appearance_tests PRIVATE MLASH_SOURCE_DIR="${CMAKE_SOURCE_DIR}")
     add_test(NAME appearance_tests COMMAND mlash_appearance_tests -o "${CMAKE_BINARY_DIR}/appearance-tests.xml,xml")
     set_tests_properties(appearance_tests PROPERTIES TIMEOUT 45 ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
+    if(NOT WIN32)
+        add_test(NAME ui_refinement_tests COMMAND mlash_appearance_tests
+            semanticContrastAndArtwork themeChangesPreserveDraftAndPopupFirstFrame
+            allPagesAndDialogsAcrossAppearances groupedSettingsAndPopulatedPagesRemainUsable
+            toolWindowsKeepActionsAndDraftsAccessible quietDefaultsKeepErrorsDraftsAndHelp
+            taskEntryPointsAndSettingsStayCoherent ruleListAndHomeSelectionRequireExplicitApply
+            -o "${CMAKE_BINARY_DIR}/ui-refinement-tests.xml,xml")
+        set_tests_properties(ui_refinement_tests PROPERTIES TIMEOUT 45 ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
+    endif()
     if(WIN32)
         add_executable(mlash_system_tests tests/WindowsReleaseTests.cpp src/platform/windows/WindowsReleaseSupport.cpp)
         target_link_libraries(mlash_system_tests PRIVATE mlash_engine Qt6::Test)

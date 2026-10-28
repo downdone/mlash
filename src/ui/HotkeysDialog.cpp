@@ -1,5 +1,6 @@
 #include "DialogDraftGuard.h"
 #include "HotkeysDialog.h"
+#include "ContextNote.h"
 #include <QFormLayout>
 #include <QVBoxLayout>
 #include <QHBoxLayout>
@@ -58,7 +59,7 @@ protected:
 HotkeysDialog::HotkeysDialog(AppController* controller,QWidget* parent):QDialog(parent) {
     setAttribute(Qt::WA_DeleteOnClose); setObjectName("hotkeysDialog"); setWindowTitle("全局快捷键"); resize(620,440); setMinimumSize(480,340);
     const auto expected=controller->settings().hotkeys; auto* layout=new QVBoxLayout(this);
-    auto* note=new QLabel("留空关闭，支持手填或录制单组合。至少包含Ctrl或Alt，可加Shift和字母、数字、F键（F12/Win保留）。网络动作须空闲且状态允许；不自动接管外部代理或安装TUN服务。重载只使用运行版，模式按该版配置初始化。"); note->setWordWrap(true); layout->addWidget(note);
+    layout->addWidget(contextNote("录制组合键，或留空停用。","留空关闭，支持手填或录制单组合。至少包含Ctrl或Alt，可加Shift和字母、数字、F键（F12/Win保留）。网络动作须空闲且状态允许；不自动接管外部代理或安装TUN服务。重载只使用运行版，模式按该版配置初始化。"));
     auto* scroll=new HotkeyViewport; scroll->setObjectName("hotkeyScroll"); scroll->setWidgetResizable(true); scroll->setFrameShape(QFrame::NoFrame); auto* body=new QWidget; auto* fields=new QVBoxLayout(body); fields->setContentsMargins(2,2,2,2); QFormLayout* form=nullptr; bool previousNetwork=true;
     QMap<QString,CaptureEdit*> inputs; QMap<QString,QLabel*> observed; QList<QPushButton*> records;
     for (const auto& action:hotkeyActions()) {
@@ -68,15 +69,15 @@ HotkeysDialog::HotkeysDialog(AppController* controller,QWidget* parent):QDialog(
         auto* actual=new QLabel; actual->setTextFormat(Qt::PlainText); actual->setProperty("secondary",true); actual->setSizePolicy(QSizePolicy::Ignored,QSizePolicy::Preferred); actual->setObjectName("registeredHotkey_"+action.id); observed.insert(action.id,actual); entry->addWidget(actual); form->addRow(action.title,row);
     }
     fields->addStretch(); scroll->setWidget(body); layout->addWidget(scroll,1);
-    auto* hint=new QLabel; hint->setObjectName("hotkeyHint"); hint->setTextFormat(Qt::PlainText); hint->setWordWrap(true); hint->setMinimumHeight(fontMetrics().lineSpacing()*2+4); layout->addWidget(hint);
+    auto* hint=new QLabel; hint->setObjectName("hotkeyHint"); hint->setTextFormat(Qt::PlainText); hint->setWordWrap(true); hint->setMinimumHeight(fontMetrics().lineSpacing()+4); layout->addWidget(hint);
     auto* actions=new QDialogButtonBox(QDialogButtonBox::Save|QDialogButtonBox::Cancel); auto* save=actions->button(QDialogButtonBox::Save); save->setText("应用快捷键"); save->setObjectName("saveHotkeys"); actions->button(QDialogButtonBox::Cancel)->setText("取消"); layout->addWidget(actions); auto saving=std::make_shared<bool>(false); auto error=std::make_shared<QString>();
     const auto draft=[inputs] { QJsonObject value; for (auto it=inputs.begin();it!=inputs.end();++it) value[it.key()]=it.value()->text(); return value; };
     const auto update=[controller,inputs,observed,records,save,saving,error,hint,draft] {
         QList<HotkeyBinding> parsed; const auto checked=parseHotkeys(draft(),parsed); const auto& state=controller->state(); const bool editable=!*saving&&!state.busy&&!state.exiting&&!state.readOnly;
         for (auto* input:inputs) input->setEnabled(editable); for (auto* record:records) record->setEnabled(editable);
         save->setEnabled(editable&&!controller->capturingHotkey()&&(!checked.ok||checked.data.value("bindings").toObject()!=controller->settings().hotkeys||checked.data.value("bindings").toObject()!=controller->activeHotkeys()||!controller->hotkeyError().isEmpty()));
-        for (auto it=observed.begin();it!=observed.end();++it) { const auto actual=controller->activeHotkeys().value(it.key()).toString(); it.value()->setText(actual.isEmpty()?QString("当前未注册"):"已注册："+actual); it.value()->setToolTip(it.value()->text()); }
-        const auto status=controller->capturingHotkey()?QString("录制中：按下组合键；Esc取消，移开焦点结束。已绑定键只作输入。"):!error->isEmpty()?*error:!checked.ok?checked.error:!controller->hotkeyError().isEmpty()?controller->hotkeyError():QString("实际已注册 %1 项；未保存内容只在本窗口。留空关闭对应动作。").arg(controller->activeHotkeys().size()); hint->setText(status); hint->setToolTip(status);
+        for (auto it=observed.begin();it!=observed.end();++it) { const auto actual=controller->activeHotkeys().value(it.key()).toString(); it.value()->setText(actual.isEmpty()?QString():"已注册："+actual); it.value()->setToolTip(it.value()->text()); }
+        const auto status=controller->capturingHotkey()?QString("录制中：按下组合键；Esc取消，移开焦点结束。已绑定键只作输入。"):!error->isEmpty()?*error:!checked.ok?checked.error:!controller->hotkeyError().isEmpty()?controller->hotkeyError():controller->activeHotkeys().isEmpty()?QString():QString("%1 项已启用").arg(controller->activeHotkeys().size()); hint->setText(status); hint->setToolTip(status);
     };
     for (auto it=inputs.begin();it!=inputs.end();++it) { auto* input=it.value(); connect(input,&QLineEdit::textChanged,this,[error,update] { error->clear(); update(); }); auto* record=findChild<QPushButton*>("recordHotkey_"+it.key()); connect(record,&QPushButton::clicked,this,[input,error,update] { if (input->recording()) input->stop(); else if (!input->start()) *error="当前不能录制，请等待正在执行的任务或注册完成。"; update(); }); }
     connect(controller,&AppController::stateChanged,this,update); connect(controller,&AppController::hotkeyCaptureChanged,this,[update](quint64) { update(); }); connect(actions,&QDialogButtonBox::rejected,this,&QDialog::reject);

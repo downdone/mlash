@@ -11,7 +11,7 @@
 namespace mlash {
 WebsiteTargetsDialog::WebsiteTargetsDialog(AppController* controller, QWidget* parent) : QDialog(parent), controller_(controller) {
     setAttribute(Qt::WA_DeleteOnClose); setObjectName("websiteTargetsDialog"); setWindowTitle("测速目标"); resize(600,410);
-    auto* layout = new QVBoxLayout(this); auto* note = new QLabel("编辑名称和 HTTPS 地址；仅在开始测速时访问，最多 24 个目标。"); note->setWordWrap(true); layout->addWidget(note);
+    auto* layout = new QVBoxLayout(this); auto* note = new QLabel("填写 HTTPS 测试地址。"); note->setWordWrap(true); layout->addWidget(note);
     table_ = new QTableWidget(0,2); table_->setObjectName("websiteTargetsTable"); table_->setHorizontalHeaderLabels({"名称","HTTPS 目标地址"}); table_->verticalHeader()->hide(); table_->setSelectionBehavior(QAbstractItemView::SelectRows); table_->setSelectionMode(QAbstractItemView::SingleSelection); table_->horizontalHeader()->setSectionResizeMode(1,QHeaderView::Stretch); table_->setColumnWidth(0,155); layout->addWidget(table_,1);
     auto* tools = new QHBoxLayout; auto* add = new QPushButton("添加"); add->setObjectName("addWebsiteTarget"); tools->addWidget(add); auto* remove = new QPushButton("删除"); remove->setObjectName("removeWebsiteTarget"); tools->addWidget(remove); auto* up = new QPushButton("上移"); tools->addWidget(up); auto* down = new QPushButton("下移"); tools->addWidget(down); tools->addStretch(); auto* defaults = new QPushButton("恢复默认"); defaults->setObjectName("defaultWebsiteTargets"); tools->addWidget(defaults); layout->addLayout(tools);
     hint_ = new QLabel; hint_->setObjectName("websiteTargetsHint"); hint_->setWordWrap(true); hint_->setTextFormat(Qt::PlainText); layout->addWidget(hint_);

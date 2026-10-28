@@ -28,7 +28,6 @@
 int main(int argc, char** argv) {
     QElapsedTimer startup; startup.start();
     QApplication app(argc, argv);
-    app.setFont(QFont("Microsoft YaHei UI", 9));
     mlash::WidgetStyle::install();
     app.setApplicationName("Mlash"); app.setOrganizationName("Mlash"); app.setApplicationVersion(MLASH_VERSION); app.setQuitOnLastWindowClosed(false);
     app.setWindowIcon(mlash::TrayController::icon());
