@@ -11,6 +11,7 @@ public:
     void addRoute(const QString& title,const QString& terms,int page);
 signals:
     void pageRequested(int page);
+    void anchorRequested(QWidget* anchor);
 protected:
     bool eventFilter(QObject* watched,QEvent* event) override;
     void showEvent(QShowEvent* event) override;

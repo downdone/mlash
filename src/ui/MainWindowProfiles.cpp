@@ -1,5 +1,7 @@
 #include "MainWindowParts.h"
 #include "profile/NodeLinks.h"
+#include "WrapLayout.h"
+#include <QSet>
 
 namespace mlash {
 using namespace WindowParts;
@@ -12,12 +14,12 @@ QWidget* MainWindow::profilesPage() {
     auto* batch=button("批量更新…",header); batch->setObjectName("batchProfiles"); connect(batch,&QPushButton::clicked,this,[this] { showProfileBatch(false); });
     header->removeWidget(add); header->addWidget(add);
     auto* listPanel = panel(); auto* listLayout = new QVBoxLayout(listPanel); listLayout->setContentsMargins(12, 10, 12, 10); listLayout->setSpacing(8); layout->addWidget(listPanel, 1);
-    auto* objectActions=new QWidget; objectActions->setObjectName("profileObjectActions"); auto* actions = new QHBoxLayout(objectActions); actions->setContentsMargins(0,0,0,0); profileSelection_ = new ElidedLabel("选择订阅后可更新或使用"); profileSelection_->setObjectName("secondaryText"); profileSelection_->setSizePolicy(QSizePolicy::Ignored, QSizePolicy::Preferred); actions->addWidget(profileSelection_, 1);
+    auto* objectActions=new QWidget; objectActions->setObjectName("profileObjectActions"); auto* actions = new WrapLayout(objectActions); actions->setContentsMargins(0,0,0,0); profileSelection_ = new ElidedLabel("选择订阅后可更新或使用"); profileSelection_->setObjectName("secondaryText"); profileSelection_->setSizePolicy(QSizePolicy::Ignored, QSizePolicy::Preferred); profileSelection_->hide();
     auto* update = button("更新订阅", actions); auto* replace = new QAction("更换文件…",this); replace->setObjectName("replaceProfileSource"); listLayout->addWidget(objectActions); mutations_ += {update};
     profileUpdate_ = update; profileReplace_ = replace;
     profileUpdate_->setObjectName("updateProfile");
     connect(update, &QPushButton::clicked, this, [this] { const auto rows=profileTable_->selectionModel()->selectedRows(); if (rows.size()>1) showProfileBatch(true); else controller_->updateProfile(selectedProfile()); }); connect(replace, &QAction::triggered, this, [this] { addFile(true); });
-    profileTable_ = new QTableWidget(0, 4); profileTable_->setHorizontalHeaderLabels({"名称", "来源", "最近更新", "状态"});
+    profileTable_ = new QTableWidget(0, 4); profileTable_->setHorizontalHeaderLabels({"名称", "获取方式", "获取时间", "状态"});
     profileTable_->setSelectionBehavior(QAbstractItemView::SelectRows); profileTable_->setSelectionMode(QAbstractItemView::ExtendedSelection); profileTable_->setEditTriggers(QAbstractItemView::NoEditTriggers);
     profileTable_->verticalHeader()->hide(); profileTable_->horizontalHeader()->setSectionResizeMode(0, QHeaderView::Stretch); listLayout->addWidget(profileTable_, 1);
     profileTable_->setObjectName("profilesTable"); styleTable(profileTable_); profileTable_->setColumnWidth(1, 90); profileTable_->setColumnWidth(2, 110); profileTable_->setColumnWidth(3, 130);
@@ -44,12 +46,12 @@ QWidget* MainWindow::profilesPage() {
         auto* close=new QPushButton("关闭"); box->addWidget(close); connect(close,&QPushButton::clicked,dialog,&QDialog::close); dialog->resize(380,180); dialog->show();
     });
     auto* rename = menu->addAction("重命名…"); profilePolicy_ = new QAction("来源与更新…", this); profilePolicy_->setObjectName("profileUpdatePolicy"); actionButton(profilePolicy_, actions, "profilePolicyButton");
-    auto* manage=new MenuPushButton("管理"); manage->setObjectName("profileManage"); manage->setMenu(menu); actions->addWidget(manage);
+    auto* manage=new MenuPushButton("管理"); manage->setObjectName("profileManage"); manage->setMenu(menu); auto* editConfig=new MenuPushButton("编辑配置"); editConfig->setObjectName("profileEdit"); auto* editMenu=new QMenu(editConfig); editMenu->setObjectName("profileEditMenu"); editConfig->setMenu(editMenu); actions->addWidget(editConfig); actions->addWidget(manage);
     connect(profilePolicy_, &QAction::triggered, this, &MainWindow::editProfilePolicy);
-    auto* providers = menu->addAction("提供者…"); providers->setObjectName("profileProviders"); connect(providers, &QAction::triggered, this, [this] { showProviders(selectedProfile()); });
+    auto* providers = menu->addAction("节点源（Provider）…"); providers->setObjectName("profileProviders"); connect(providers, &QAction::triggered, this, [this] { showProviders(selectedProfile(),"proxy-providers"); });
     auto* dns = menu->addAction("DNS 设置…"); dns->setObjectName("profileDns"); connect(dns,&QAction::triggered,this,[this] { const auto id=selectedProfile(); if (!id.isEmpty()&&!controller_->state().busy) (new DnsDialog(controller_,id,this))->show(); });
     auto* proxyEditor=menu->addAction("编辑节点与策略组…"); proxyEditor->setObjectName("profileProxyEditor"); connect(proxyEditor,&QAction::triggered,this,[this] { const auto id=selectedProfile(); if (!id.isEmpty()&&!controller_->state().busy) (new ProxyEditorDialog(controller_,id,this))->show(); });
-    auto* proxyChain=menu->addAction("代理拨号链…"); proxyChain->setObjectName("profileProxyChain"); connect(proxyChain,&QAction::triggered,this,[this] { const auto id=selectedProfile(); if (!id.isEmpty()&&!controller_->state().busy) (new ProxyChainDialog(controller_,id,this))->show(); });
+    auto* proxyChain=menu->addAction("上游代理链…"); proxyChain->setObjectName("profileProxyChain"); connect(proxyChain,&QAction::triggered,this,[this] { const auto id=selectedProfile(); if (!id.isEmpty()&&!controller_->state().busy) (new ProxyChainDialog(controller_,id,this))->show(); });
     auto* compatibility = menu->addAction("配置兼容性…"); compatibility->setObjectName("profileCompatibility");
     connect(compatibility, &QAction::triggered, this, [this] {
         const auto id = selectedProfile(); if (id.isEmpty()) return;
@@ -65,12 +67,15 @@ QWidget* MainWindow::profilesPage() {
     });
     profileReload_ = menu->addAction("重新加载当前版本"); connect(profileReload_, &QAction::triggered, this, [this] { controller_->activateProfile(selectedProfile()); });
     auto* rollback = menu->addAction("回滚上次运行版本"); menu->addSeparator(); auto* remove = menu->addAction("删除订阅…"); menu->addSeparator(); auto* directory = menu->addAction("打开数据目录");
-    auto* activate = button("使用选中订阅", actions); activate->setProperty("primary", true); auto slot=activate->sizePolicy(); slot.setRetainSizeWhenHidden(true); activate->setSizePolicy(slot);
+    auto* activate = button("使用并启动", actions); activate->setProperty("primary", true); auto slot=activate->sizePolicy(); slot.setRetainSizeWhenHidden(true); activate->setSizePolicy(slot);
     profileDetails_ = new ElidedLabel; profileDetails_->setObjectName("secondaryText"); profileDetails_->setSizePolicy(QSizePolicy::Ignored, QSizePolicy::Preferred); listLayout->addWidget(profileDetails_);
     mutations_ += {activate}; listLayout->addLayout(bottom);
     profileActivate_ = activate; profileRollback_ = rollback; profileRename_ = rename; profileDelete_ = remove;
     rollback->setObjectName("rollbackProfile"); rename->setObjectName("renameProfile"); remove->setObjectName("deleteProfile");
     profileActivate_->setObjectName("activateProfile");
+    for (auto* action:{proxyEditor,dns,proxyChain,providers}) { menu->removeAction(action); editMenu->addAction(action); }
+    menu->addSeparator(); menu->addAction(profilePolicy_);
+    listLayout->removeWidget(objectActions); listLayout->addWidget(objectActions);
     connect(activate, &QPushButton::clicked, this, [this] { controller_->activateProfile(selectedProfile()); }); connect(rollback, &QAction::triggered, this, [this] { controller_->activateProfile(selectedProfile(), true); });
     connect(rename, &QAction::triggered, this, [this] { QString name; for (const auto& profile : controller_->profiles()) if (profile.id == selectedProfile()) name = profile.name; bool ok; const auto next = QInputDialog::getText(this, "重命名订阅", "订阅名称", QLineEdit::Normal, name, &ok); if (ok && next.trimmed() != name) controller_->renameProfile(selectedProfile(), next); });
     connect(remove, &QAction::triggered, this, [this] { const auto id = selectedProfile(); if (!id.isEmpty() && QMessageBox::question(this, "删除订阅", "删除选中的订阅快照？若是当前订阅，将先安全恢复代理并停止内核。") == QMessageBox::Yes) controller_->deleteProfile(id); });
@@ -82,7 +87,7 @@ void MainWindow::updateProfiles() {
     const auto toggle = [this](QCheckBox* box, bool before, bool actual) { if (!hasDisplayedSettings_ || box->isChecked() == before) box->setChecked(actual); };
     toggle(autoStart_,displayedSettings_.autoStart,s.autoStart); toggle(silentStart_,displayedSettings_.silentStart,s.silentStart); toggle(startCore_,displayedSettings_.startCore,s.startCore); toggle(restoreProxy_,displayedSettings_.restoreProxy,s.restoreProxy); toggle(lightweight_,displayedSettings_.lightweight,s.lightweight);
     if (!hasDisplayedSettings_ || mixedPort_->value() == displayedSettings_.mixedPort) mixedPort_->setValue(s.mixedPort);
-    if (!hasDisplayedSettings_ || logLevel_->currentText() == displayedSettings_.logLevel) logLevel_->setCurrentText(s.logLevel);
+    if (!hasDisplayedSettings_ || logLevel_->currentData().toString() == displayedSettings_.logLevel) logLevel_->setCurrentIndex(logLevel_->findData(s.logLevel));
     if (!hasDisplayedSettings_ || corePath_->text() == displayedSettings_.corePath) corePath_->setText(s.corePath);
     if (!hasDisplayedSettings_ || testUrl_->text() == displayedSettings_.testUrl) testUrl_->setText(s.testUrl);
     if (!hasDisplayedSettings_ || startupPage_->currentData().toInt()==displayedSettings_.startupPage) startupPage_->setCurrentIndex(startupPage_->findData(s.startupPage));
@@ -93,12 +98,12 @@ void MainWindow::updateProfiles() {
     const auto selected = selectedProfile(); const auto selectedCombo = profilesCombo_->currentData().toString(); const QSignalBlocker comboBlock(profilesCombo_); profilesCombo_->clear(); profileTable_->setRowCount(controller_->profiles().size());
     int row = 0;
     for (const auto& p : controller_->profiles()) {
-        const bool active = p.id == controller_->settings().activeProfile;
+        const bool active = p.id == controller_->state().activeProfile;
         profilesCombo_->addItem(p.name + (active ? " · 当前" : ""), p.id);
         auto* name = new QTableWidgetItem((active ? "● " : "") + p.name); name->setData(Qt::UserRole, p.id); profileTable_->setItem(row, 0, name);
-        profileTable_->setItem(row, 1, new QTableWidgetItem(p.sourceType == "url" ? "URL" : p.source.isEmpty()?"本地快照":"文件快照"));
+        profileTable_->setItem(row, 1, new QTableWidgetItem(p.sourceType == "url" ? "订阅链接" : p.source.isEmpty()?"节点快照":"配置文件"));
         profileTable_->setItem(row, 2, new QTableWidgetItem(QDateTime::fromString(p.updated, Qt::ISODate).toLocalTime().toString("MM-dd HH:mm")));
-        auto* status = new QTableWidgetItem(!p.updateError.isEmpty() ? "更新失败 · 保留旧版" : active ? p.candidate != p.active ? "当前 · 有待激活版本" : "当前" : "可激活"); status->setToolTip(p.updateError); profileTable_->setItem(row, 3, status);
+        const auto statusText=(active?(controller_->state().ready?QString("正在使用"):QString("已选用 · 未运行")):QString("尚未使用"))+(active&&p.candidate!=p.active?QString(" · 有更新"):QString())+(!p.updateError.isEmpty()?QString(" · 更新失败"):QString()); auto* status = new QTableWidgetItem(statusText); status->setToolTip(statusText+(p.updateError.isEmpty()?QString():"\n"+p.updateError)); profileTable_->setItem(row, 3, status);
         if (p.id == selected) profileTable_->selectRow(row); ++row;
     }
     if (profileTable_->currentRow() < 0 && row > 0) profileTable_->selectRow(0);
@@ -115,13 +120,12 @@ void MainWindow::addUrl() {
 void MainWindow::importPayload(const QString& input) {
     if (controller_->state().busy || controller_->state().readOnly || findChild<ImportDialog*>()) return;
     const auto text=input.trimmed(); const auto scheme=text.section(':',0,0).toLower();
-    if (text.toUtf8().size()<=64*1024&&NodeLinks::acceptsScheme(scheme)&&scheme!="http"&&scheme!="https") { auto* dialog=new ImportDialog(this); dialog->setAttribute(Qt::WA_DeleteOnClose); dialog->bindController(controller_); dialog->setNodeLinks(text); dialog->open(); return; }
+    if (text.toUtf8().size()<=64*1024&&NodeLinks::acceptsScheme(scheme)&&scheme!="http"&&scheme!="https") { auto* dialog=new ImportDialog(this); dialog->setNodeLinks(text); presentImport(dialog); return; }
     if (text.isEmpty() || text.size()>4096 || text.contains('\n') || text.contains('\r')) { QMessageBox::information(this,"导入订阅","请提供一个订阅地址、本地 YAML 文件或每行一个节点链接"); return; }
     const QUrl url(text); const bool remote=QStringList{"http","https"}.contains(url.scheme())&&!url.host().isEmpty()&&url.userInfo().isEmpty()&&!url.hasFragment();
     const auto path=url.isLocalFile()?url.toLocalFile():text;
     if (!remote && (!QFileInfo(path).isAbsolute() || !QStringList{"yaml","yml"}.contains(QFileInfo(path).suffix().toLower()))) { QMessageBox::information(this,"导入订阅","仅支持一个 HTTP/HTTPS 订阅或本地 YAML 文件"); return; }
-    auto* dialog=new ImportDialog(this); dialog->setAttribute(Qt::WA_DeleteOnClose); dialog->setPrefill(remote?text:path,remote);
-    dialog->bindController(controller_); dialog->open();
+    auto* dialog=new ImportDialog(this); dialog->setPrefill(remote?text:path,remote); presentImport(dialog);
 }
 
 void MainWindow::dragEnterEvent(QDragEnterEvent* event) {
@@ -155,10 +159,14 @@ void MainWindow::showProfileBatch(bool start) {
     connect(controller_,&AppController::profileBatchChanged,dialog,refresh); connect(controller_,&AppController::stateChanged,dialog,refresh); connect(run,&QPushButton::clicked,dialog,[this,ids] { controller_->updateProfilesBatch(ids); }); connect(cancel,&QPushButton::clicked,controller_,&AppController::cancelProfileBatch); connect(close,&QPushButton::clicked,dialog,&QDialog::close); dialog->show(); refresh(); if (start&&run->isEnabled()) run->click();
 }
 
-void MainWindow::addSubscription(bool url) {
-    auto* dialog = new ImportDialog(this); dialog->setAttribute(Qt::WA_DeleteOnClose); dialog->setSourceTab(url);
-    dialog->bindController(controller_);
+void MainWindow::presentImport(ImportDialog* dialog) {
+    QSet<QString> before; for (const auto& profile:controller_->profiles()) before.insert(profile.id);
+    dialog->setAttribute(Qt::WA_DeleteOnClose); dialog->bindController(controller_);
+    connect(dialog,&QDialog::accepted,this,[this,before] { setPage(1); for (int row=0;row<profileTable_->rowCount();++row) if (!before.contains(profileTable_->item(row,0)->data(Qt::UserRole).toString())) { profileTable_->selectRow(row); break; } });
     dialog->open();
+}
+void MainWindow::addSubscription(bool url) {
+    auto* dialog = new ImportDialog(this); dialog->setSourceTab(url); presentImport(dialog);
 }
 
 void MainWindow::addFile(bool replace) {
@@ -169,8 +177,8 @@ void MainWindow::addFile(bool replace) {
 
 void MainWindow::showProviders(const QString& id, const QString& kind) {
     if (id.isEmpty()) return;
-    auto* dialog = new QDialog(this); dialog->setAttribute(Qt::WA_DeleteOnClose); dialog->setObjectName("providersDialog"); dialog->setWindowTitle("提供者快照"); dialog->resize(680, 410);
-    auto* content = new QVBoxLayout(dialog); auto* versions=new CompactComboBox; versions->setObjectName("providerVersion"); versions->addItem("候选版本",false); versions->addItem("已使用版本",true); content->addWidget(versions);
+    auto* dialog = new QDialog(this); dialog->setAttribute(Qt::WA_DeleteOnClose); dialog->setObjectName("providersDialog"); dialog->setWindowTitle(kind=="rule-providers"?"规则源（Provider）":"节点源（Provider）"); dialog->resize(680, 410);
+    auto* content = new QVBoxLayout(dialog); auto* versions=new CompactComboBox; versions->setObjectName("providerVersion"); versions->addItem("待使用版本",false); versions->addItem("上次使用版本",true); content->addWidget(versions);
     auto* hint = new QLabel("正在读取…"); hint->setTextFormat(Qt::PlainText); hint->setWordWrap(true); content->addWidget(hint);
     auto* table = new QTableWidget(0, 5); table->setObjectName("providersTable"); table->setHorizontalHeaderLabels({"名称", "类别", "条目", "快照时间", "状态"}); table->setSelectionBehavior(QAbstractItemView::SelectRows); table->setSelectionMode(QAbstractItemView::SingleSelection); table->setEditTriggers(QAbstractItemView::NoEditTriggers); table->verticalHeader()->hide(); styleTable(table); table->horizontalHeader()->setSectionResizeMode(0, QHeaderView::Stretch); table->setColumnWidth(2, 58); table->setColumnWidth(3, 125); content->addWidget(table, 1);
     auto* row = new QHBoxLayout; auto* reload = button("刷新列表", row); auto* refresh = button("更新选中", row); refresh->setObjectName("refreshProvider"); auto* policy=button("下载与更新…",row); policy->setObjectName("providerPolicy"); auto* all = button("更新全部", row); all->setObjectName("refreshAllProviders"); row->addStretch(); auto* compare=button("查看变化 / 应用",row); compare->setObjectName("providerApplyCandidate"); auto* close = button("关闭", row); content->addLayout(row); refresh->setEnabled(false); all->setEnabled(false);
@@ -191,7 +199,7 @@ void MainWindow::showProviders(const QString& id, const QString& kind) {
                 guarded->item(index,0)->setData(Qt::UserRole+1,item); guarded->item(index, 0)->setData(Qt::UserRole, (item.value("type") == "http"||item.value("type")=="orphan") ? item.value("id").toString() : QString());
                 if (!item.value("error").toString().isEmpty()) errors.append(item.value("name").toString() + "：" + item.value("error").toString());
             }
-            guardedHint->setText(errors.isEmpty() ? (guarded->rowCount() ? "更新仅生成候选；点击“查看变化 / 应用”确认切换。" : "此版本没有对应提供者") : errors.join('\n'));
+            guardedHint->setText(errors.isEmpty() ? (guarded->rowCount() ? "" : "此版本没有对应来源") : errors.join('\n'));
         },running);
     };
     auto update = [this, id, table, refresh, policy, all, reload, waiting, versions, compare] {
@@ -205,7 +213,7 @@ void MainWindow::showProviders(const QString& id, const QString& kind) {
     connect(policy,&QPushButton::clicked,dialog,[this,id,table,dialog,load] { const auto* item=table->item(table->currentRow(),0); if (!item||item->data(Qt::UserRole).toString().isEmpty()) return; auto* editor=new ProviderPolicyDialog(controller_,id,item->data(Qt::UserRole+1).toJsonObject(),dialog); connect(editor,&QDialog::accepted,dialog,[load] { (*load)(); }); editor->open(); });
     connect(refresh, &QPushButton::clicked, dialog, [this, id, table, waiting] { const auto* selected = table->item(table->currentRow(), 0); if (!selected) return; *waiting = true; controller_->refreshProviders(id, selected->data(Qt::UserRole).toString()); });
     connect(all, &QPushButton::clicked, dialog, [this, id, kind, waiting] { *waiting = true; controller_->refreshProviders(id, kind.isEmpty() ? "*" : "kind:" + kind); });
-    connect(controller_, &AppController::operationFinished, dialog, [waiting, guardedHint, load, update](bool ok, const QString& message) { if (!*waiting) return; *waiting = false; if (guardedHint) guardedHint->setText(ok ? "提供者新候选已就绪；当前运行配置不变" : message); (*load)(); update(); });
+    connect(controller_, &AppController::operationFinished, dialog, [waiting, guardedHint, load, update](bool ok, const QString& message) { if (!*waiting) return; *waiting = false; if (guardedHint) guardedHint->setText(ok ? "更新已就绪，可查看变化并应用。" : message); (*load)(); update(); });
     connect(versions,&QComboBox::currentIndexChanged,dialog,[load,update] { update(); (*load)(); }); connect(compare,&QPushButton::clicked,dialog,[this,id,dialog] { (new ProfileChangesDialog(controller_,id,dialog))->show(); }); connect(controller_,&AppController::profilesChanged,dialog,update);
     connect(close, &QPushButton::clicked, dialog, &QDialog::close); dialog->show(); (*load)(); update();
 }
@@ -226,9 +234,9 @@ void MainWindow::editProfilePolicy() {
     if (profile.sourceType == "url") { auto* form = new QFormLayout; hours = new QSpinBox; hours->setButtonSymbols(QAbstractSpinBox::NoButtons); hours->setObjectName("profileUpdateHours"); hours->setRange(1, 168); hours->setSuffix(" 小时"); hours->setValue(profile.updateIntervalHours); hours->setEnabled(profile.autoUpdate); form->addRow("更新周期", hours); layout->addLayout(form); }
     if (hours) connect(automatic, &QCheckBox::toggled, hours, &QSpinBox::setEnabled);
     auto* download = new DownloadPolicyEditor(profile.download); layout->addWidget(download);
-    const auto usage = SubscriptionInfo::summary(profile.subscriptionInfo); auto* info = new QLabel(usage.isEmpty() ? "来源未提供标准流量/到期信息" : usage + "\n来源快照：" + profile.subscriptionInfo.value("observed_at").toString()); info->setTextFormat(Qt::PlainText); info->setWordWrap(true); layout->addWidget(info);
+    const auto usage = SubscriptionInfo::summary(profile.subscriptionInfo); auto* info = new QLabel(usage.isEmpty() ? "" : usage + "\n来源快照：" + profile.subscriptionInfo.value("observed_at").toString()); info->setTextFormat(Qt::PlainText); info->setWordWrap(true); info->setVisible(!usage.isEmpty()); layout->addWidget(info);
     auto* maintenance=new QLabel("最近成功："+(profile.updated.isEmpty()?QString("尚无"):profile.updated)+"\n最近尝试："+(profile.lastUpdateAttempt.isEmpty()?QString("尚无"):profile.lastUpdateAttempt)+"\n"+(expected.value("next").toString().isEmpty()?QString("无定时任务"):"下次检查："+expected.value("next").toString())+(profile.updateError.isEmpty()?QString():"\n上次失败："+profile.updateError)); maintenance->setTextFormat(Qt::PlainText); maintenance->setWordWrap(true); layout->addWidget(maintenance);
-    auto* note = new QLabel("只下载、校验并保存候选；当前运行配置不变。失败保留原版本，稍后重试。"); note->setWordWrap(true); note->setObjectName("secondaryText"); layout->addWidget(note);
+    auto* note = new QLabel("更新后需手动应用。"); note->setWordWrap(true); note->setObjectName("secondaryText"); layout->addWidget(note);
     auto* buttons = new QDialogButtonBox(QDialogButtonBox::Save | QDialogButtonBox::Cancel); buttons->button(QDialogButtonBox::Save)->setText("保存"); buttons->button(QDialogButtonBox::Cancel)->setText("取消"); outer->addWidget(buttons);
     connect(buttons, &QDialogButtonBox::rejected, dialog, &QDialog::reject);
     auto saving=std::make_shared<bool>(false);

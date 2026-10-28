@@ -5,6 +5,7 @@
 #include "NodeLinksEditor.h"
 #include "DialogDraftGuard.h"
 #include <QTabWidget>
+#include <QTabBar>
 #include <QLineEdit>
 #include <QLabel>
 #include <QPushButton>
@@ -17,12 +18,30 @@
 #include <QScrollArea>
 
 namespace mlash {
+namespace {
+// Hidden source forms must not dictate the current source's height.
+class ImportSourceTabs final : public QTabWidget {
+public:
+    ImportSourceTabs() { connect(this,&QTabWidget::currentChanged,this,[this] { fitCurrent(); }); }
+    void fitCurrent() {
+        for (int i=0;i<count();++i) widget(i)->setSizePolicy(QSizePolicy::Ignored,i==currentIndex()?QSizePolicy::Preferred:QSizePolicy::Ignored);
+        updateGeometry();
+    }
+    QSize sizeHint() const override { return sourceSize(false); }
+    QSize minimumSizeHint() const override { return sourceSize(true); }
+private:
+    QSize sourceSize(bool minimum) const {
+        const auto* page=currentWidget(); const auto content=page?(minimum?page->minimumSizeHint():page->sizeHint()):QSize();
+        const auto tabs=tabBar()->sizeHint(); return {qMax(content.width()+8,tabs.width()),qMax(0,content.height())+tabs.height()+8};
+    }
+};
+}
 ImportDialog::ImportDialog(QWidget* parent) : QDialog(parent) {
-    setWindowTitle("添加订阅 · Mlash"); setObjectName("importDialog"); resize(500, 560); setMinimumSize(420,340);
+    setWindowTitle("添加订阅 · Mlash"); setObjectName("importDialog"); resize(520, 460); setMinimumSize(420,340);
     auto* outer = new QVBoxLayout(this); outer->setContentsMargins(16,16,16,14); outer->setSpacing(10);
     auto* title = new QLabel("添加订阅"); title->setObjectName("pageTitle"); outer->addWidget(title);
     auto* scroll=new QScrollArea; scroll->setObjectName("importScroll"); scroll->setWidgetResizable(true); scroll->setFrameShape(QFrame::NoFrame); auto* body=new QWidget; auto* layout=new QVBoxLayout(body); layout->setContentsMargins(0,0,0,0); layout->setSpacing(10); scroll->setWidget(body); outer->addWidget(scroll,1);
-    tabs_ = new QTabWidget; tabs_->setObjectName("importTabs");
+    tabs_ = new ImportSourceTabs; tabs_->setObjectName("importTabs");
     auto* urlPage = new QWidget; urlPage->setObjectName("importSource"); urlPage->setAttribute(Qt::WA_StyledBackground, true); auto* urlForm = new QVBoxLayout(urlPage);
     urlForm->addWidget(new QLabel("订阅地址")); url_ = new QLineEdit; url_->setObjectName("subscriptionUrl");
     url_->setPlaceholderText("https://example.com/subscription"); url_->setClearButtonEnabled(true); url_->setEchoMode(QLineEdit::Password);
@@ -32,14 +51,14 @@ ImportDialog::ImportDialog(QWidget* parent) : QDialog(parent) {
     auto* fileRow = new QHBoxLayout; file_ = new QLineEdit; file_->setObjectName("subscriptionFile"); file_->setPlaceholderText("选择完整 YAML 配置文件"); file_->setClearButtonEnabled(true);
     fileRow->addWidget(file_, 1); auto* browse = new QPushButton("浏览…"); browse->setAutoDefault(false); fileRow->addWidget(browse); fileLayout->addLayout(fileRow);
     connect(browse, &QPushButton::clicked, this, [this] { const auto path = QFileDialog::getOpenFileName(this, "选择订阅配置", {}, "YAML (*.yaml *.yml)"); if (!path.isEmpty()) file_->setText(path); });
-    tabs_->addTab(urlPage, "从 URL 导入"); tabs_->addTab(filePage, "从文件导入"); links_=new NodeLinksEditor(nullptr); tabs_->addTab(links_,"节点链接"); layout->addWidget(tabs_);
+    urlForm->addStretch(1); fileLayout->addStretch(1); tabs_->addTab(urlPage, "订阅链接"); tabs_->addTab(filePage, "配置文件"); links_=new NodeLinksEditor(nullptr); tabs_->addTab(links_,"节点链接"); static_cast<ImportSourceTabs*>(tabs_)->fitCurrent(); layout->addWidget(tabs_,0,Qt::AlignTop);
     auto* form = new QFormLayout; name_ = new QLineEdit; name_->setObjectName("subscriptionName"); name_->setMaxLength(120); name_->setPlaceholderText("可选，留空使用默认名称"); form->addRow("名称", name_); layout->addLayout(form);
     auto* advanced = new QPushButton("下载设置"); advanced->setCheckable(true); advanced->setAutoDefault(false); layout->addWidget(advanced, 0, Qt::AlignLeft);
     download_ = new DownloadPolicyEditor; download_->hide(); layout->addWidget(download_); connect(advanced, &QPushButton::toggled, download_, &QWidget::setVisible);
     connect(tabs_, &QTabWidget::currentChanged, this, [this, advanced](int index) { advanced->setVisible(index == 0); download_->setVisible(index == 0 && advanced->isChecked()); });
     connect(download_->userAgentEditor(), &QLineEdit::textChanged, this, &ImportDialog::inputChanged);
     hint_ = new ElidedLabel; hint_->setObjectName("importHint"); hint_->setSizePolicy(QSizePolicy::Ignored,QSizePolicy::Preferred); hint_->setMinimumHeight(hint_->fontMetrics().height()+6); outer->addWidget(hint_);
-    auto* note = new QLabel("导入后在订阅页查看并使用；当前运行配置保持不变。"); note->setToolTip("端口、控制接口和 TUN 由 Mlash 设置管理；仅监听本机。"); note->setObjectName("secondaryText"); note->setWordWrap(true); layout->addWidget(note);
+    auto* note = new QLabel("导入后需手动使用。"); note->setToolTip("端口、控制接口和 TUN 由 Mlash 设置管理；仅监听本机。"); note->setObjectName("secondaryText"); note->setWordWrap(true); layout->addWidget(note);
     layout->addStretch(1);
     auto* buttons = new QDialogButtonBox(QDialogButtonBox::Cancel); buttons->button(QDialogButtonBox::Cancel)->setText("取消");
     import_ = buttons->addButton("导入并校验", QDialogButtonBox::AcceptRole); import_->setObjectName("importSubmit"); import_->setProperty("primary", true); import_->setDefault(true); outer->addWidget(buttons);
@@ -96,8 +115,8 @@ void ImportDialog::validateInput() {
     else if (isUrl()) {
         const QUrl url(source());
         valid = valid && url.isValid() && QStringList{"http", "https"}.contains(url.scheme()) && !url.host().isEmpty() && url.userInfo().isEmpty() && !url.hasFragment();
-        hint = valid ? "地址格式有效；导入时检查网络与配置内容。" : "请输入完整的 HTTP/HTTPS 地址，不含用户名、密码或片段。";
-    } else hint = valid ? "导入时读取并校验文件；原文件不会被修改。" : "请选择或填写 YAML 文件路径。";
+        hint = valid||source().isEmpty()?QString():QString("地址无效：需 HTTP/HTTPS，且不含账户信息或片段。");
+    } else hint.clear();
     if (isUrl() && !download_->policy().valid()) { valid = false; hint = "User-Agent 仅支持最多 256 个单行 ASCII 字符"; }
     if (!pending_) {
         hint_->setText(failure_.isEmpty()?hint:failure_);

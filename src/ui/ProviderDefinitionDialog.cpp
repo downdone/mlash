@@ -1,4 +1,5 @@
 #include "ProviderDefinitionDialog.h"
+#include "ContextNote.h"
 #include "CompactComboBox.h"
 #include "DialogDraftGuard.h"
 #include "profile/ProviderEdits.h"
@@ -19,7 +20,7 @@ ProviderDefinitionDialog::ProviderDefinitionDialog(const QString& name,const QJs
     format_=new CompactComboBox; format_->setObjectName("ruleProviderFormat"); for (const auto& item:QStringList{"yaml","text","mrs"}) format_->addItem(item.toUpper(),item); format_->setCurrentIndex(qMax(0,format_->findData(initial.value("format").toString("yaml")))); form->addRow("格式",format_); box->addLayout(form);
     auto* show=new QCheckBox("显示私人地址"); box->addWidget(show); connect(show,&QCheckBox::toggled,this,[this](bool visible) { url_->setEchoMode(visible?QLineEdit::Normal:QLineEdit::Password); });
     reference_=new QCheckBox("同时添加一条前置引用"); reference_->setObjectName("addRuleProviderReference"); reference_->setEnabled(canAddRule); box->addWidget(reference_); target_=new CompactComboBox; target_->setObjectName("ruleProviderTarget"); for (const auto& item:targets) target_->addItem(item=="DIRECT"?QString("直连 · DIRECT"):item=="REJECT"?QString("阻断 · REJECT"):item,item); target_->setEnabled(false); box->addWidget(target_); connect(reference_,&QCheckBox::toggled,target_,&QWidget::setEnabled);
-    auto* note=new QLabel("加入草稿不会联网；保存主窗口规则时才下载并校验，失败保留原版本。不改写订阅原文。"); note->setWordWrap(true); note->setObjectName("secondaryText"); box->addWidget(note); hint_=new QLabel; hint_->setTextFormat(Qt::PlainText); hint_->setWordWrap(true); box->addWidget(hint_);
+    box->addWidget(contextNote("保存规则时下载并校验。","加入草稿不会联网；保存主窗口规则时才下载并校验，失败保留原版本。不改写订阅原文。")); hint_=new QLabel; hint_->setTextFormat(Qt::PlainText); hint_->setWordWrap(true); box->addWidget(hint_);
     auto* buttons=new QDialogButtonBox(QDialogButtonBox::Save|QDialogButtonBox::Cancel); save_=buttons->button(QDialogButtonBox::Save); save_->setText("加入草稿"); save_->setObjectName("stageRuleProvider"); buttons->button(QDialogButtonBox::Cancel)->setText("取消"); box->addWidget(buttons); connect(buttons,&QDialogButtonBox::accepted,this,&QDialog::accept); connect(buttons,&QDialogButtonBox::rejected,this,&QDialog::reject);
     const auto baseline=definition(); const auto baselineName=providerName(); DialogDraftGuard::protect(this,[this,baseline,baselineName] { return providerName()!=baselineName||definition()!=baseline||reference_->isChecked(); });
     for (auto* field:{name_,url_}) connect(field,&QLineEdit::textChanged,this,[this] { validate(); }); for (auto* field:{behavior_,format_,target_}) connect(field,&QComboBox::currentIndexChanged,this,[this] { validate(); }); connect(reference_,&QCheckBox::toggled,this,[this] { validate(); }); validate();

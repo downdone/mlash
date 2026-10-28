@@ -128,8 +128,8 @@ protected:
         p.setFont(font()); p.setPen(QColor(isEnabled()?UiTheme::Ink:UiTheme::Muted)); const auto textRect=rect().adjusted(10,0,-28,0); p.drawText(textRect,Qt::AlignCenter,fontMetrics().elidedText(text(),Qt::ElideRight,textRect.width()));
     }
 };
-inline QPushButton* button(const QString& text, QHBoxLayout* layout) { auto* b = new QPushButton(text); layout->addWidget(b); return b; }
-inline QToolButton* actionButton(QAction* action, QHBoxLayout* layout, const QString& name) {
+inline QPushButton* button(const QString& text, QLayout* layout) { auto* b = new QPushButton(text); layout->addWidget(b); return b; }
+inline QToolButton* actionButton(QAction* action, QLayout* layout, const QString& name) {
     auto* control = new ChevronToolButton; control->setObjectName(name); control->setToolButtonStyle(Qt::ToolButtonTextOnly); control->setDefaultAction(action); layout->addWidget(control); return control;
 }
 inline QLabel* emptyState(QAbstractItemView* table, const QString& text) {
@@ -155,13 +155,15 @@ inline QFrame* panel() { auto* frame = new QFrame; frame->setObjectName("panel")
 inline void settingRow(QVBoxLayout* section, const QString& name, const QString& description, QWidget* control,bool stacked=false) {
     auto* row = new QWidget; row->setObjectName("settingRow"); row->setProperty("settingSearchName",name); row->setProperty("settingSearchTerms",name+" "+description);
     auto* labels = new QVBoxLayout; labels->setSpacing(2); auto* title = new QLabel(name); title->setObjectName("settingName"); labels->addWidget(title);
-    const bool explain=QStringList{"恢复系统代理","轻量模式","静默启动","TUN 虚拟网卡","自动备份与保护","恢复与迁移"}.contains(name);
+    const bool explain=QStringList{"启动时恢复代理开关","关闭窗口时释放界面"}.contains(name);
     if (!description.isEmpty()) { control->setToolTip(control->toolTip().isEmpty()?description:control->toolTip()+"\n"+description); }
     if (explain&&!description.isEmpty()) { auto* detail = new QLabel(description); detail->setObjectName("secondaryText"); detail->setWordWrap(true); detail->setSizePolicy(QSizePolicy::Ignored,QSizePolicy::Preferred); labels->addWidget(detail); }
+    if (auto* button=qobject_cast<QPushButton*>(control)) button->setProperty("quiet",true);
+    if (control->layout()) control->layout()->setSizeConstraint(QLayout::SetMinimumSize);
     control->setAccessibleName(name); control->setAccessibleDescription(description);
     row->setProperty("settingKind",stacked?"stacked":explain?"explained":"single");
-    if (stacked) { auto* layout=new QVBoxLayout(row); layout->setContentsMargins(0,4,0,4); layout->setSpacing(6); layout->addLayout(labels); layout->addWidget(control); }
-    else { auto* layout=new QHBoxLayout(row); layout->setContentsMargins(0,explain?4:2,0,explain?4:2); layout->setSpacing(12); layout->addLayout(labels,1); layout->addWidget(control,0,Qt::AlignRight | Qt::AlignVCenter); row->setMinimumHeight(explain?qMax(48,2*title->fontMetrics().height()+10):36); }
+    if (stacked) { auto* layout=new QVBoxLayout(row); layout->setContentsMargins(0,10,0,10); layout->setSpacing(8); layout->addLayout(labels); layout->addWidget(control); }
+    else { auto* layout=new QHBoxLayout(row); layout->setContentsMargins(0,8,0,8); layout->setSpacing(12); layout->addLayout(labels,1); layout->addWidget(control,0,Qt::AlignRight | Qt::AlignVCenter); row->setMinimumHeight(explain?qMax(56,2*title->fontMetrics().height()+16):44); }
     section->addWidget(row);
 }
 class GroupCardDelegate final : public QStyledItemDelegate {
@@ -273,7 +275,7 @@ inline QIcon navigationIcon(int kind) {
     QIcon icon;
     for (auto mode : {QIcon::Normal, QIcon::Selected}) {
         QPixmap pixmap(48, 48); pixmap.setDevicePixelRatio(2); pixmap.fill(Qt::transparent);
-        QPainter p(&pixmap); p.setRenderHint(QPainter::Antialiasing); p.setPen(QPen(mode == QIcon::Selected ? QColor(UiTheme::Brand) : QColor(UiTheme::Secondary), 1.7, Qt::SolidLine, Qt::RoundCap, Qt::RoundJoin));
+        QPainter p(&pixmap); p.setRenderHint(QPainter::Antialiasing); p.setPen(QPen(mode == QIcon::Selected ? QColor(UiTheme::OnPrimary) : QColor(UiTheme::Secondary), 1.7, Qt::SolidLine, Qt::RoundCap, Qt::RoundJoin));
         QPainterPath path;
         if (kind == 0) { path.moveTo(3, 11); path.lineTo(12, 3); path.lineTo(21, 11); path.moveTo(6, 9); path.lineTo(6, 21); path.lineTo(10, 21); path.lineTo(10, 15); path.lineTo(14, 15); path.lineTo(14, 21); path.lineTo(18, 21); path.lineTo(18, 9); }
         else if (kind == 1) { path.moveTo(3, 7); path.lineTo(3, 20); path.lineTo(21, 20); path.lineTo(21, 8); path.lineTo(12, 8); path.lineTo(9, 4); path.lineTo(3, 4); path.closeSubpath(); }

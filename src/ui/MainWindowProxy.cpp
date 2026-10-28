@@ -6,7 +6,7 @@ using namespace WindowParts;
 QWidget* MainWindow::proxyPage() {
     auto* page = new QWidget; auto* layout = new QVBoxLayout(page);
     layout->setContentsMargins(0, 0, 0, 0); layout->setSpacing(8);
-    auto* top = new QHBoxLayout; auto* pageTitle = new QLabel("代理"); pageTitle->setObjectName("pageTitle"); top->addWidget(pageTitle); top->addStretch();
+    auto* top = new QHBoxLayout; auto* pageTitle = new QLabel("节点"); pageTitle->setObjectName("pageTitle"); top->addWidget(pageTitle); top->addStretch();
     auto* modeControl=new QFrame; modeControl->setObjectName("modeControl"); auto* modes=new QHBoxLayout(modeControl); modes->setContentsMargins(3,3,3,3); modes->setSpacing(1); top->addWidget(modeControl);
     for (const auto& mode : QList<QPair<QString, QString>>{{"规则", "rule"}, {"全局", "global"}, {"直连", "direct"}}) {
         auto* control = button(mode.first, modes); control->setCheckable(true); control->setProperty("mode", mode.second); proxyModes_.append(control);
@@ -15,14 +15,14 @@ QWidget* MainWindow::proxyPage() {
     layout->addLayout(top);
     auto* subscription = panel(); subscription->setObjectName("proxyContext"); auto* subscriptionLayout = new QVBoxLayout(subscription); subscriptionLayout->setContentsMargins(0,0,0,0);
     auto* row = new WrapLayout; row->addWidget(new QLabel("订阅")); profilesCombo_ = new CompactComboBox; profilesCombo_->setObjectName("proxyProfilesCombo"); profilesCombo_->setSizePolicy(QSizePolicy::Expanding,QSizePolicy::Fixed); profilesCombo_->setSizeAdjustPolicy(QComboBox::AdjustToMinimumContentsLengthWithIcon); profilesCombo_->setMinimumContentsLength(8); row->addWidget(profilesCombo_);
-    useProfile_ = new QPushButton("使用此订阅"); useProfile_->setObjectName("useProxyProfile"); useProfile_->setProperty("primary", true); auto reserved=useProfile_->sizePolicy(); reserved.setRetainSizeWhenHidden(true); useProfile_->setSizePolicy(reserved); subscriptionLayout->addLayout(row);
+    useProfile_ = new QPushButton("使用并启动"); useProfile_->setObjectName("useProxyProfile"); useProfile_->setProperty("primary", true); auto reserved=useProfile_->sizePolicy(); reserved.setRetainSizeWhenHidden(true); useProfile_->setSizePolicy(reserved); subscriptionLayout->addLayout(row);
     proxyProfileHint_ = new QLabel(subscription); proxyProfileHint_->setObjectName("secondaryText"); proxyProfileHint_->hide(); layout->addWidget(subscription);
     connect(useProfile_, &QPushButton::clicked, this, [this] { controller_->activateProfile(profilesCombo_->currentData().toString()); });
     connect(profilesCombo_, &QComboBox::currentIndexChanged, this, [this] { groupHistory_.clear(); updateProxies(); });
     layout->removeWidget(subscription); auto* groupLayout = subscriptionLayout; groupLayout->setSpacing(6);
     auto* groupTools = row; selectedGroupTitle_=new ElidedLabel("选择策略组",subscription); selectedGroupTitle_->setObjectName("sectionTitle"); selectedGroupTitle_->hide();
-    groupSwitcher_=new QToolButton; groupSwitcher_->setObjectName("groupSwitcher"); groupSwitcher_->setText("切换策略组"); groupSwitcher_->setCheckable(true); groupSwitcher_->setArrowType(Qt::DownArrow); groupSwitcher_->setToolButtonStyle(Qt::ToolButtonTextBesideIcon); groupSwitcher_->setToolTip("展开策略组列表（Ctrl+G）；仅改变浏览组"); groupTools->addWidget(groupSwitcher_);
-    auto* providers = new QPushButton("提供者",subscription); providers->setObjectName("proxyProviders"); connect(providers, &QPushButton::clicked, this, [this] { showProviders(profilesCombo_->currentData().toString(), "proxy-providers"); });
+    groupSwitcher_=new QToolButton; groupSwitcher_->setObjectName("groupSwitcher"); groupSwitcher_->setText("切换策略组"); groupSwitcher_->setMinimumWidth(180); groupSwitcher_->setMaximumWidth(260); groupSwitcher_->setCheckable(true); groupSwitcher_->setArrowType(Qt::DownArrow); groupSwitcher_->setToolButtonStyle(Qt::ToolButtonTextBesideIcon); groupSwitcher_->setToolTip("展开策略组列表（Ctrl+G）；仅改变浏览组"); groupTools->addWidget(groupSwitcher_);
+
     automaticAction_ = new QPushButton("恢复自动"); groupTools->addWidget(automaticAction_); automaticAction_->setObjectName("automaticAction");
     proxyGroups_=new QListWidget; proxyGroups_->setObjectName("proxyGroups"); proxyGroups_->setViewMode(QListView::IconMode); proxyGroups_->setResizeMode(QListView::Adjust); proxyGroups_->setMovement(QListView::Static); proxyGroups_->setWrapping(true); proxyGroups_->setGridSize(QSize(154,54)); proxyGroups_->setItemDelegate(new GroupCardDelegate(proxyGroups_)); proxyGroups_->setSelectionMode(QAbstractItemView::SingleSelection); proxyGroups_->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff); proxyGroups_->setVerticalScrollMode(QAbstractItemView::ScrollPerPixel); proxyGroups_->setFixedHeight(110); proxyGroups_->setAccessibleName("策略组卡片"); groupLayout->addWidget(proxyGroups_); layout->addWidget(subscription);
     connect(proxyGroups_, &QListWidget::currentItemChanged, this, [this](QListWidgetItem* item) { if (!updating_ && item && !proxyGroups_->isVisible()) selectGroup(item->text()); });
@@ -36,15 +36,12 @@ QWidget* MainWindow::proxyPage() {
     auto* memberSort = new CompactComboBox; memberSort->setObjectName("memberSort"); memberSort->addItem("默认排序", -1); memberSort->addItem("按名称排序", 0); memberSort->addItem("按延迟排序", 2); memberSort->setToolTip("默认保留订阅成员顺序；名称与延迟按升序排列"); tools->addWidget(memberSort);
     auto* viewMode=memberViewMode_=new CompactComboBox; viewMode->setObjectName("nodeViewMode"); viewMode->addItems({"表格","卡片"}); viewMode->setAccessibleName("节点视图"); viewMode->setToolTip("切换展示方式，搜索、排序、选择与测速共用"); tools->addWidget(viewMode);
     nodeCount_ = new QLabel; nodeCount_->setObjectName("secondaryText"); auto* testMenu = new QMenu(this);
-    testAction_ = testMenu->addAction("测试本组"); testAction_->setObjectName("testGroup"); testSelectedAction_ = testMenu->addAction("测试选中成员");
+    testAction_ = testMenu->addAction("测本组延迟"); testAction_->setObjectName("testGroup"); testSelectedAction_ = testMenu->addAction("测选中延迟");
     auto* test = new ChevronToolButton; test->setObjectName("testGroupButton"); test->setDefaultAction(testAction_); test->setMenu(testMenu); test->setPopupMode(QToolButton::MenuButtonPopup);
     testProgress_ = new QLabel; testProgress_->setObjectName("testProgress");
     cancelTestAction_ = new QAction("取消测速", this); cancelTestAction_->setObjectName("cancelNodeTests"); cancelTestButton_ = new QToolButton; cancelTestButton_->setObjectName("cancelNodeTestButton"); cancelTestButton_->setDefaultAction(cancelTestAction_); cancelTestButton_->setProperty("quiet",true); nodesLayout->addWidget(toolSurface);
-    auto* disclose=new QPushButton("筛选"); disclose->setCheckable(true); disclose->setObjectName("nodeFilterDisclosure"); groupTools->addWidget(disclose); auto* preferences=new QPushButton("本组偏好…",subscription); preferences->setObjectName("nodePreferences"); connect(preferences,&QPushButton::clicked,this,&MainWindow::editNodePreferences); providers->hide(); preferences->hide();
-    auto* management=new MenuPushButton; management->setObjectName("proxyManagement"); management->setText("管理"); auto* managementMenu=new QMenu(management); management->setMenu(managementMenu); groupTools->addWidget(management); row->addWidget(useProfile_);
-    auto* groupPreferences=managementMenu->addAction("本组偏好…"); connect(groupPreferences,&QAction::triggered,preferences,&QPushButton::click);
-    auto* providerManagement=managementMenu->addAction("代理提供者…"); connect(providerManagement,&QAction::triggered,providers,&QPushButton::click);
-    connect(managementMenu,&QMenu::aboutToShow,this,[this,groupPreferences,providerManagement] { groupPreferences->setEnabled(!selectedGroup_.isEmpty()&&!controller_->state().busy); providerManagement->setEnabled(!profilesCombo_->currentData().toString().isEmpty()&&!controller_->state().busy); });
+    auto* disclose=new QPushButton("筛选"); disclose->setCheckable(true); disclose->setObjectName("nodeFilterDisclosure"); groupTools->addWidget(disclose); auto* preferences=new QPushButton("本组偏好…",subscription); preferences->setObjectName("nodePreferences"); connect(preferences,&QPushButton::clicked,this,&MainWindow::editNodePreferences); preferences->hide();
+    preferences->setText("节点选项…"); preferences->show(); groupTools->addWidget(preferences); row->addWidget(useProfile_);
     auto* conditions=new QWidget; conditions->setObjectName("nodeFilterConditions"); auto* fields=new QHBoxLayout(conditions); fields->setContentsMargins(0,0,0,0);
     nodeRegion_=new CompactComboBox; nodeRegion_->setObjectName("nodeRegion"); nodeRegion_->addItem("全部地区",""); nodeRegion_->setToolTip("位置依据名称，不代表实际 IP");
     nodeProtocol_=new CompactComboBox; nodeProtocol_->setObjectName("nodeProtocol"); nodeProtocol_->addItem("全部协议","");
@@ -63,7 +60,7 @@ QWidget* MainWindow::proxyPage() {
     nodes_->setContextMenuPolicy(Qt::CustomContextMenu); connect(nodes_,&QWidget::customContextMenuRequested,this,[this,favoriteMenu](const QPoint& p) { favoriteMenu(nodes_,p); }); nodes_->setSortingEnabled(false); nodes_->setSelectionBehavior(QAbstractItemView::SelectRows); nodes_->setSelectionMode(QAbstractItemView::SingleSelection);
     nodes_->setObjectName("nodesTable"); nodes_->setMinimumHeight(120); nodes_->setEditTriggers(QAbstractItemView::NoEditTriggers); nodes_->verticalHeader()->hide(); nodes_->horizontalHeader()->setSectionResizeMode(0, QHeaderView::Stretch); filter_.setSortCaseSensitivity(Qt::CaseInsensitive); filter_.sort(-1); styleTable(nodes_); nodes_->setItemDelegateForColumn(0,new NodeNameDelegate(nodes_));
     nodeCards_=new NodeCardView; nodeCards_->setObjectName("nodeCards"); nodeCards_->setStyleSheet("QListView { border: none; background: transparent; outline: none; }"); nodeCards_->setModel(&filter_); nodeCards_->setContextMenuPolicy(Qt::CustomContextMenu); connect(nodeCards_,&QWidget::customContextMenuRequested,this,[this,favoriteMenu](const QPoint& p) { favoriteMenu(nodeCards_,p); }); nodeCards_->setSelectionModel(nodes_->selectionModel()); nodeCards_->setItemDelegate(new NodeCardDelegate(nodeCards_)); nodeCards_->setViewMode(QListView::IconMode); nodeCards_->setResizeMode(QListView::Adjust); nodeCards_->setMovement(QListView::Static); nodeCards_->setUniformItemSizes(true); nodeCards_->setWrapping(true); nodeCards_->setSelectionMode(QAbstractItemView::SingleSelection); nodeCards_->setSelectionBehavior(QAbstractItemView::SelectRows); nodeCards_->setEditTriggers(QAbstractItemView::NoEditTriggers); nodeCards_->setVerticalScrollMode(QAbstractItemView::ScrollPerPixel); nodeCards_->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff); nodeCards_->setAccessibleName("节点卡片");
-    nodeViews_=new QStackedWidget; nodeViews_->setObjectName("nodeViews"); nodeViews_->addWidget(nodes_); nodeViews_->addWidget(nodeCards_); nodesLayout->addWidget(nodeViews_,1);
+    nodeViews_=new QStackedWidget; nodeViews_->setObjectName("nodeViews"); nodeViews_->addWidget(nodes_); nodeViews_->addWidget(nodeCards_); nodesLayout->addWidget(nodeViews_,1); auto* next=new QPushButton("前往首页"); next->setObjectName("nodeNextStep"); nodesLayout->addWidget(next,0,Qt::AlignCenter); connect(next,&QPushButton::clicked,this,[this] { setPage(controller_->profiles().isEmpty()||controller_->state().activeProfile.isEmpty()?1:0); });
     nodeCards_->viewport()->setMouseTracking(true);
     static_cast<NodeCardView*>(nodeCards_)->delayClicked=[this](const QModelIndex& index) { if (testAction_->isEnabled() && index.isValid()) controller_->testNodes({index.data(Qt::UserRole).toString()},selectedGroup_); };
     auto* retest=new QShortcut(QKeySequence(Qt::Key_F5),nodeCards_); retest->setContext(Qt::WidgetWithChildrenShortcut); connect(retest,&QShortcut::activated,this,[this] { if (testSelectedAction_->isEnabled()) testSelectedAction_->trigger(); });
@@ -86,7 +83,7 @@ QWidget* MainWindow::proxyPage() {
     testProgress_->setMinimumWidth(42); bottom->addWidget(testProgress_); bottom->addWidget(cancelTestButton_); auto retained=cancelTestButton_->sizePolicy(); retained.setRetainSizeWhenHidden(true); cancelTestButton_->setSizePolicy(retained); bottom->addWidget(nodeCount_);
     locateAction_ = button("定位当前", bottom); connect(locateAction_, &QPushButton::clicked, this, &MainWindow::locateCurrentNode);
     enterGroup_ = button("进入策略组", bottom); enterGroup_->setObjectName("enterGroup"); connect(enterGroup_, &QPushButton::clicked, this, &MainWindow::enterSelectedGroup);
-    chooseAction_ = button("使用选中成员", bottom); chooseAction_->setProperty("primary", true); chooseAction_->setObjectName("chooseMember"); nodesLayout->addLayout(bottom); layout->addWidget(nodesPanel, 1);
+    chooseAction_ = button("切换节点", bottom); chooseAction_->setProperty("primary", true); chooseAction_->setObjectName("chooseMember"); nodesLayout->addLayout(bottom); layout->addWidget(nodesPanel, 1);
     auto* escape=new QShortcut(QKeySequence(Qt::Key_Escape),page); escape->setContext(Qt::WidgetWithChildrenShortcut);
     connect(escape,&QShortcut::activated,this,[this,page] {
         if (auto* popup=QApplication::activePopupWidget()) {
@@ -122,11 +119,12 @@ void MainWindow::restoreNodeBookmark(const QJsonObject& value) {
 void MainWindow::editNodePreferences() {
     const auto id=profilesCombo_->currentData().toString(),group=selectedGroup_; if (id.isEmpty()||group.isEmpty()||controller_->state().busy) return;
     const auto expected=controller_->nodePreferences(id),initial=expected.value("groups").toObject().value(group).toObject();
-    auto* dialog=new QDialog(this); dialog->setAttribute(Qt::WA_DeleteOnClose); dialog->setObjectName("nodePreferencesDialog"); dialog->setWindowTitle("本组偏好"); dialog->resize(510,280); auto* box=new QVBoxLayout(dialog); auto* label=new QLabel(group); label->setTextFormat(Qt::PlainText); label->setObjectName("sectionTitle"); box->addWidget(label);
-    auto* form=new QFormLayout; auto* url=new QLineEdit(initial.value("test_url").toString()); url->setObjectName("groupTestUrl"); url->setMaxLength(2048); url->setPlaceholderText("留空沿用默认测试地址"); form->addRow("测试地址",url);
+    auto* dialog=new QDialog(this); dialog->setAttribute(Qt::WA_DeleteOnClose); dialog->setObjectName("nodePreferencesDialog"); dialog->setWindowTitle("节点选项"); dialog->resize(510,280); auto* box=new QVBoxLayout(dialog); auto* label=new QLabel(group); label->setTextFormat(Qt::PlainText); label->setObjectName("sectionTitle"); box->addWidget(label);
+    auto* form=new QFormLayout; auto* url=new QLineEdit(initial.value("test_url").toString()); url->setObjectName("groupTestUrl"); url->setMaxLength(2048); url->setPlaceholderText("留空沿用默认测试地址"); form->addRow("本组延迟测试地址",url);
     auto* view=new CompactComboBox; view->addItems({"表格","卡片"}); view->setCurrentIndex(memberView()); form->addRow("默认视图",view); auto* sort=new CompactComboBox; sort->addItems({"默认顺序","名称升序","延迟升序"}); sort->setCurrentIndex(findChild<QComboBox*>("memberSort")->currentIndex()); form->addRow("默认排序",sort); box->addLayout(form);
     auto* common=new QCheckBox("作为常用组，在列表和托盘中优先显示"); common->setChecked(expected.value("common_groups").toArray().contains(group)); box->addWidget(common);
-    auto* disconnect=new QCheckBox("切换成员后断开受影响连接"); disconnect->setObjectName("disconnectAffected"); disconnect->setChecked(expected.value("disconnect_affected").toBool()); disconnect->setToolTip("默认保留。只处理切换前经过该策略组的连接，单次最多32条；其他连接保留，结果以回读为准。"); box->addWidget(disconnect);
+    auto* subscriptionScope=new QLabel("此订阅的切换行为"); subscriptionScope->setProperty("secondary",true); box->addWidget(subscriptionScope);
+    auto* disconnect=new QCheckBox("切换成员后断开受影响连接"); disconnect->setObjectName("disconnectAffected"); disconnect->setChecked(expected.value("disconnect_affected").toBool()); disconnect->setToolTip("此开关用于该订阅的所有策略组。默认保留。只处理切换前经过所切策略组的连接，单次最多32条；其他连接保留，结果以回读为准。"); box->addWidget(disconnect);
     auto* note=new QLabel; note->setTextFormat(Qt::PlainText); note->setWordWrap(true); box->addWidget(note); auto* buttons=new QDialogButtonBox(QDialogButtonBox::Save|QDialogButtonBox::Cancel); buttons->button(QDialogButtonBox::Save)->setText("保存"); buttons->button(QDialogButtonBox::Cancel)->setText("取消"); box->addWidget(buttons);
     const auto draft=[expected,group,url,view,sort,common,disconnect] { auto value=expected; auto groups=value.value("groups").toObject(); groups[group]=QJsonObject{{"test_url",url->text().trimmed()},{"view",view->currentIndex()},{"sort",sort->currentIndex()}}; value["groups"]=groups; value["last_group"]=group; value["disconnect_affected"]=disconnect->isChecked(); auto commons=value.value("common_groups").toArray(); for (int i=commons.size()-1;i>=0;--i) if (commons[i].toString()==group) commons.removeAt(i); if (common->isChecked()) commons.append(group); value["common_groups"]=commons; return value; };
     const auto baseline=draft(); auto pending=std::make_shared<bool>(false); DialogDraftGuard::protect(dialog,[draft,baseline] { return draft()!=baseline; },[pending] { return *pending; }); connect(buttons,&QDialogButtonBox::rejected,dialog,&QDialog::reject);
@@ -193,7 +191,7 @@ void MainWindow::updateGroup() {
     const auto type = controller_->proxies().value(group).toObject().value("type").toString();
     const auto object=controller_->proxies().value(group).toObject(); const bool automatic=QStringList{"URLTest","Fallback"}.contains(type); const bool fixed=!object.value("fixed").toString().isEmpty(); if (automatic) selectedGroupTitle_->setText(selectedGroupTitle_->text()+(fixed?" · 手动固定":" · 自动选择"));
     groupSwitcher_->setFixedWidth(qMax(140,groupSwitcher_->fontMetrics().horizontalAdvance("切换策略组")+42));
-    groupSwitcher_->setText(groupSwitcher_->fontMetrics().elidedText(group.isEmpty()?QString("切换策略组"):group+QString(" · %1").arg(model_.rowCount()),Qt::ElideRight,groupSwitcher_->width()-36));
+    groupSwitcher_->setText(groupSwitcher_->fontMetrics().elidedText(group.isEmpty()?QString("切换策略组"):QString("策略组：")+group+QString(" · %1").arg(model_.rowCount()),Qt::ElideRight,groupSwitcher_->width()-36));
     groupSwitcher_->setToolTip(selectedGroupTitle_->text()+"\n展开策略组（Ctrl+G）；仅改变浏览组"+(automatic?(fixed?QString("\n当前为手动固定；可恢复自动选择"):QString("\n当前按自动策略选择")):QString()));
     groupHint_->setText(group.isEmpty() ? "无节点：导入并激活订阅，或检查内核状态。" : type == "Selector" ? "手动选择组；粗体标记当前成员。" : "自动/其他策略组；手动选择可能固定自动组的成员。");
     proxyGroups_->setToolTip(groupHint_->text()); nodes_->setToolTip(groupHint_->text() + " 双击或回车选择成员。");
@@ -227,13 +225,13 @@ void MainWindow::updateCurrentMember() {
     const auto now = controller_->proxies().value(selectedGroup_).toObject().value("now").toString();
     const auto path = (groupHistory_ + QStringList{selectedGroup_}).join(" / ");
     const bool viewingActive = profilesCombo_->currentData().toString() == controller_->state().activeProfile;
-    auto text = !viewingActive ? "使用所选订阅后显示当前成员" : !controller_->state().ready ? "内核就绪后显示当前成员" : now.isEmpty() ? "尚无当前成员" : path + " · 当前：" + now;
+    auto text = !viewingActive || !controller_->state().ready ? QString() : now.isEmpty() ? QString("当前成员未知") : path + " · 当前：" + now;
     const auto row = model_.names().indexOf(now);
     if (controller_->state().ready && row >= 0) { const auto delay = model_.data(model_.index(row, 2)).toString(); if (delay.endsWith(" ms")) text += " · " + delay; }
     const auto rows=nodes_->selectionModel()->selectedRows();
     if (viewingActive && controller_->state().ready && !rows.isEmpty()) {
         const auto selected=model_.nameAt(filter_.mapToSource(rows.first()).row());
-        if (!selected.isEmpty() && selected!=now) text+=" · 待使用："+selected;
+        if (!selected.isEmpty() && selected!=now) text+=" · 待切换："+selected;
     }
     currentMember_->setToolTip(text); currentMember_->setText(text);
 }

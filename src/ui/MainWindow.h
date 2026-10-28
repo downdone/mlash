@@ -13,7 +13,7 @@ class QAction; class QTabWidget; class QMenu; class QDialog;
 class QToolButton; class QStatusBar;
 class QTabBar; class QHBoxLayout;
 class QDragEnterEvent; class QDropEvent;
-namespace mlash { class WebsiteTestsPage; }
+namespace mlash { class WebsiteTestsPage; class ImportDialog; }
 namespace mlash { class ConnectionOptions; }
 namespace mlash {
 class MainWindow : public QMainWindow {
@@ -32,7 +32,6 @@ public:
 signals:
     void guiReleaseRequested();
 protected:
-    bool eventFilter(QObject* watched,QEvent* event) override;
     void closeEvent(QCloseEvent* event) override;
     void showEvent(QShowEvent* event) override;
     void hideEvent(QHideEvent* event) override;
@@ -41,14 +40,17 @@ protected:
 private:
     QWidget* homePage(); QWidget* proxyPage(); QWidget* profilesPage(); QWidget* diagnosticsPage(); QWidget* settingsPage(); QWidget* rulesPage(); QWidget* connectionsPage();
     void applyAppearance();
-    void updateRulesProfiles(); void loadRuleDraft(); void updateConnections();
+    void updateRulesProfiles(); void loadRuleDraft();
+    void rebuildRuleList(); void updateConnections();
     void updateHome();
     void updateHomeOutbound(bool capture=false);
     void showOutboundDiagnostics();
     QPointer<QDialog> outboundDialog_;
     void updateState(); void updateProfiles(); void updateProxies(); void updateGroup(); void updateLogs();
     QString selectedProfile() const;
+    void presentImport(ImportDialog* dialog);
     void addUrl(); void addFile(bool replace); void applySettings(); void addSubscription(bool url);
+    void syncSectionNavigation(int page);
     void updateActions(); void updateCurrentMember(); void chooseSelectedNode(); void locateCurrentNode();
     void editProfilePolicy();
     void editNodePreferences();
@@ -71,6 +73,8 @@ private:
     bool hasDisplayedSettings_ = false;
     Settings displayedSettings_;
     QListWidget* navigation_;
+    QTabBar* sectionTabs_;
+    QPointer<QLabel> sectionTitle_;
     QStackedWidget* pages_;
     WebsiteTestsPage* websitePage_;
     QStatusBar* operationStatus_;
