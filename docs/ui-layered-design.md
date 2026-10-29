@@ -1009,8 +1009,8 @@ U05 表未覆盖、但实施必需：
 
 | 控件 | 表面 | 文字 | 边界 | 状态（悬停 / 按下 / 选中 / 焦点 / 禁用） | 几何 |
 |---|---|---|---|---|---|
-| **侧栏** | `sidebar` | `textSecondary` → 选中 `onAccent` | 右边 `separator` | 悬停 `hoverFill`；选中 `accent` 实心 | 宽 172，项高 32 |
-| **分区页签** | 底座 `surfaceRaised`，选中 `surface` | 选中 `textPrimary`，否则 `textSecondary` | 无 | 悬停 `hoverFill`；选中 = `surface` 填充（`surfaceRaised` 浅色须深于 `surface` 才有抬升） | 高 30，圆角 `radius-md` |
+| **侧栏** | `sidebar` | `textSecondary` → 选中 `onAccent` | 右边 `separator` | 悬停 `sidebarHover`；选中 `accent` 实心 | 宽 172，项高 32 |
+| **分区页签** | 底座 `surfaceRaised`，选中 `surface` | 选中 `textPrimary`，否则 `textSecondary` | 无 | 悬停 `hoverFill`（对底座 1.03，仅示意）；选中 = `surface` 填充（对底座 1.17） | 高 30，圆角 `radius-md` |
 | **主按钮** | `accent` | `onAccent` | 无 | 悬停 `accentHover`；按下 `accentPressed`；禁用 `controlFill` + `textDisabled` | `control-lg` |
 | **次按钮** | `controlFill` | `textPrimary` | 无 | 悬停 `hoverFill`；按下 `pressedFill` | `control-md` |
 | **危险按钮** | 透明 | `danger` | 无 | 悬停 `danger` + 10% 叠色；按下 18% | `control-md` |
@@ -1022,7 +1022,7 @@ U05 表未覆盖、但实施必需：
 | **表头** | `surface` | `textSecondary` | 底 `separator` | 排序时箭头 + `textPrimary` | 高 32 |
 | **卡片** | `surface` | 主 `textPrimary`，次 `textSecondary` | 仅可点击卡片有 `border` | 悬停 `hoverFill`；选中 `selectionFill` + `selectionBar` | `card-min` / `radius-lg` |
 | **设置行** | 透明 | 名称 `textPrimary`，说明 `textSecondary` | 行底 `separator` | 悬停 `hoverFill` | `row-form` |
-| **菜单** | `popupSurface` | `textPrimary` | `popupBorder` | 悬停 `hoverFill`；禁用 `textDisabled` | 行高 28，`radius-md` |
+| **菜单** | `popupSurface` | `textPrimary` | `popupBorder` | 悬停 `popupHover`；禁用 `textDisabled` | 行高 28，`radius-md` |
 | **工具提示** | `popupSurface` | `textSecondary` | `popupBorder` | — | `radius-sm` |
 | **滚动条** | 透明轨道 | — | — | 常态 `scrollHandle`；悬停 `scrollHandleHover`；拖动加深 | 宽 8 |
 | **状态点** | — | — | — | `success`/`warning`/`danger`/`accent`/`textSecondary` | 10px + 形状编码 |
@@ -1037,7 +1037,7 @@ U05 表未覆盖、但实施必需：
 **取值的三个例外**：
 
 1. **表格与卡片不描边**（除可点击卡片），层级靠 `surface` 抬升与行底 `separator`。这是 P6 与 6.3 规则 1 的直接应用。
-2. **焦点环统一绘制**：2px `focusRing` + 1px 间隙，画在控件外围，不参与布局。禁止用「改 padding 防跳」的 QSS 写法（现有 `UiTheme.cpp` 有 5 处）。
+2. **焦点环统一绘制**：2px `focusRing` + 1px 间隙，画在控件外围，不参与布局。禁止用「改 padding 防跳」的 QSS 写法（现有 `UiTheme.cpp` 有 6 处）。
 3. **禁用态只降文字与填充**，不改变控件尺寸与位置。
 
 ### 6.2c 图标体系合并
@@ -1058,17 +1058,23 @@ U05 表未覆盖、但实施必需：
 1. **层级靠表面抬升，不靠边框**。三级表面：`canvas` → `surface` → `popupSurface`，深色逐级变亮;边框只给可交互容器与浮层。
 2. **交互状态用「色相分离 + 结构信号」，不用亮度阶梯**。经实算，同一色相的叠色在合理 alpha 范围内无法产生可辨的亮度差（accent 叠 30% 时浅色仅 1.58、深色 1.31），继续加深会让表面发脏。因此改为：
 
-   - **悬停**：中性灰填充（浅 `#EAEAEF` / 深 `#36363B`），只表达「指针在此」。
-   - **选中**：accent 色调填充（浅 `#D6E4F7` / 深 `#1E3350`）+ **左侧 2px `selectionBar`**（对选中底 5.33 / 5.99）。
-   - **按下**：同悬停色再叠 12% 中性加深，或加 1px 内描边。
-   - 选中与悬停的亮度比只有 1.07，但**色相不同**，配合竖条形成双重通道——这是 macOS 列表的做法，也是唯一可行的方向。
+   本节**重新定义** `hoverFill` 与 `selectionFill` 的取值，U05 表中对应行的旧值作废：
 
-   **禁止**用单一背景亮度区分选中与悬停。
+   | token | 浅色 | 深色 | 说明 |
+   |---|---|---|---|
+   | `hoverFill` | `#EAEAEF` | `#36363B` | 中性灰，只表达「指针在此」 |
+   | `selectionFill` | `#D6E4F7` | `#1E3350` | accent 调，配合竖条 |
+   | `selectionBar` | `#0057B8` | `#7DB4FF` | 2px，对选中底 5.33 / 5.99 |
+   | `pressedFill` | `#DFDFE6` | `#45454B` | 悬停色加深一档（对悬停底 1.11 / 1.09） |
+
+   - 选中与悬停的亮度比只有 1.07，但**色相不同**，配合竖条形成双重通道——这是 macOS 列表的做法。
+   - **禁止**用单一背景亮度区分选中与悬停。
+   - **浮层例外**：`popupSurface` 深色为 `#36363B`，与 `hoverFill` 深色相同，会导致菜单悬停不可见。浮层内改用 `popupHover` 深色 `#4A4A50`（对浮层底 1.37），浅色 `#EFEFF3`（对浮层底 1.15）。
 3. **高对比是第四套平行 token**（浅/深 × 普通/高对比，与 `applyAppearance(scheme, highContrast)` 的二维参数一致）。不只加深边框，选中、控件填充、轨道、焦点同时增强。注意 HC 已知弱于普通模式（见 6.3b），必须单独验证。
 4. **字号七档、间距 8pt、圆角四级**。页面代码禁止字面量。
 5. **几何随文字比例缩放**，覆盖 90–120%；给出最小字号 9pt 与最小行高 16px 下限，低于下限不再缩放。
 6. **状态多通道**。形状 + 颜色 + 文本，不只靠色相。
-7. **硬编码清零**。经逐处核对，真正的字面色值只有 4 处（`QColor(UiTheme::X)` 属正确用法，不在此列）：
+7. **硬编码清零**。经逐处核对，真正的字面色值与内联样式共 7 处（`QColor(UiTheme::X)` 属正确用法，不在此列）：
 
 | 位置 | 内容 | 处理 |
 |---|---|---|
@@ -1103,9 +1109,9 @@ U05 的 token 取值已按 WCAG 2.x 相对亮度逐组复算（本轮实际执�
 | 选中竖条 / 选中底 | 5.33 | 5.99 | 3.0 | 达标 |
 | 主色 / 反白文字 | 5.69 | 4.81 | 4.5 | 达标 |
 | 焦点环 / 画布 | 5.10 | **4.66** | 3.0 | 达标 |
-| 焦点环 / 选中底 | — | **3.10** | 3.0 | 勉强达标 |
+| 焦点环 / 选中底 | — | **3.50** | 3.0 | 达标（按新 `selectionFill` `#1E3350`） |
 | 危险 / 表面 | 6.54 | 6.28 | 4.5 | 达标 |
-| 成功 / 表面 | 6.55 | — | 4.5 | 达标 |
+| 成功 / 表面 | 6.55 | 8.14 | 4.5 | 达标 |
 | `accentText` / 表面 | 6.87 | 6.53 | 4.5 | 达标 |
 | `accent`（作填充）/ 表面 | — | **2.90** | 3.0 | **深色不达标** |
 
@@ -1123,8 +1129,8 @@ U05 的 token 取值已按 WCAG 2.x 相对亮度逐组复算（本轮实际执�
 | 悬停 / 表面 | 1.20 | 1.16 | 达标（视觉上可辨） |
 | 选中 / 表面 | 1.29 | 1.09 | 浅色达标；深色靠竖条 |
 | 侧栏悬停 / 侧栏 | **1.009** | 1.42 | **浅色等于无反馈**——新增 `sidebarHover` `#D4D4DB`（1.17） |
-| 页签选中 / 页签底座 | **1.000** | 1.16 | **浅色无抬升**——`surfaceRaised` 浅色改为 `#EDEDF2`（对 surface 1.12） |
-| 菜单悬停 / 浮层底 | 1.15 | 1.13 | 可接受（浮层小面积） |
+| 页签选中 / 页签底座 | **1.000** | 1.16 | **浅色无抬升**——`surfaceRaised` 浅色改为 `#EDEDF2`（对 surface 1.17） |
+| 菜单悬停 / 浮层底 | 1.15 | 1.37 | 可接受（浮层小面积，配合 2px 内缩高亮） |
 | 分隔线 / 表面 | 1.27 | 1.23 | 可接受（hairline 不承担层级） |
 
 **边界说明**：以上为静态计算，未在 Windows 实机、90–120% 文字或系统高对比下截图核对。**高对比（HC）列未逐项复算，且已知弱于普通模式**（HC 深 `selectionFill`/`surface` 1.84），实施时必须单独验证，不能假设 HC 更好。
@@ -1174,14 +1180,6 @@ value = qRound(base * textScale / 100.0)   // 四舍五入，不额外取偶
 
 - **侧栏宽度 172**：120% 下四个两字分区名加图标约需 81px，侧栏内宽 148px，余量充足。侧栏**项的 padding 与图标随比例缩放**，总宽由内边距吸收。
 - **图标尺寸**取最近档（16/20/24），不连续缩放；描边随档位调整（16px 用 1.25、24px 用 1.5），避免小图标描边过粗。
-
----|---|---|---|---|
-| `control-md` | 28 | 30 | 33 | 36 |
-| `row-form` | 44 | 48 | 52 | 56 |
-| `row-data` | 29 | 32 | 35 | 38 |
-| `switch-track` | 38×22 | 42×24 | 46×26 | 48×28 |
-| `statusbar` | 32 | 34 | 37 | 40 |
-| `sidebar` | 172 | 172 | 172 | 172（文字 120% 仍可容纳 4 项） |
 
 侧栏宽度不缩放——分区名短，缩放会挤压内容区。图标尺寸随比例取最近档（16/20/24），不做连续缩放。
 
@@ -1300,7 +1298,7 @@ QWidget* ToolWindowRegistry::show(ToolId tool, const QString& objectKey, std::fu
 // 复用键 = tool + objectKey；对象删除/切换数据源时 close；页面切换时保留并 raise
 ```
 
-**P6 检查脚本**：`scripts/check_ui_tokens.py`，白名单 `UiTheme.*`、`UiIcons.*`、`WidgetStyle.*`、`NodePresentation.*`、`tests/`；命中 `setStyleSheet`／`QColor` 字面量／`setPixelSize`／`setPointSize` 即失败；接入 `scripts/test.ps1`。
+**P6 检查脚本**：`scripts/check_ui_tokens.py`，白名单 `UiTheme.*`、`UiIcons.*`、`WidgetStyle.*`、`NodePresentation.*`、`MainWindowParts.*`、`CompactComboBox.*`、`ProxyTableModel.*`、`tests/`；命中 `setStyleSheet`／`QColor` 字面量／`setPixelSize`／`setPointSize` 即失败；接入 `scripts/test.ps1`。
 
 ## 验收边界
 
