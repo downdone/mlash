@@ -139,7 +139,7 @@ MainWindow::MainWindow(AppController* controller, QWidget* parent) : QMainWindow
         feedbackTimer_.stop(); recentFeedback_=ok; feedbackError_=ok?QString():text; if (ok) feedbackTimer_.start();
         if (ok && controller_->state().readOnly) message_->setText(controller_->state().lastError);
         testProgress_->setText(text=="测速已取消" ? "已取消" : QString()); updateActions();
-        if (settingsApplying_) { settingsApplying_=false; settingsFeedback_=ok?"设置已应用":"应用失败："+text; }
+        if (settingsApplying_) { settingsApplying_=false; settingsFeedback_=ok?"网络设置已应用":"应用失败："+text; }
         if (rulesSaving_) { rulesSaving_ = false; if (ok) { rulesDirty_ = false; loadRuleDraft(); if (pages_->currentIndex() == 3) controller_->refreshRules(); rulesHint_->clear(); } else rulesHint_->setText("保存失败，修改已保留 · "+text); }
         updateActions();
     });
@@ -382,8 +382,8 @@ void MainWindow::updateActions() {
     findChild<QPushButton*>("rulesNextStep")->setVisible(actualRules?!state.ready:rulesProfiles_->count()==0); findChild<QPushButton*>("rulesNextStep")->setText(actualRules?"前往首页启动":"前往订阅");
     findChild<QLabel*>("rulesRuntimeEmpty")->setVisible(rulesFilter_.rowCount()==0); findChild<QLabel*>("rulesRuntimeEmpty")->setText(!state.ready?"内核未就绪":"暂未读取到匹配的内核规则");
     auto* quickEmpty=quickRules->findChild<QLabel*>("emptyState"); quickEmpty->setText(rulesProfiles_->count()==0?"请先添加或选择订阅":"还没有优先规则\n在上方添加，或打开完整规则编辑");
-    applySettings_->setEnabled(idle && settingsDirty()); resetSettings_->setEnabled(!state.exiting && settingsDirty());
-    const int changeCount=settingsChangeCount(); settingsDraftHint_->setText(settingsApplying_?"正在校验并应用…":!settingsFeedback_.isEmpty() && (!changeCount || settingsFeedback_.startsWith("应用失败"))?settingsFeedback_:changeCount?QString("有 %1 项待应用").arg(changeCount):QString()); settingsDraftHint_->setToolTip(settingsDraftHint_->text());
+    const int networkChanges=networkSettingCount(); applySettings_->setEnabled(idle && networkChanges>0); applySettings_->setVisible(networkChanges>0); resetSettings_->setEnabled(!state.exiting && networkChanges>0); resetSettings_->setVisible(networkChanges>0);
+    settingsDraftHint_->setText(settingsApplying_?"正在校验并应用…":!settingsFeedback_.isEmpty()?settingsFeedback_:networkChanges>0?QString("有 %1 项需要重启内核的修改").arg(networkChanges):QString()); settingsDraftHint_->setToolTip(settingsDraftHint_->text());
     findChild<QAction*>("importGeoData")->setEnabled(idle); findChild<QAction*>("previewActiveConfig")->setEnabled(!state.busy && !state.exiting && !state.activeProfile.isEmpty());
     cancelTestAction_->setEnabled(controller_->testingNodes()); cancelTestButton_->setVisible(controller_->testingNodes()); testProgress_->setVisible(true);
     nodeEmpty_->setVisible(filter_.rowCount()==0); nodeEmpty_->setText(model_.rowCount()>0 ? "没有匹配的节点\n请调整搜索条件" : controller_->profiles().isEmpty()?"暂无节点\n请先添加订阅":state.activeProfile.isEmpty()?"请先使用订阅":!state.ready ? "内核未就绪" : "使用所选订阅后，选择策略组查看节点"); nodeCardsEmpty_->setText(nodeEmpty_->text()); nodeCardsEmpty_->setVisible(filter_.rowCount()==0);
@@ -472,6 +472,7 @@ void MainWindow::syncSectionNavigation(int page) {
     for (int row=0;row<navigation_->count();++row) if (navigation_->item(row)->data(Qt::UserRole).toInt()==section) { navigation_->setCurrentRow(row); navigation_->item(row)->setData(Qt::UserRole+1,page); }
     if (!sectionTabs_->count()||sectionTabs_->property("section").toInt()!=section) {
         while (sectionTabs_->count()) sectionTabs_->removeTab(0);
+        // Settings uses the same title slot: its category page tabs stand where other pages show section tabs.
         const auto views=section==0?QList<QPair<QString,int>>{{"状态",0},{"节点",2},{"网站测试",7}}:section==1?QList<QPair<QString,int>>{{"订阅",1},{"规则",3}}:section==4?QList<QPair<QString,int>>{{"连接",4},{"日志",5}}:QList<QPair<QString,int>>{};
         for (const auto& view:views) { const int tab=sectionTabs_->addTab(view.first); sectionTabs_->setTabData(tab,view.second); }
         sectionTabs_->setProperty("section",section);
@@ -481,8 +482,9 @@ void MainWindow::syncSectionNavigation(int page) {
         if (sectionTitle_) { delete sectionTitle_->parentWidget()->layout()->replaceWidget(sectionTabs_,sectionTitle_); sectionTitle_->show(); sectionTitle_=nullptr; }
         if (section!=6&&title) { delete title->parentWidget()->layout()->replaceWidget(title,sectionTabs_); title->hide(); sectionTitle_=title; }
     }
-    sectionTabs_->setVisible(section!=6);
     for (int tab=0;tab<sectionTabs_->count();++tab) if (sectionTabs_->tabData(tab).toInt()==page) sectionTabs_->setCurrentIndex(tab);
+    // Settings reuses this title slot: its category tabs replace the section tabs and search stays right-aligned.
+    sectionTabs_->setVisible(section!=6);
 }
 void MainWindow::setPage(int index) {
     if (index < 0 || index >= pages_->count()) return;

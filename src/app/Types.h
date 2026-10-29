@@ -3,6 +3,8 @@
 #include <QJsonArray>
 #include <QString>
 #include <QVector>
+#include <algorithm>
+#include <iterator>
 
 namespace mlash {
 struct Result {
@@ -20,6 +22,22 @@ struct DownloadPolicy {
     QJsonObject toJson() const;
     static DownloadPolicy fromJson(const QJsonObject& object);
 };
+struct CoreHistoryEntry {
+    QString sha256, version, path, source, recordedAt;
+    qint64 bytes = 0;
+    bool valid(const QStringList& allowedSources) const;
+    static QStringList sources();
+    QJsonObject toJson() const;
+    static CoreHistoryEntry fromJson(const QJsonObject& object);
+    bool operator==(const CoreHistoryEntry& other) const { return sha256==other.sha256&&version==other.version&&path==other.path&&source==other.source&&recordedAt==other.recordedAt&&bytes==other.bytes; }
+};
+// Bounded newest-first history; one entry per sha256, bundled core stays implicit.
+inline QVector<CoreHistoryEntry> appendedCoreHistory(QVector<CoreHistoryEntry> history, const CoreHistoryEntry& entry) {
+    history.erase(std::remove_if(history.begin(), history.end(), [&entry](const CoreHistoryEntry& existing) { return existing.sha256 == entry.sha256; }), history.end());
+    history.prepend(entry);
+    while (history.size() > 8) history.removeLast();
+    return history;
+}
 struct Settings {
     bool autoStart = false;
     bool silentStart = true;
@@ -40,6 +58,7 @@ struct Settings {
     QString activeProfile;
     QString corePath;
     QString previousCorePath;
+    QVector<CoreHistoryEntry> coreHistory;
     QJsonArray websiteTargets;
     QJsonObject hotkeys;
     QJsonObject connectionView;

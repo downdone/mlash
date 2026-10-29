@@ -12,6 +12,7 @@
 #include <QPlainTextEdit>
 #include <QLabel>
 #include <QtEndian>
+#include <QTableWidget>
 using namespace mlash;
 class UpdatePlatform final:public PlatformServices {
 public:
@@ -43,6 +44,31 @@ private slots:
     }
     void stoppedIndexFailureKeepsOldPathAndCleansValidation() {
         QTemporaryDir data; auto platform=std::make_shared<UpdatePlatform>(); ProfileStore store(data.path(),platform); QVERIFY(store.load().result.ok); Settings s; s.corePath=original; s.startCore=false; QVERIFY(store.save(s,{}).ok); AppController c(data.path(),true,nullptr,platform); QSignalSpy init(&c,&AppController::initialized),finished(&c,&AppController::operationFinished); c.initialize(); QTRY_COMPARE(init.size(),1); const auto inspected=preview(c,original); QVERIFY(inspected.ok); QByteArray before,after; QVERIFY(readFile(data.path()+"/state.dat",before).ok); platform->failState=true; finished.clear(); c.applyCoreUpdate(inspected.data.value("token").toString()); QTRY_COMPARE_WITH_TIMEOUT(finished.size(),1,15000); QVERIFY(!finished.last()[0].toBool()); QCOMPARE(c.settings().corePath,original); QVERIFY(!c.state().ready); QCOMPARE(c.coreProcessId(),qint64(0)); QVERIFY(readFile(data.path()+"/state.dat",after).ok); QCOMPARE(after,before); QVERIFY(QDir(data.path()).entryList({"core-check-*"},QDir::Dirs|QDir::NoDotAndDotDot).isEmpty()); QCOMPARE(platform->writes,0);
+    }
+    void coreHistoryKeepsBoundedSwitchableVersions() {
+        QTemporaryDir data; auto platform=std::make_shared<UpdatePlatform>(); ProfileStore store(data.path(),platform); QVERIFY(store.load().result.ok); Settings s; s.startCore=false; s.corePath=original; QVERIFY(store.save(s,{}).ok);
+        AppController c(data.path(),true,nullptr,platform); QSignalSpy init(&c,&AppController::initialized),finished(&c,&AppController::operationFinished); c.initialize(); QTRY_COMPARE(init.size(),1);
+        QCOMPARE(c.settings().coreHistory.size(),0);
+        const auto applied=preview(c,original); QVERIFY2(applied.ok,qUtf8Printable(applied.error)); finished.clear(); c.applyCoreUpdate(applied.data.value("token").toString()); QTRY_COMPARE_WITH_TIMEOUT(finished.size(),1,15000); QVERIFY2(finished.last()[0].toBool(),qUtf8Printable(finished.last()[1].toString()));
+        QCOMPARE(c.settings().coreHistory.size(),1); const auto first=c.settings().coreHistory.first();
+        QCOMPARE(first.sha256,applied.data.value("sha256").toString()); QCOMPARE(first.version,applied.data.value("version").toString()); QCOMPARE(first.path,c.settings().corePath); QCOMPARE(first.source,QString("local")); QVERIFY(first.valid(CoreHistoryEntry::sources()));
+        // Switching to the recorded entry reuses the same explicit preview/apply path.
+        const auto switched=preview(c,first.path); QVERIFY2(switched.ok,qUtf8Printable(switched.error)); finished.clear(); c.applyCoreUpdate(switched.data.value("token").toString()); QTRY_COMPARE_WITH_TIMEOUT(finished.size(),1,15000); QVERIFY2(finished.last()[0].toBool(),qUtf8Printable(finished.last()[1].toString()));
+        QCOMPARE(c.settings().corePath,first.path);
+        // The manager lists recorded versions and can drive the same preview from a selected row.
+        QPointer<CoreUpdateDialog> dialog=new CoreUpdateDialog(&c); dialog->show(); auto* table=dialog->findChild<QTableWidget*>("coreHistory"); auto* useHistory=dialog->findChild<QPushButton*>("previewHistoryCore"); QVERIFY(table&&useHistory);
+        QTRY_VERIFY(table->rowCount()>=1); QCOMPARE(table->item(0,0)->data(Qt::UserRole).toString(),first.path); QCOMPARE(table->item(0,3)->text(),QString("当前")); table->selectRow(0); QVERIFY(useHistory->isEnabled());
+        // Selecting the running version is refused in place instead of re-previewing it.
+        useHistory->click(); QVERIFY(dialog->findChild<QLabel*>("coreUpdateHint")->text().contains("当前内核"));
+        QVERIFY(!dialog->findChild<QPushButton*>("applyCoreUpdate")->isEnabled()); dialog->close(); QTRY_VERIFY(dialog.isNull());
+        c.cancelCoreUpdatePreview();
+        // One entry per digest, newest first, capped at the same bound as the copy store.
+        auto history=c.settings().coreHistory; for (int i=0;i<10;++i) { const auto sha=QString(QStringLiteral("%1").arg(i,2,16,QChar('0')).repeated(32)); CoreHistoryEntry entry{sha,"v9."+QString::number(i),data.path()+"/core-updates/"+sha+"/mihomo.exe","local","2026-10-29T00:00:00Z",1024}; history=appendedCoreHistory(history,entry); }
+        QCOMPARE(history.size(),8); QCOMPARE(history.first().version,QString("v9.9")); QCOMPARE(history.last().version,QString("v9.2"));
+        auto next=store.load().settings; next.coreHistory=history; QVERIFY(store.save(next,{}).ok); QCOMPARE(ProfileStore(data.path(),platform).load().settings.coreHistory.size(),8);
+        auto bad=next.toJson(); auto rows=bad.value("core_history").toArray(); auto row=rows[0].toObject(); row["sha256"]="not-a-digest"; rows[0]=row; bad["core_history"]=rows; QVERIFY(!ProfileStore(data.path(),platform).save(Settings::fromJson(bad),{}).ok);
+        auto dup=next.toJson(); auto dupRows=dup.value("core_history").toArray(); dupRows[1]=dupRows[0]; dup["core_history"]=dupRows; QVERIFY(!ProfileStore(data.path(),platform).save(Settings::fromJson(dup),{}).ok);
+        QCOMPARE(platform->writes,0);
     }
 };
 QTEST_MAIN(CoreUpdateTests)

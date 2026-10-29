@@ -60,3 +60,4 @@ ADR 保留决策发生时的背景和取舍；较新的已接受决策可以替�
 | 0041 | [ADR 0041：公开文档基线与重新发布](0041-public-documentation-baseline.md) |
 | 0042 | [ADR 0042：单列分组设置与平台排版](0042-grouped-settings-and-platform-typography.md) |
 | 0043 | [ADR 0043：功能归属、明确动作与设置分类](0043-task-ownership-and-clear-actions.md) |
+| 0044 | [ADR 0044：设置即时生效、内核历史与设置页标题统一](0044-immediate-settings-core-history.md) |

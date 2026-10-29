@@ -84,6 +84,8 @@ QWidget* MainWindow::profilesPage() {
 
 void MainWindow::updateProfiles() {
     const auto& s = controller_->settings();
+    // Programmatic sync must not look like a user edit and resubmit settings.
+    settingsSyncing_ = true;
     const auto toggle = [this](QCheckBox* box, bool before, bool actual) { if (!hasDisplayedSettings_ || box->isChecked() == before) box->setChecked(actual); };
     toggle(autoStart_,displayedSettings_.autoStart,s.autoStart); toggle(silentStart_,displayedSettings_.silentStart,s.silentStart); toggle(startCore_,displayedSettings_.startCore,s.startCore); toggle(restoreProxy_,displayedSettings_.restoreProxy,s.restoreProxy); toggle(lightweight_,displayedSettings_.lightweight,s.lightweight);
     if (!hasDisplayedSettings_ || mixedPort_->value() == displayedSettings_.mixedPort) mixedPort_->setValue(s.mixedPort);
@@ -94,6 +96,7 @@ void MainWindow::updateProfiles() {
     for (const auto& tuple:QList<QPair<QComboBox*,QPair<QString,QString>>>{{trayClick_,{displayedSettings_.trayClick,s.trayClick}},{ipv6Mode_,{displayedSettings_.ipv6Mode,s.ipv6Mode}},{unifiedDelayMode_,{displayedSettings_.unifiedDelayMode,s.unifiedDelayMode}}}) if (!hasDisplayedSettings_ || tuple.first->currentData().toString()==tuple.second.first) tuple.first->setCurrentIndex(tuple.first->findData(tuple.second.second));
     if (!hasDisplayedSettings_||appearance_->currentData().toString()==displayedSettings_.appearance) appearance_->setCurrentIndex(appearance_->findData(s.appearance));
     if (!hasDisplayedSettings_||textScale_->currentData().toInt()==displayedSettings_.textScale) textScale_->setCurrentIndex(textScale_->findData(s.textScale));
+    settingsSyncing_ = false;
     displayedSettings_ = s; hasDisplayedSettings_ = true;
     const auto selected = selectedProfile(); const auto selectedCombo = profilesCombo_->currentData().toString(); const QSignalBlocker comboBlock(profilesCombo_); profilesCombo_->clear(); profileTable_->setRowCount(controller_->profiles().size());
     int row = 0;

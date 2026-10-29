@@ -29,7 +29,7 @@
 
 ## 支持范围
 
-当前版本为 **1.17.0 预发布**，目标平台为 Windows 10/11 x64。固定内核为 `v1.19.32-halfclose.1`；默认半关闭空闲回收为 client 300 秒 / server 30 秒，保留来源显式值。
+当前版本为 **1.17.1 预发布**，目标平台为 Windows 10/11 x64。固定内核为 `v1.19.32-halfclose.1`；默认半关闭空闲回收为 client 300 秒 / server 30 秒，保留来源显式值。
 
 TUN 服务已实现，但实际服务/驱动/路由恢复、干净机器部署和完整长期验收尚未完成。预发布保持 `release_qualified=false`，不代表正式发行资格。实际验证与未验范围见 [验证报告](docs/verification-report.md)。macOS/Linux 系统集成不受支持。
 

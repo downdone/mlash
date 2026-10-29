@@ -96,7 +96,7 @@ private slots:
         QTemporaryDir dir; AppController controller(dir.path(),true,nullptr,std::make_shared<ReviewPlatform>()); QSignalSpy init(&controller,&AppController::initialized); controller.initialize(); QTRY_COMPARE(init.size(),1); MainWindow window(&controller); window.show(); window.setPage(6); auto* port=window.findChild<QSpinBox*>("mixedPort"); const int draft=port->value()+1; port->setValue(draft);
         TrayController tray(&controller); auto* menu=tray.findChild<QSystemTrayIcon*>()->contextMenu();
         for (const auto scheme:{Qt::ColorScheme::Light,Qt::ColorScheme::Dark}) {
-            UiTheme::applyAppearance(scheme); QCoreApplication::processEvents(); QCOMPARE(port->value(),draft); QCOMPARE(controller.settings().mixedPort,draft-1); QCOMPARE(window.page(),6); QCOMPARE(window.findChild<QLabel*>("settingsDraftHint")->text(),QString("有 1 项待应用"));
+            UiTheme::applyAppearance(scheme); QCoreApplication::processEvents(); QCOMPARE(port->value(),draft); QCOMPARE(controller.settings().mixedPort,draft-1); QCOMPARE(window.page(),6); QCOMPARE(window.findChild<QLabel*>("settingsDraftHint")->text(),QString("有 1 项需要重启内核的修改"));
             menu->popup(QPoint(180,100)); QTRY_VERIFY(menu->isVisible()); const auto before=menu->geometry();
             for (int wait:{0,16,160}) { if (wait) QTest::qWait(wait); const auto frame=menu->grab().toImage(); QCOMPARE(frame.pixelColor(0,0).alpha(),0); QCOMPARE(menu->geometry(),before); } save(menu,scheme==Qt::ColorScheme::Dark?"tray-dark":"tray-light"); menu->hide();
             auto* combo=window.findChild<QComboBox*>("startupPage"); combo->showPopup(); QTRY_VERIFY(combo->view()->isVisible()); QCOMPARE(combo->view()->window()->grab().toImage().pixelColor(0,0).alpha(),0); save(combo->view()->window(),scheme==Qt::ColorScheme::Dark?"combo-dark":"combo-light"); QTest::keyClick(combo->view(),Qt::Key_Escape); QTRY_VERIFY(!combo->view()->isVisible()); QCOMPARE(port->value(),draft);
@@ -181,8 +181,7 @@ private slots:
                     QVERIFY(window.findChild<QWidget*>("settingsSurface")->width()<=760);
                     QCOMPARE(scroll->horizontalScrollBar()->maximum(),0);
                     scroll->verticalScrollBar()->setValue(scroll->verticalScrollBar()->maximum()); QCoreApplication::processEvents();
-                    QVERIFY(window.findChild<QPushButton*>("applySettings")->isVisible());
-                    save(&window,QString("settings-category-%1-%2-%3-%4").arg(category).arg(settings.appearance).arg(scale).arg(size.width()));
+                    QVERIFY(window.findChild<QPushButton*>("applySettings")->isVisible());                    save(&window,QString("settings-category-%1-%2-%3-%4").arg(category).arg(settings.appearance).arg(scale).arg(size.width()));
                 }
                 categories->setCurrentIndex(0); scroll->verticalScrollBar()->setValue(0); QCOMPARE(port->value(),original+1);
             }
@@ -234,14 +233,14 @@ private slots:
         auto* message=window.findChild<QLabel*>("operationMessage"); auto* details=window.findChild<QToolButton*>("statusDetails");
         QVERIFY(message->text().isEmpty()); QVERIFY(!details->isVisible()); QVERIFY(!window.findChild<QFrame*>("overview")->isVisible());
         window.setPage(6); auto* draft=window.findChild<QLabel*>("settingsDraftHint"); auto* port=window.findChild<QSpinBox*>("mixedPort"); QVERIFY(draft->text().isEmpty());
-        port->setValue(port->value()+1); QVERIFY(draft->text().contains("待应用"));
+        port->setValue(port->value()+1); QVERIFY(draft->text().contains("需要重启内核的修改"));
         const auto geometry=window.centralWidget()->geometry();
         controller.operationStarted("正在导入…"); QVERIFY(details->isVisible());
         const QString error="配置校验失败 · "+QString(1024,QChar(0x6d4b)); controller.operationFinished(false,error);
         QCOMPARE(message->toolTip(),error); QVERIFY(message->text().contains("校验失败")); QVERIFY(details->isVisible());
         window.setPage(5); QCoreApplication::processEvents(); QVERIFY(message->text().contains("校验失败"));
         controller.operationFinished(true,"已完成"); QTRY_VERIFY_WITH_TIMEOUT(message->text().isEmpty(),4500); QVERIFY(!details->isVisible()); QCOMPARE(window.centralWidget()->geometry(),geometry);
-        window.setPage(6); QVERIFY(draft->text().contains("待应用"));
+        window.setPage(6); QVERIFY(draft->text().contains("需要重启内核的修改"));
         auto* dialog=new ProtocolSettingsDialog(&controller,&window); dialog->show(); QCoreApplication::processEvents();
         auto* help=dialog->findChild<QToolButton*>("contextHelp"); QVERIFY(help); const int before=operations.size();
         help->setFocus(Qt::TabFocusReason); QTest::keyClick(help,Qt::Key_Space);

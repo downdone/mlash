@@ -30,6 +30,7 @@
 #include "UiTheme.h"
 #include "WebsiteTestsPage.h"
 #include "CompactComboBox.h"
+#include "CompactSpinBox.h"
 #include "UiIcons.h"
 #include "profile/SubscriptionInfo.h"
 #include "profile/RuleDraft.h"
