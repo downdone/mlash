@@ -1,15 +1,24 @@
 #pragma once
 #include "UiTheme.h"
 #include <QComboBox>
+#include <QEvent>
+#include <QAbstractItemView>
 #include <QPainter>
 #include <QStylePainter>
 #include <QStyleOptionComboBox>
 
 namespace mlash {
+// Shared rule: a compact selector must not change value from a wheel gesture that was
+// only passing over it while scrolling the surrounding list. Focus or an open popup
+// keeps the usual behaviour.
 class CompactComboBox final : public QComboBox {
 public:
     explicit CompactComboBox(QWidget* parent=nullptr):QComboBox(parent) { setProperty("customChevron",true); }
     QSize sizeHint() const override { return QComboBox::sizeHint()+QSize(8,0); }
+    bool event(QEvent* event) override {
+        if (event->type()==QEvent::Wheel && !hasFocus() && !view()->isVisible()) { event->ignore(); return false; }
+        return QComboBox::event(event);
+    }
 protected:
     void paintEvent(QPaintEvent* event) override {
         if (!isEditable()) {

@@ -81,7 +81,7 @@ public:
     void setUrlProtocol(bool enabled);
     void checkOfficialCore(Completion done);
     void downloadOfficialCore(Completion done);
-    void previewCoreUpdate(const QString& file,Completion done,const QString& expectedVersion={});
+    void previewCoreUpdate(const QString& file,Completion done,const QString& expectedVersion={},const QString& source={});
     void cancelCoreUpdatePreview();
     void applyCoreUpdate(const QString& token);
     void cleanCoreCopies();

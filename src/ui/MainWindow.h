@@ -11,7 +11,7 @@ class QListView;
 class QTableView; class QTableWidget; class QLineEdit; class QPlainTextEdit; class QSpinBox; class QPushButton;
 class QAction; class QTabWidget; class QMenu; class QDialog;
 class QToolButton; class QStatusBar;
-class QTabBar; class QHBoxLayout;
+class QTabBar; class QHBoxLayout; class QScrollArea;
 class QDragEnterEvent; class QDropEvent;
 namespace mlash { class WebsiteTestsPage; class ImportDialog; }
 namespace mlash { class ConnectionOptions; }
@@ -63,10 +63,12 @@ private:
     void connectionDetails(bool copy=false);
     void prefillConnectionRule(const QJsonObject& suggestion);
     bool settingsDirty() const;
-    int settingsChangeCount() const;
+    int networkSettingCount() const;
+    void commitInstantSettings();
     QString ruleDraftError() const;
     void appendLogLine(const QString& line);
     void resetSettingsDraft();
+    void selectSettingsCategory(int index);
     void selectGroup(const QString& group, bool nested = false); void enterSelectedGroup();
     AppController* controller_;
     bool trayAvailable_ = false, updating_ = false;
@@ -152,6 +154,11 @@ private:
     quint64 homeOutboundGeneration_=0;
     bool homeOutboundReady_=false;
     QLabel *settingsDraftHint_, *settingsVersion_;
+    QList<QWidget*> settingsSections_;
+    QPointer<QScrollArea> settingsScroll_;
+    QPointer<QWidget> settingsPage_;
+    QPointer<QTabBar> settingsCategories_;
+    bool settingsSyncing_ = false;
     QLabel* connectionStats_;
     QAction* closeAllConnections_;
     QPointer<QDialog> connectionDetail_;

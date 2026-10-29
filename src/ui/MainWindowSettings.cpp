@@ -2,6 +2,47 @@
 
 namespace mlash {
 using namespace WindowParts;
+void MainWindow::selectSettingsCategory(int index) {
+    if (index<0||index>=settingsSections_.size()) return;
+    for (int i=0;i<settingsSections_.size();++i) settingsSections_[i]->setVisible(i==index);
+    settingsPage_->setProperty("settingsCategory",index); settingsPage_->layout()->invalidate(); settingsPage_->layout()->activate(); settingsPage_->updateGeometry();
+    settingsScroll_->verticalScrollBar()->setValue(0);
+    settingsCategories_->setAccessibleName("设置分类："+settingsCategories_->tabText(index));
+}
+
+// Rows that need a core restart keep an explicit action; they are the only reason the bar appears.
+int MainWindow::networkSettingCount() const {
+    const auto& s=controller_->settings(); int count=0;
+    for (bool changed:{mixedPort_->value()!=s.mixedPort,logLevel_->currentData().toString()!=s.logLevel,corePath_->text().trimmed()!=s.corePath,ipv6Mode_->currentData().toString()!=s.ipv6Mode,unifiedDelayMode_->currentData().toString()!=s.unifiedDelayMode}) count+=changed;
+    return count;
+}
+
+bool MainWindow::settingsDirty() const { return networkSettingCount()>0; }
+
+void MainWindow::commitInstantSettings() {
+    if (settingsSyncing_) return;
+    const auto& current=controller_->settings();
+    auto next=current;
+    next.autoStart=autoStart_->isChecked(); next.silentStart=silentStart_->isChecked(); next.startCore=startCore_->isChecked();
+    next.restoreProxy=restoreProxy_->isChecked(); next.lightweight=lightweight_->isChecked();
+    next.startupPage=startupPage_->currentData().toInt(); next.trayClick=trayClick_->currentData().toString();
+    next.appearance=appearance_->currentData().toString(); next.textScale=textScale_->currentData().toInt();
+    // The address field also marks a restart-class change until its own explicit apply, so take it only on commit.
+    if (auto* edit=qobject_cast<QLineEdit*>(sender())) if (edit==testUrl_) next.testUrl=testUrl_->text().trimmed();
+    const bool unchanged=next.autoStart==current.autoStart&&next.silentStart==current.silentStart&&next.startCore==current.startCore&&next.restoreProxy==current.restoreProxy&&next.lightweight==current.lightweight&&next.startupPage==current.startupPage&&next.trayClick==current.trayClick&&next.appearance==current.appearance&&next.textScale==current.textScale&&next.testUrl==current.testUrl;
+    if (unchanged) return;
+    // Instant preferences must not carry an unrelated pending restart value into the controller.
+    next.mixedPort=current.mixedPort; next.logLevel=current.logLevel; next.corePath=current.corePath; next.ipv6Mode=current.ipv6Mode; next.unifiedDelayMode=current.unifiedDelayMode;
+    controller_->updateSettings(next);
+}
+
+void MainWindow::resetSettingsDraft() { settingsFeedback_.clear(); hasDisplayedSettings_=false; updateProfiles(); updateActions(); }
+
+void MainWindow::applySettings() {
+    settingsApplying_=true; settingsFeedback_="正在校验并应用…";
+    // Carries whatever instant preferences are already saved plus this explicit network change.
+    auto s = controller_->settings(); s.mixedPort = mixedPort_->value(); s.logLevel = logLevel_->currentData().toString(); s.corePath = corePath_->text().trimmed(); s.ipv6Mode=ipv6Mode_->currentData().toString(); s.unifiedDelayMode=unifiedDelayMode_->currentData().toString(); controller_->updateSettings(s);
+}
 QWidget* MainWindow::settingsPage() {
     auto* page = new QWidget; page->setObjectName("settingsSurface"); page->setAttribute(Qt::WA_StyledBackground, true); auto* layout = new QGridLayout(page); layout->setContentsMargins(0,0,0,0); layout->setSpacing(12); layout->setColumnStretch(0,1); layout->setColumnStretch(1,1);
     auto* startupPanel = panel(); startupPanel->setObjectName("settingsApplication"); startupPanel->setProperty("settingsColumn",0); auto* startupLayout = new QVBoxLayout(startupPanel); startupLayout->setContentsMargins(16,16,16,8); startupLayout->setSpacing(0);
@@ -24,7 +65,7 @@ QWidget* MainWindow::settingsPage() {
     auto* coreTitle = new QLabel("内核与本地代理"); coreTitle->setObjectName("sectionTitle"); coreSection->addWidget(coreTitle); coreTitle->hide();
     groupTitle(coreSection,"网络与分流");
     auto* tun=new QPushButton("管理…"); tun->setObjectName("manageTunService"); settingRow(coreSection,"TUN 虚拟网卡","权限服务、协议栈与严格路由",tun); connect(tun,&QPushButton::clicked,this,[this] { if (auto* dialog=findChild<TunDialog*>("tunDialog")) { dialog->show(); dialog->raise(); } else (new TunDialog(controller_,this))->show(); });
-    mixedPort_ = new QSpinBox; mixedPort_->setObjectName("mixedPort"); mixedPort_->setFixedWidth(96); mixedPort_->setButtonSymbols(QAbstractSpinBox::NoButtons); mixedPort_->setToolTip("1024–65535；修改后重新校验和安全重启"); mixedPort_->setRange(1024,65535); settingRow(coreSection,"本地端口","HTTP / SOCKS5 共用，仅本机",mixedPort_);
+    mixedPort_ = new CompactSpinBox; mixedPort_->setObjectName("mixedPort"); mixedPort_->setFixedWidth(96); mixedPort_->setButtonSymbols(QAbstractSpinBox::NoButtons); mixedPort_->setToolTip("1024–65535；修改后重新校验和安全重启"); mixedPort_->setRange(1024,65535); settingRow(coreSection,"本地端口","HTTP / SOCKS5 共用，仅本机",mixedPort_);
     auto* bypass=new QPushButton("编辑…"); bypass->setObjectName("configureProxyBypass"); settingRow(coreSection,"系统代理排除","主机、IP与本地地址",bypass); connect(bypass,&QPushButton::clicked,this,[this] { (new ProxyBypassDialog(controller_,this))->show(); });
     groupTitle(coreSection,"高级内核");
     logLevel_ = new CompactComboBox; logLevel_->setFixedWidth(140); logLevel_->setObjectName("coreLogLevel"); for (const auto& option:QList<QPair<QString,QString>>{{"警告","warning"},{"信息","info"},{"错误","error"},{"调试","debug"},{"关闭日志","silent"}}) logLevel_->addItem(option.first,option.second); settingRow(coreSection,"日志等级","应用后校验并安全重启",logLevel_);
@@ -37,7 +78,7 @@ QWidget* MainWindow::settingsPage() {
     connect(browse, &QPushButton::clicked, this, [this] { const auto path = QFileDialog::getOpenFileName(this, "选择可信 mihomo 文件", {}, "Executable (*.exe);;All files (*)"); if (!path.isEmpty()) corePath_->setText(path); });
     auto* utilityPanel=panel(); utilityPanel->setObjectName("settingsTools"); auto* utilityLayout=new QVBoxLayout(utilityPanel); utilityLayout->setContentsMargins(16,16,16,8); auto* utilityTitle=new QLabel("备份与工具"); utilityTitle->setObjectName("sectionTitle"); utilityLayout->addWidget(utilityTitle); utilityTitle->hide(); auto* utilityColumns=new QHBoxLayout; utilityColumns->setDirection(QBoxLayout::TopToBottom); utilityColumns->setObjectName("settingsToolsColumns"); utilityColumns->setSpacing(16); auto* utilities=new QVBoxLayout; utilities->setSpacing(0); auto* utilityRight=new QVBoxLayout; utilityRight->setSpacing(0); utilityColumns->addLayout(utilities,1); utilityColumns->addLayout(utilityRight,1); utilityLayout->addLayout(utilityColumns); layout->addWidget(utilityPanel,2,0,1,2,Qt::AlignTop);
     auto* address=new QPushButton("复制地址"); settingRow(utilities,"本地代理地址","复制已应用的 HTTP 代理地址",address); auto* data=new QPushButton("打开目录"); settingRow(utilities,"数据目录","订阅快照与加密状态",data);
-    auto* actions = new QHBoxLayout; settingsDraftHint_=new QLabel; settingsDraftHint_->setObjectName("settingsDraftHint"); settingsDraftHint_->setProperty("secondary",true); settingsDraftHint_->setSizePolicy(QSizePolicy::Ignored,QSizePolicy::Preferred); actions->addWidget(settingsDraftHint_,1); resetSettings_=button("还原修改",actions); connect(resetSettings_,&QPushButton::clicked,this,&MainWindow::resetSettingsDraft); auto* apply = button("应用设置", actions); applySettings_=apply; apply->setObjectName("applySettings"); mutations_ += {apply};
+    auto* actions = new QHBoxLayout; settingsDraftHint_=new QLabel; settingsDraftHint_->setObjectName("settingsDraftHint"); settingsDraftHint_->setProperty("secondary",true); settingsDraftHint_->setSizePolicy(QSizePolicy::Ignored,QSizePolicy::Preferred); actions->addWidget(settingsDraftHint_,1); resetSettings_=button("放弃修改",actions); resetSettings_->setObjectName("discardNetworkSettings"); connect(resetSettings_,&QPushButton::clicked,this,&MainWindow::resetSettingsDraft); auto* apply = button("应用网络设置", actions); applySettings_=apply; apply->setObjectName("applySettings"); mutations_ += {apply};
     apply->setProperty("primary", true);
     connect(apply, &QPushButton::clicked, this, &MainWindow::applySettings); connect(address, &QPushButton::clicked, this, [this] { QApplication::clipboard()->setText(QString("http://127.0.0.1:%1").arg(controller_->settings().mixedPort)); });
     connect(data, &QPushButton::clicked, this, [this] { openDirectory(controller_->dataRoot()); });
@@ -68,32 +109,23 @@ QWidget* MainWindow::settingsPage() {
     for (auto* row:toolRows) utilityRight->addWidget(row);
     utilities->addStretch(); utilityRight->addStretch(); settingsVersion_=new QLabel("Mlash " MLASH_VERSION " · Qt " QT_VERSION_STR); settingsVersion_->setObjectName("settingsVersion"); settingsVersion_->setProperty("secondary",true); layout->addWidget(settingsVersion_,3,0,1,2); layout->setRowStretch(4,1);
     auto* scroll = new QScrollArea; scroll->setWidgetResizable(true); scroll->setFrameShape(QFrame::NoFrame); scroll->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff); auto* canvas=new QWidget; canvas->setObjectName("settingsCanvas"); auto* centering=new QHBoxLayout(canvas); centering->setContentsMargins(0,0,0,0); page->setMaximumWidth(760); page->setProperty("singleColumn",true); centering->addWidget(page,1,Qt::AlignTop); scroll->setWidget(canvas);
-    scroll->setObjectName("settingsScroll"); auto* surface=new QWidget; auto* outer=new QVBoxLayout(surface); outer->setContentsMargins(0,0,0,0); outer->setSpacing(14); auto* header=new QHBoxLayout; auto* title=new QLabel("设置"); title->setObjectName("pageTitle"); header->addWidget(title); header->addStretch(); auto* locator=new SettingsSearch(page,scroll,surface); locator->setMaximumWidth(470); header->addWidget(locator,1); outer->addLayout(header); connect(locator,&SettingsSearch::pageRequested,this,&MainWindow::setPage); locator->addRoute("订阅 › 来源与更新","订阅 URL provider 来源 更新 用量 subscription",1); locator->addRoute("订阅 › DNS 与上游代理链","DNS DNS覆盖 上游 拨号 链 chain",1); locator->addRoute("节点 › 选择节点与策略组","代理 节点 策略组 proxy node",2); locator->addRoute("规则 › 自定义规则与规则集","规则 域名 自定义 规则集 DOMAIN rules",3); locator->addRoute("连接 › 实时连接与进程","连接 进程 规则 流量 connection process",4); locator->addRoute("网站测试 › 响应延迟","网站 测速 目标 YouTube ChatGPT Google",7); locator->addRoute("日志 › 筛选与诊断","日志 错误 诊断 脱敏 导出 log",5); auto* categories=new QTabBar; categories->setObjectName("settingsCategories"); categories->setExpanding(false); categories->setDrawBase(false); for (const auto& name:QStringList{"常规","网络与内核","备份与工具"}) categories->addTab(name); outer->addWidget(categories); outer->addWidget(scroll,1); outer->addLayout(actions);
+    scroll->setObjectName("settingsScroll"); auto* surface=new QWidget; auto* outer=new QVBoxLayout(surface); outer->setContentsMargins(0,0,0,0); outer->setSpacing(14);
+    // One title row like every other page: category tabs occupy the tab slot, search right-aligned on the same baseline.
+    auto* header=new QHBoxLayout; header->setSpacing(12); auto* categories=new QTabBar; categories->setObjectName("settingsCategories"); categories->setExpanding(false); categories->setDrawBase(false); categories->setAccessibleName("设置分类"); for (const auto& name:QStringList{"常规","网络与内核","备份与工具"}) categories->addTab(name);
+    header->addWidget(categories,0,Qt::AlignLeft|Qt::AlignBottom); header->addStretch(1); auto* locator=new SettingsSearch(page,scroll,surface); locator->setObjectName("settingsLocator"); locator->setMaximumWidth(470); header->addWidget(locator,1,Qt::AlignBottom); outer->addLayout(header);
+    connect(locator,&SettingsSearch::pageRequested,this,&MainWindow::setPage); locator->addRoute("订阅 › 来源与更新","订阅 URL provider 来源 更新 用量 subscription",1); locator->addRoute("订阅 › DNS 与上游代理链","DNS DNS覆盖 上游 拨号 链 chain",1); locator->addRoute("节点 › 选择节点与策略组","代理 节点 策略组 proxy node",2); locator->addRoute("规则 › 自定义规则与规则集","规则 域名 自定义 规则集 DOMAIN rules",3); locator->addRoute("连接 › 实时连接与进程","连接 进程 规则 流量 connection process",4); locator->addRoute("网站测试 › 响应延迟","网站 测速 目标 YouTube ChatGPT Google",7); locator->addRoute("日志 › 筛选与诊断","日志 错误 诊断 脱敏 导出 log",5);
+    outer->addWidget(scroll,1); outer->addLayout(actions);
     const QList<QWidget*> sections{startupPanel,corePanel,utilityPanel};
-    const auto selectCategory=[sections,scroll,page,categories](int index) { for (int i=0;i<sections.size();++i) sections[i]->setVisible(i==index); page->setProperty("settingsCategory",index); page->layout()->invalidate(); page->layout()->activate(); page->updateGeometry(); scroll->verticalScrollBar()->setValue(0); categories->setAccessibleName("设置分类："+categories->tabText(index)); };
-    connect(categories,&QTabBar::currentChanged,surface,selectCategory); selectCategory(0);
-    connect(locator,&SettingsSearch::anchorRequested,surface,[sections,categories](QWidget* anchor) { for (int i=0;i<sections.size();++i) if (sections[i]->isAncestorOf(anchor)) { categories->setCurrentIndex(i); break; } });
-    for (auto* toggle:{autoStart_,silentStart_,startCore_,restoreProxy_,lightweight_}) connect(toggle,&QCheckBox::toggled,this,&MainWindow::updateActions);
-    for (auto* combo:{logLevel_,startupPage_,trayClick_,ipv6Mode_,unifiedDelayMode_,appearance_,textScale_}) connect(combo,&QComboBox::currentIndexChanged,this,&MainWindow::updateActions);
+    settingsSections_=sections; settingsScroll_=scroll; settingsPage_=page; settingsCategories_=categories;
+    connect(categories,&QTabBar::currentChanged,surface,[this](int index) { selectSettingsCategory(index); }); selectSettingsCategory(0);
+    connect(locator,&SettingsSearch::anchorRequested,surface,[this](QWidget* anchor) { for (int i=0;i<settingsSections_.size();++i) if (settingsSections_[i]->isAncestorOf(anchor)) { settingsCategories_->setCurrentIndex(i); break; } });
+    // Preference rows commit immediately; only core-restart rows wait for the explicit action bar.
+    const QList<QComboBox*> instantCombos{startupPage_,trayClick_,appearance_,textScale_};
+    for (auto* toggle:{autoStart_,silentStart_,startCore_,restoreProxy_,lightweight_}) connect(toggle,&QCheckBox::toggled,this,&MainWindow::commitInstantSettings);
+    for (auto* combo:instantCombos) connect(combo,&QComboBox::currentIndexChanged,this,&MainWindow::commitInstantSettings);
+    connect(testUrl_,&QLineEdit::editingFinished,this,&MainWindow::commitInstantSettings);
+    for (auto* combo:{logLevel_,ipv6Mode_,unifiedDelayMode_}) connect(combo,&QComboBox::currentIndexChanged,this,&MainWindow::updateActions);
     connect(mixedPort_,&QSpinBox::valueChanged,this,&MainWindow::updateActions); connect(corePath_,&QLineEdit::textChanged,this,&MainWindow::updateActions); connect(testUrl_,&QLineEdit::textChanged,this,&MainWindow::updateActions); return surface;
-}
-
-bool MainWindow::settingsDirty() const {
-    return settingsChangeCount()>0;
-}
-
-int MainWindow::settingsChangeCount() const {
-    const auto& s=controller_->settings(); int count=0;
-    for (bool changed:{autoStart_->isChecked()!=s.autoStart,silentStart_->isChecked()!=s.silentStart,startCore_->isChecked()!=s.startCore,restoreProxy_->isChecked()!=s.restoreProxy,lightweight_->isChecked()!=s.lightweight,mixedPort_->value()!=s.mixedPort,logLevel_->currentData().toString()!=s.logLevel,corePath_->text().trimmed()!=s.corePath,testUrl_->text().trimmed()!=s.testUrl,startupPage_->currentData().toInt()!=s.startupPage,trayClick_->currentData().toString()!=s.trayClick,ipv6Mode_->currentData().toString()!=s.ipv6Mode,unifiedDelayMode_->currentData().toString()!=s.unifiedDelayMode,appearance_->currentData().toString()!=s.appearance,textScale_->currentData().toInt()!=s.textScale}) count+=changed;
-    return count;
-}
-
-void MainWindow::resetSettingsDraft() { settingsFeedback_.clear(); hasDisplayedSettings_=false; updateProfiles(); updateActions(); }
-
-void MainWindow::applySettings() {
-    settingsApplying_=true; settingsFeedback_="正在校验并应用…";
-    auto s = controller_->settings(); s.autoStart = autoStart_->isChecked(); s.silentStart = silentStart_->isChecked(); s.startCore = startCore_->isChecked();
-    s.restoreProxy = restoreProxy_->isChecked(); s.lightweight = lightweight_->isChecked(); s.mixedPort = mixedPort_->value(); s.logLevel = logLevel_->currentData().toString(); s.corePath = corePath_->text().trimmed(); s.testUrl = testUrl_->text().trimmed(); s.startupPage=startupPage_->currentData().toInt(); s.trayClick=trayClick_->currentData().toString(); s.ipv6Mode=ipv6Mode_->currentData().toString(); s.unifiedDelayMode=unifiedDelayMode_->currentData().toString(); s.appearance=appearance_->currentData().toString(); s.textScale=textScale_->currentData().toInt(); controller_->updateSettings(s);
 }
 
 }

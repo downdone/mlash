@@ -34,7 +34,7 @@ void SettingsSearch::refresh() {
 }
 void SettingsSearch::locate(int match) {
     if (match<0||match>=matches_.size()) return; clearMark(); current_=match; const auto& entry=entries_[matches_[match]];
-    count_->setAccessibleName(QString("%1，共%2项：%3").arg(match+1).arg(matches_.size()).arg(entry.title)); count_->setToolTip(entry.title);
+    count_->setAccessibleName(QString("%1，共%2项：%3").arg(match+1).arg(matches_.size()).arg(entry.title)); count_->setToolTip(entry.title); menu_->hide();
     if (entry.page>=0) { emit pageRequested(entry.page); return; }
     if (!entry.anchor) return; emit anchorRequested(entry.anchor); const QPointer<QWidget> anchor=entry.anchor; QTimer::singleShot(0,this,[this,anchor] { if (anchor) scroll_->ensureWidgetVisible(anchor,8,12); }); marked_=entry.anchor; marked_->setProperty("located",true); marked_->style()->unpolish(marked_); marked_->style()->polish(marked_); marked_->update(); markTimer_.start();
 }

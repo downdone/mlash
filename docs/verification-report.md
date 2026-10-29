@@ -2,6 +2,24 @@
 
 本文只记录实际结果，区分本轮执行、历史匿名汇总与尚未验证的资格。原始配置、私人环境、真实订阅及原始诊断不进入公开文档。
 
+## 本轮：设置即时生效、内核历史与标题统一（2026-10-29）
+
+按 [ADR 0044](adr/0044-immediate-settings-core-history.md) 与本轮工程审视先记录方案，再修改。设置页分类页签与搜索并入统一标题行，不再保留独立“设置”标题；偏好类设置在控件变化时立即提交，需要内核安全重启的项只保留显式动作；设置分组内 `CompactComboBox` 与新增 `CompactSpinBox` 在未聚焦且未展开时忽略滚轮；内核历史以 `core_history` 持久化（上限 8、按 sha256 去重、旧版在前），清理时保留在册副本并移除已删除记录。
+
+构建：Windows 本机 Qt 6.10.2 + MinGW 13.1.0，`scripts/build.ps1`（windows-mingw 预设）配置与全部目标链接成功，复跑为 `ninja: no work to do`。首次构建发现新结构体的 const 捕获与 `QJsonValue::size` 误用，修正后零错误；保留既有 `AppearanceTests.cpp` 弃用警告。
+
+自动测试（实际执行）：
+- `mlash_core_update_tests` 全部通过，含新增 `coreHistoryKeepsBoundedSwitchableVersions`：应用后记录 sha256/版本/路径/来源；按记录路径再预检并切换回原版本；`appendedCoreHistory` 去重并保持 8 条上限与新旧顺序；状态文件往返持久化；非法 sha256 与重复摘要被存储校验拒绝；管理窗列出历史、标记当前版本、选择当前版本时拒绝重复预检。
+- `mlash_ui_tests quietMouseFocusAndGroupedSettings` 通过，含新增滚轮检查：未聚焦的下拉与数字框接收滚轮后值不变，聚焦后滚轮按预期改变选项。
+- `mlash_appearance_prefs_tests`、`mlash_appearance_tests`、`mlash_ui_tests` 专项、`core_update`、`official_core`、`backup`、`remote_backup`、`status_bar`、`release_tools` 等通过；`system_test_guard` 按设计跳过。
+- 更新后的 `draftApplyFailureAndPersistence` 验证两次连续偏好提交各产生一次事务、重启类修改保持待应用且不被后续偏好提交吞掉。
+
+首轮完整 `scripts/test.ps1`：31/34 通过。为区分来源，将本轮全部改动暂存后以同一工具链重建并复跑 `workflow_depth_tests`、`ui_components`、`node_links_tests`、`outbound_tests`、`website_tests`，失败用例与断言逐条一致，确认均为合入的 `c4d2c8c`（PR #2）遗留：测试仍指向已移除的设置行与旧八页导航索引、代理编辑作用域旧文案、首页摘要旧空态文案、首页指标按钮旧去向，以及 `proxyManagement` 等已移入菜单的控件。
+
+随后修复：更新上述陈旧断言以匹配当前契约（出口诊断统一从网站测试页进入、首页预选需点“切换”、设置不再拥有 DNS 行）；修复两个真实缺陷——`ConnectionOptions::fitDefault` 在 840 DIP 下把名称列压到 134（改为先按紧凑下限压缩其余列、再按比例兜底），`SettingsSearch::locate` 点击结果后菜单不关闭（补 `menu_->hide()`）。修复后五组全部通过，再跑完整 `scripts/test.ps1`：33 通过、0 失败、1 系统门禁跳过（34 项中），用时 442 秒。
+
+未验：Windows 实机原生交互、人工读屏、真实内核与系统代理/TUN 写入、性能与发行资格。UI 几何只在离屏自动检查中覆盖，人工理解度与视觉复核未执行。分发构建与打包未在本轮重新执行。
+
 ## 本轮：U03 功能组织与完整任务重审（2026-10-28）
 
 按 [事前方案及逐页复核](ui-apple-review.md#u03-任务流程与信息架构重审) 先梳理首次使用、日常切换、配置维护和诊断恢复，再实现。用户追加 Shadowrocket 截图后，将八个并列入口收敛为首页/配置/数据/设置四分区，域内页签占原标题位置，保留原视图 ID 与启动页值。订阅配置和节点操作、规则维护及出口诊断各归所属页面；不复制参考截图中的私有节点/地址或未实现能力。当前交互、架构、使用指南和 ADR 0043 同步维护。

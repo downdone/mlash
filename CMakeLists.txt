@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.24)
-project(Mlash VERSION 1.17.0 LANGUAGES C CXX)
+project(Mlash VERSION 1.17.1 LANGUAGES C CXX)
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_AUTOMOC ON)
@@ -88,7 +88,7 @@ else()
     target_compile_options(mlash_engine PRIVATE -Wall -Wextra -Wpedantic)
 endif()
 
-add_library(mlash_ui STATIC src/ui/ContextNote.h src/ui/SettingsSearch.h src/ui/SettingsSearch.cpp src/ui/HomeSummaryDialog.h src/ui/HomeSummaryDialog.cpp src/ui/MainWindow.h src/ui/MainWindow.cpp src/ui/MainWindowHome.cpp src/ui/MainWindowSettings.cpp src/ui/MainWindowProxy.cpp src/ui/MainWindowProfiles.cpp src/ui/MainWindowParts.h src/ui/NodeFilter.cpp
+add_library(mlash_ui STATIC src/ui/ContextNote.h src/ui/SettingsSearch.h src/ui/SettingsSearch.cpp src/ui/CompactSpinBox.h src/ui/HomeSummaryDialog.h src/ui/HomeSummaryDialog.cpp src/ui/MainWindow.h src/ui/MainWindow.cpp src/ui/MainWindowHome.cpp src/ui/MainWindowSettings.cpp src/ui/MainWindowProxy.cpp src/ui/MainWindowProfiles.cpp src/ui/MainWindowParts.h src/ui/NodeFilter.cpp
     src/ui/ProviderDefinitionDialog.h src/ui/YamlFormEditor.h src/ui/YamlFormEditor.cpp
     src/ui/ConnectionDetailsDialog.h src/ui/ConnectionDetailsDialog.cpp src/ui/ProviderDefinitionDialog.cpp src/ui/ProviderPolicyDialog.cpp
     src/ui/DialogDraftGuard.h src/ui/DialogDraftGuard.cpp

@@ -38,11 +38,16 @@ void ConnectionOptions::flushPreferences() { debounce_.stop(); if (dirty_&&!cont
 void ConnectionOptions::defaults() { custom_=false; const auto sizes=defaultConnectionWidths(table_->fontMetrics()); auto* header=table_->horizontalHeader(); for (int id=0;id<ConnectionColumns::Count;++id) { header->moveSection(header->visualIndex(id),id); table_->setColumnHidden(id,id>=ConnectionColumns::LegacyCount); table_->setColumnWidth(id,sizes[id]); widths_[id]=sizes[id]; } }
 void ConnectionOptions::fitDefault() {
     if (custom_||applying_) return; applying_=true; auto sizes=defaultConnectionWidths(table_->fontMetrics());
-    int others=0; for (int col=1;col<ConnectionColumns::LegacyCount;++col) others+=sizes[col];
-    int excess=qMax(0,others-qMax(0,table_->viewport()->width()-150));
-    for (const auto item:QList<QPair<int,int>>{{3,80},{2,80},{5,100},{4,100}}) { const int shrink=qMin(excess,qMax(0,sizes[item.first]-item.second)); sizes[item.first]-=shrink; excess-=shrink; }
-    others=0; for (int col=1;col<ConnectionColumns::LegacyCount;++col) { widths_[col]=sizes[col]; table_->setColumnWidth(col,sizes[col]); others+=sizes[col]; }
-    widths_[0]=qBound(80,table_->viewport()->width()-others,1000); table_->setColumnWidth(0,widths_[0]); applying_=false;
+    // Keep the name column readable; everything else may shrink, then trim proportionally if still too wide.
+    constexpr int minimumName=150, minimumColumn=24;
+    const auto othersTotal=[&sizes] { int total=0; for (int col=1;col<ConnectionColumns::LegacyCount;++col) total+=sizes[col]; return total; };
+    int excess=qMax(0,othersTotal()-(table_->viewport()->width()-minimumName));
+    // Defaults mirror the legacy seven-column set; compact minimums keep the name readable at 840 DIP.
+    for (const auto& item:QList<QPair<int,int>>{{5,88},{4,88},{2,64},{3,72},{6,64},{7,80},{8,100},{9,90},{10,80},{11,64},{12,64},{13,64},{14,64}}) { if (excess<=0) break; const int shrink=qMin(excess,qMax(0,sizes[item.first]-item.second)); sizes[item.first]-=shrink; excess-=shrink; }
+    const int flexible=othersTotal()-minimumColumn*(ConnectionColumns::LegacyCount-1);
+    if (excess>0&&flexible>0) { const double ratio=qMin(1.0,double(excess)/flexible); for (int col=1;col<ConnectionColumns::LegacyCount;++col) sizes[col]-=int((sizes[col]-minimumColumn)*ratio); }
+    int others=0; for (int col=1;col<ConnectionColumns::LegacyCount;++col) { widths_[col]=sizes[col]; table_->setColumnWidth(col,sizes[col]); others+=sizes[col]; }
+    widths_[0]=qBound(minimumColumn,table_->viewport()->width()-others,1000); table_->setColumnWidth(0,widths_[0]); applying_=false;
 }
 bool ConnectionOptions::eventFilter(QObject* watched,QEvent* event) { if (watched==table_&&(event->type()==QEvent::FontChange||event->type()==QEvent::StyleChange)&&!custom_&&!applying_) { applying_=true; defaults(); applying_=false; fitDefault(); } if (watched==table_->viewport()&&event->type()==QEvent::Resize) fitDefault(); return QWidget::eventFilter(watched,event); }
 QJsonObject ConnectionOptions::preferences() const { QJsonObject object{{"case_sensitive",case_->isChecked()},{"whole_word",word_->isChecked()},{"regex",regex_->isChecked()}}; if (custom_) { QJsonArray columns; for (int visual=0;visual<ConnectionColumns::Count;++visual) { const int id=table_->horizontalHeader()->logicalIndex(visual); columns.append(QJsonObject{{"id",id},{"width",qBound(24,widths_.value(id,80),1000)},{"visible",!table_->isColumnHidden(id)}}); } object["columns"]=columns; } return object; }

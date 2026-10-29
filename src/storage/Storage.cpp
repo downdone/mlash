@@ -87,11 +87,25 @@ bool isId(const QString& id) {
     static const QRegularExpression expression("^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$");
     return expression.match(id).hasMatch();
 }
+QJsonObject CoreHistoryEntry::toJson() const {
+    return {{"sha256",sha256},{"version",version},{"path",path},{"source",source},{"recorded_at",recordedAt},{"bytes",double(bytes)}};
+}
+CoreHistoryEntry CoreHistoryEntry::fromJson(const QJsonObject& o) {
+    CoreHistoryEntry e; e.sha256=o.value("sha256").toString(); e.version=o.value("version").toString(); e.path=o.value("path").toString();
+    e.source=o.value("source").toString(); e.recordedAt=o.value("recorded_at").toString(); e.bytes=o.value("bytes").toInteger(0); return e;
+}
+QStringList CoreHistoryEntry::sources() { return {"local","official","rollback","bundled"}; }
+bool CoreHistoryEntry::valid(const QStringList& allowedSources) const {
+    static const QRegularExpression digest("^[a-f0-9]{64}$");
+    const auto ordinary=[](const QString& text, int limit) { return !text.isEmpty()&&text.size()<=limit&&!text.contains(QChar::Null)&&!text.contains('\n')&&!text.contains('\r'); };
+    return digest.match(sha256).hasMatch() && ordinary(version,128) && ordinary(path,4096) && allowedSources.contains(source) && ordinary(recordedAt,32) && bytes>0;
+}
 QJsonObject Settings::toJson() const {
+    QJsonArray history; for (const auto& entry:coreHistory) history.append(entry.toJson());
     return {{"schema_version", 2}, {"auto_start", autoStart}, {"silent_start", silentStart},
         {"start_core_on_launch", startCore}, {"restore_proxy_on_launch", restoreProxy},
         {"desired_proxy_enabled", desiredProxy}, {"lightweight_mode", lightweight}, {"tun_enabled",tunEnabled},{"tun_stack",tunStack},{"tun_strict_route",tunStrictRoute},{"tun_mtu",tunMtu},{"tun_dns_hijack",tunDnsHijack},{"tun_exclude_routes",QJsonArray::fromStringList(tunExcludeRoutes)}, {"mixed_port", mixedPort}, {"log_level", logLevel},
-        {"active_profile_id", activeProfile}, {"core_path", corePath}, {"previous_core_path",previousCorePath}, {"test_url", testUrl}, {"startup_page",startupPage},
+        {"active_profile_id", activeProfile}, {"core_path", corePath}, {"previous_core_path",previousCorePath}, {"core_history",history}, {"test_url", testUrl}, {"startup_page",startupPage},
         {"tray_click",trayClick},{"ipv6_mode",ipv6Mode},{"unified_delay_mode",unifiedDelayMode},{"website_targets",websiteTargets},{"hotkeys",hotkeys},{"connection_view",connectionView},{"appearance",appearance},{"text_scale",textScale},{"home_probe_seconds",homeProbeSeconds},{"home_summary_mask",homeSummaryMask},{"proxy_bypass",proxyBypass},{"remote_backup",remoteBackup},{"local_backup",localBackup}};
 }
 Settings Settings::fromJson(const QJsonObject& o) {
@@ -106,6 +120,7 @@ Settings Settings::fromJson(const QJsonObject& o) {
     if (!QStringList{"debug","info","warning","error","silent"}.contains(s.logLevel)) s.logLevel = "warning";
     s.activeProfile = o.value("active_profile_id").toString(); s.corePath = o.value("core_path").toString();
     s.previousCorePath=o.value("previous_core_path").toString();
+    for (const auto& entry:o.value("core_history").toArray()) s.coreHistory.append(CoreHistoryEntry::fromJson(entry.toObject()));
     s.testUrl = o.value("test_url").toString(s.testUrl);
     s.startupPage=o.value("startup_page").toInt(0); s.trayClick=o.value("tray_click").toString("show");
     s.ipv6Mode=o.value("ipv6_mode").toString("source"); s.unifiedDelayMode=o.value("unified_delay_mode").toString("source");

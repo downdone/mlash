@@ -1,11 +1,16 @@
 param(
     [string]$Preset = 'windows-mingw',
-    [ValidatePattern('^Mlash-[A-Za-z0-9][A-Za-z0-9._-]*$')][string]$OutputName = 'Mlash-1.17.0-windows-x64-portable',
+    [ValidatePattern('^Mlash-[A-Za-z0-9][A-Za-z0-9._-]*$')][string]$OutputName = '',
     [switch]$Release,
     [string]$EvidenceManifest = ''
 )
 $ErrorActionPreference = 'Stop'
 $projectRoot = Split-Path $PSScriptRoot -Parent
+if (!$OutputName) {
+    $versionMatch = [regex]::Match((Get-Content (Join-Path $projectRoot 'CMakeLists.txt') -Raw), 'project\(Mlash VERSION ([0-9]+\.[0-9]+\.[0-9]+)')
+    if (!$versionMatch.Success) { throw 'CMake version missing' }
+    $OutputName = "Mlash-$($versionMatch.Groups[1].Value)-windows-x64-portable"
+}
 if ($Release) {
     if (!$EvidenceManifest) { throw 'Formal release requires verified evidence manifest' }
     python "$PSScriptRoot/release_gate.py" $EvidenceManifest --app "$projectRoot/build/$Preset/bin/Mlash.exe" --core "$projectRoot/cores/mihomo.exe"
