@@ -63,3 +63,4 @@ ADR 保留决策发生时的背景和取舍；较新的已接受决策可以替�
 | 0044 | [ADR 0044：设置即时生效、内核历史与设置页标题统一](0044-immediate-settings-core-history.md) |
 | 0045 | [ADR 0045：界面系统重构方向](0045-ui-system-rebuild.md) |
 | 0046 | [ADR 0046：导航可寻址、反馈路由与设置分类深链](0046-navigation-routability-and-feedback-routing.md) |
+| 0047 | [ADR 0047：网站测试归属数据分区与页面标题移除](0047-website-tests-and-title-removal.md) |
