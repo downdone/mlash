@@ -25,6 +25,7 @@
 | [当前交互契约](ui-interactions.md) | 四分区八视图、托盘、反馈、视觉与完整操作链 |
 | [界面精修审视](ui-apple-review.md) | Apple 风格精修的逐页、控件、按钮与密度设计及复核 |
 | [界面系统重构方案](ui-system-review.md) | U05 全量评审：信息架构、视觉 token、实施阶段与验收边界 |
+| [界面分层设计](ui-layered-design.md) | U06 六层设计：架构、原则、分类、容器、Widget、视觉 |
 | [原始产品规格](Mlash_Codex_Design_Spec_v2.0.md) | 需求和验收基线；接受的偏差由 ADR 说明 |
 | [架构决策索引](adr/README.md) | 编号 ADR、后续替代关系和设计理由 |
 
