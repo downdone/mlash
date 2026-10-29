@@ -984,23 +984,33 @@ U05 表未覆盖、但实施必需：
 | 组 | token | 值 |
 |---|---|---|
 | 图标尺寸 | `icon-sm`/`icon-md`/`icon-lg` | 16 / 20 / 24 |
-| 图标描边 | `icon-stroke` | 1.5（统一，禁止 1.1/1.2/1.7 混用） |
-| 状态形状 | `state-shape` | 成功=实心圆、警告=三角、失败=方、进行中=空心环 |
-| 卡片最小高 | `card-min` | 节点 54、网站 108、组卡 54 |
+| 图标描边 | `icon-stroke-sm` / `icon-stroke-md` | 1.25（16px）/ 1.5（20–24px）——小图标细描边，避免光学偏粗 |
+| 图标填充模式 | `icon-fill` | 仅播放/停止类允许实心；其余强制描边。现有 `Glyph::Play` 是唯一实心，`Refresh`/`Copy`/`Edit` 等必须描边 |
+| 图标简化版 | `icon-simplified` | 16px 下 `Settings`（齿轮辐条）与 `Refresh`（箭头弧）需简化，否则糊成一团 |
+| 服务图标深色 | `service-icon-dark` | 深色下加 1px `textSecondary` 描边；现有主体 `#171717` 在深色 `surface` 上仅 1.3，**不加描边不可见**（U05 V5） |
+| 地区旗帜深色 | `flag-dark` | 深色下统一加 1px `textSecondary` 外描边，不反色 |
+| 状态形状 | `state-shape` | 成功=实心圆、警告=三角、失败=方、进行中=空心环；直径/边长 10px，描边 1.5px |
+| 卡片最小高 | `card-min-node` / `card-min-website` / `card-min-group` | 54 / 108 / 54 |
 | 卡片间距 | `card-gap` | 8 |
 | 网格列宽 | `grid-col-min` | 节点 220、网站 236 |
 | 滚动条 | `scrollHandle` / `scrollHandleHover` | 见 U05 表；四态完整定义 |
-| 表面层级 | `elevation-0/1/2` | canvas / surface / popup，深色逐级变亮 |
-| 禁用叠色 | `disabledOverlay` | 表面 40% 透明叠色 |
+| 禁用叠色 | `disabledOverlay` | `canvas` 40% 叠在 `surface` 上 |
+| 浮层 | `popupSurface` / `popupBorder` | 浅 `#FFFFFF`/`#B0B0BA`；深 `#36363B`/`#55555C` |
+| 滚动条悬停 | `scrollHandleHover` | 浅 `#8E8E96`；深 `#9A9AA2` |
+| 图标命中区 | `icon-hit` | 28 / 34（随文字比例） |
+| 开关滑块 | `switchKnob` | `#FFFFFF` 两套通用 |
+| 开关轨道悬停 | `switchTrackHover` | 浅 `#84848B`（加深）；**深 `#8A8A93`（提亮，非加深）** |
+| 侧栏悬停 | `sidebarHover` | 浅 `#D4D4DB`；深 `#3E3E43` |
+| 页签底座 | `surfaceRaised` 修正 | 浅色改为 `#EDEDF2`（原 `#FFFFFF` 与 surface 相同，选中无抬升） |
 
 ### 6.2b 控件 → token 映射
 
-每个控件必须从下表取 token，**不得自行选色或量尺寸**。表中「状态」列列出的每种状态都要有对应取值，缺一种即为未完成。
+每个控件必须从下表取 token，**不得自行选色或量尺寸**。表中「状态」列只列**该控件特有的状态**；悬停、按下、焦点、禁用四项共性状态由 6.3 统一推导，不在每行重复。
 
 | 控件 | 表面 | 文字 | 边界 | 状态（悬停 / 按下 / 选中 / 焦点 / 禁用） | 几何 |
 |---|---|---|---|---|---|
 | **侧栏** | `sidebar` | `textSecondary` → 选中 `onAccent` | 右边 `separator` | 悬停 `hoverFill`；选中 `accent` 实心 | 宽 172，项高 32 |
-| **分区页签** | 底座 `surfaceRaised`，选中 `surface` | 选中 `textPrimary`，否则 `textSecondary` | 无 | 悬停 `hoverFill`；选中加 `elevation-1` | 高 30，圆角 `radius-md` |
+| **分区页签** | 底座 `surfaceRaised`，选中 `surface` | 选中 `textPrimary`，否则 `textSecondary` | 无 | 悬停 `hoverFill`；选中 = `surface` 填充（`surfaceRaised` 浅色须深于 `surface` 才有抬升） | 高 30，圆角 `radius-md` |
 | **主按钮** | `accent` | `onAccent` | 无 | 悬停 `accentHover`；按下 `accentPressed`；禁用 `controlFill` + `textDisabled` | `control-lg` |
 | **次按钮** | `controlFill` | `textPrimary` | 无 | 悬停 `hoverFill`；按下 `pressedFill` | `control-md` |
 | **危险按钮** | 透明 | `danger` | 无 | 悬停 `danger` + 10% 叠色；按下 18% | `control-md` |
@@ -1018,6 +1028,11 @@ U05 表未覆盖、但实施必需：
 | **状态点** | — | — | — | `success`/`warning`/`danger`/`accent`/`textSecondary` | 10px + 形状编码 |
 | **徽标** | 实心四色 | 白字 | — | — | 24×18，`radius-sm` |
 | **分隔线** | `separator` | — | — | — | 1px |
+| **图标按钮** | 透明 | 图标 `textSecondary` → 悬停 `textPrimary` | 无 | 悬停 `hoverFill` 圆角底；焦点 `focusRing` 外环；禁用 `textDisabled` | `icon-hit` |
+| **页内分段** | 透明底座 | 同分区页签 | 底 `separator` | 同分区页签 | `control-sm` |
+| **状态栏** | `sidebar` | `textSecondary` | 上 `separator` | — | `statusbar` |
+| **内联提示 / 进度** | 透明 | 失败 `danger`，其余 `textSecondary` | 无 | — | 文字行高 |
+| **空态 / 错误行** | 透明 | 图标 `textTertiary`，原因 `textSecondary`，动作 `accentText` | 无 | 动作按钮按「次按钮」 | 内容驱动 |
 
 **取值的三个例外**：
 
@@ -1025,11 +1040,31 @@ U05 表未覆盖、但实施必需：
 2. **焦点环统一绘制**：2px `focusRing` + 1px 间隙，画在控件外围，不参与布局。禁止用「改 padding 防跳」的 QSS 写法（现有 `UiTheme.cpp` 有 5 处）。
 3. **禁用态只降文字与填充**，不改变控件尺寸与位置。
 
+### 6.2c 图标体系合并
+
+现有两套绘制器必须合并为一套，否则描边与尺寸无法统一：
+
+| 现状 | 问题 | 目标 |
+|---|---|---|
+| `UiIcons::icon()`（`UiIcons.cpp`） | 48×48 @dpr2、1.7 描边、Normal/Disabled 两态、13 个 `Glyph` | 唯一入口：`UiIcons::icon(Glyph, QIcon::Mode, const QString& color)` |
+| `navigationIcon(int kind)`（`MainWindowParts.h:275-292`） | 独立的 8 个 `kind` 魔法值、Selected 态用 `OnPrimary` | 改为 `navigationIcon(NavKind)` 枚举，内部调用 `UiIcons::icon` |
+
+**映射表**（`NavKind` → `Glyph`）：首页→`Home`、配置→`List`、数据→`Chart`、设置→`Settings`。分区只有 4 个，原 8 个 `kind` 是旧八页遗留，随 R2 一并删除。
+
+**服务图标**：`scripts/generate-service-icons.py` 写死 `#171717`，需按 `service-icon-dark` 生成两套或改为模板着色。
+
 ### 6.3 应用规则
 
-1. **层级靠表面抬升，不靠边框**。elevation-0 → 1 → 2；边框只给可交互容器与浮层。
-2. **交互状态用叠色阶梯**。悬停、按下、选中各占一档；选中另加 2px `selectionBar`。
-3. **高对比是第三套平行 token**。不只加深边框，选中、控件填充、轨道、焦点同时增强。
+1. **层级靠表面抬升，不靠边框**。三级表面：`canvas` → `surface` → `popupSurface`，深色逐级变亮;边框只给可交互容器与浮层。
+2. **交互状态用「色相分离 + 结构信号」，不用亮度阶梯**。经实算，同一色相的叠色在合理 alpha 范围内无法产生可辨的亮度差（accent 叠 30% 时浅色仅 1.58、深色 1.31），继续加深会让表面发脏。因此改为：
+
+   - **悬停**：中性灰填充（浅 `#EAEAEF` / 深 `#36363B`），只表达「指针在此」。
+   - **选中**：accent 色调填充（浅 `#D6E4F7` / 深 `#1E3350`）+ **左侧 2px `selectionBar`**（对选中底 5.33 / 5.99）。
+   - **按下**：同悬停色再叠 12% 中性加深，或加 1px 内描边。
+   - 选中与悬停的亮度比只有 1.07，但**色相不同**，配合竖条形成双重通道——这是 macOS 列表的做法，也是唯一可行的方向。
+
+   **禁止**用单一背景亮度区分选中与悬停。
+3. **高对比是第四套平行 token**（浅/深 × 普通/高对比，与 `applyAppearance(scheme, highContrast)` 的二维参数一致）。不只加深边框，选中、控件填充、轨道、焦点同时增强。注意 HC 已知弱于普通模式（见 6.3b），必须单独验证。
 4. **字号七档、间距 8pt、圆角四级**。页面代码禁止字面量。
 5. **几何随文字比例缩放**，覆盖 90–120%；给出最小字号 9pt 与最小行高 16px 下限，低于下限不再缩放。
 6. **状态多通道**。形状 + 颜色 + 文本，不只靠色相。
@@ -1041,39 +1076,106 @@ U05 表未覆盖、但实施必需：
 | `NodePresentation.cpp:98-99` | 节点徽标四色 + 浅底写死 | 改用 `badgeGroup/badgeReject/badgeDirect/badgeGeneric` 实心 + 白字 |
 | `MainWindowParts.h:269` | 开关滑块硬编码 `Qt::white` | 改用 `switchKnob` token |
 | `WebsiteTestsPage.cpp:130` | 每次刷新 `setStyleSheet` 覆盖标签色 | 改用 `setProperty("state",…)` + QSS 状态选择器 |
+| `MainWindow.cpp:338` | `statusDot_->setStyleSheet("color:%1; font-size:18px")` —— 带颜色 + 硬编码 px 字号 | 改用 `StatusGlyph` 自绘（形状+颜色），字号走 `caption` token |
+| `MainWindowProxy.cpp:62` | `nodeCards_->setStyleSheet("QListView{border:none;background:transparent…}")` | 改用 `setProperty("flat",true)` + QSS |
+| `NodePresentation.cpp:100` | `QFont("Segoe UI") + setPixelSize(9)` —— 写死字体族与像素字号，无视平台与缩放 | 改用 `caption` token + `UiTheme::bodyFont()` 派生 |
 
-另有 2 处「代码设定的字号」需并入 token：`OutboundDialog.cpp:22` 硬编码 17pt（不随文字比例缩放）；`HomeMetricsView.cpp:30` 的 `setPointSize(SectionPoints)` 被 QSS 覆盖，属死代码，应删除。配合 P6 的构建检查脚本守住后续。
+另有 3 处「代码设定的字号」需并入 token：`OutboundDialog.cpp:22` 硬编码 17pt（不随比例缩放）；`HomeMetricsView.cpp:30` 的 `setPointSize(SectionPoints)` 被 QSS 覆盖，属死代码；`NodePresentation.cpp:100` 的 `setPixelSize(9)`（U05 V7 已提，上表已列）。
+
+**另有 6 处「改 padding 防跳」的 QSS**（`UiTheme.cpp:129,132,153,178,181,187`），焦点环改为外围绘制后全部删除。
+
+**主题缓存失效**：`NodePresentation.cpp:84` 的静态 `QHash` 图标缓存不随主题切换失效，迁移时必须加主题版本键或清空——否则深色切回浅色后徽标仍是旧色。
+
+**白名单**：P6 的检查脚本需放行 `UiTheme.*`、`UiIcons.*`、`WidgetStyle.*`、`NodePresentation.*`、`MainWindowParts.*`、`CompactComboBox.*`、`ProxyTableModel.*`、`tests/`——后三者共有 16 处合法的 `QColor(UiTheme::X)`，不在白名单会被误报。`WidgetStyle.cpp:118` 迁移后应从豁免中移除。
 
 ### 6.3b 对比度验证
 
-U05 的 token 取值已按 WCAG 2.x 相对亮度逐组复算（本轮实际执行，非引用）。19 组关键配对全部达标：
+U05 的 token 取值已按 WCAG 2.x 相对亮度逐组复算（本轮实际执行，非引用）。**以下 14 组为实际计算值**：
 
-| 配对 | 浅色 | 深色 | 门槛 |
+| 配对 | 浅色 | 深色 | 门槛 | 结论 |
+|---|---|---|---|---|
+| 主文字 / 表面 | 16.83 | 12.49 | 4.5 | 达标 |
+| 次文字 / 表面 | 7.06 | 7.14 | 4.5 | 达标 |
+| 弱文字 / 表面 | 6.42 | 5.11 | 4.5 | 达标 |
+| 占位文字 / 表面 | 4.50 | **4.29** | 4.5 | **深色不达标** |
+| 输入边界 / 表面 | 3.71 | 3.66 | 3.0 | 达标 |
+| 开关轨道 / 表面 | 3.21 | 3.28 | 3.0 | 达标 |
+| 选中竖条 / 选中底 | 5.33 | 5.99 | 3.0 | 达标 |
+| 主色 / 反白文字 | 5.69 | 4.81 | 4.5 | 达标 |
+| 焦点环 / 画布 | 5.10 | **4.66** | 3.0 | 达标 |
+| 焦点环 / 选中底 | — | **3.10** | 3.0 | 勉强达标 |
+| 危险 / 表面 | 6.54 | 6.28 | 4.5 | 达标 |
+| 成功 / 表面 | 6.55 | — | 4.5 | 达标 |
+| `accentText` / 表面 | 6.87 | 6.53 | 4.5 | 达标 |
+| `accent`（作填充）/ 表面 | — | **2.90** | 3.0 | **深色不达标** |
+
+**三处必须修正的取值**：
+
+1. **占位文字深色** `#8E8E96` 对表面仅 4.29，低于 4.5；且在 `controlFill` 上 3.59、在 `selectionFill` 上 3.48 更差。改为 `#A0A0A8`（对表面 5.37、对 `controlFill` 4.50）。
+2. **浅色占位文字 4.5036 是零余量**，任何微调都会跌破；改为 `#6E6E76`（对表面 5.02），留出余量。
+3. **深色 `accent` 直接作图标/文字时仅 2.90**。6.2b 中所有「accent 作图标」的地方必须改用 `accentText`（6.53 达标）；`accent` 只用于**带反白文字的填充**，不用于深色底上的线条或文字。
+
+**状态可区分性（非 WCAG 门槛，本项目自定 ≥1.35）**：
+
+| 配对 | 浅色 | 深色 | 结论 |
 |---|---|---|---|
-| 主文字 / 表面 | 16.83 | 12.49 | 4.5 |
-| 次文字 / 表面 | 7.06 | 7.14 | 4.5 |
-| 弱文字 / 表面 | 6.42 | 5.11 | 4.5 |
-| 占位文字 / 表面 | 4.50 | — | 4.5 |
-| 输入边界 / 表面 | 3.71 | 3.66 | 3.0 |
-| 开关轨道 / 表面 | 3.21 | 3.28 | 3.0 |
-| 选中竖条 / 选中底 | 5.43 | — | 3.0 |
-| 主色 / 反白文字 | 5.69 | 4.81 | 4.5 |
-| 焦点环 / 画布 | 5.10 | 3.82 | 3.0 |
-| 危险 / 表面 | 6.54 | 6.28 | 4.5 |
-| 成功 / 表面 | 6.55 | — | 4.5 |
+| 选中 / 悬停 | 1.07 | 1.06 | **达不到**——改用色相分离 + 竖条，见 6.3 规则 2 |
+| 悬停 / 表面 | 1.20 | 1.16 | 达标（视觉上可辨） |
+| 选中 / 表面 | 1.29 | 1.09 | 浅色达标；深色靠竖条 |
+| 侧栏悬停 / 侧栏 | **1.009** | 1.42 | **浅色等于无反馈**——新增 `sidebarHover` `#D4D4DB`（1.17） |
+| 页签选中 / 页签底座 | **1.000** | 1.16 | **浅色无抬升**——`surfaceRaised` 浅色改为 `#EDEDF2`（对 surface 1.12） |
+| 菜单悬停 / 浮层底 | 1.15 | 1.13 | 可接受（浮层小面积） |
+| 分隔线 / 表面 | 1.27 | 1.23 | 可接受（hairline 不承担层级） |
 
-**边界说明**：以上为静态计算，未在 Windows 实机、90–120% 文字或系统高对比下截图核对。高对比列（HC）未逐项复算——实施时需按 6.1 的三套平行 token 补验。
+**边界说明**：以上为静态计算，未在 Windows 实机、90–120% 文字或系统高对比下截图核对。**高对比（HC）列未逐项复算，且已知弱于普通模式**（HC 深 `selectionFill`/`surface` 1.84），实施时必须单独验证，不能假设 HC 更好。
 
-**仍不达标的旧值**（本轮修正后消除）：现有实现的 `Selection` 对 `Surface` 仅 1.13、`Hover` 1.18、输入边界 1.34、开关轨道 1.87——这些正是 6.3 规则 2「叠色阶梯」要替换的对象。
+**本文未覆盖、R9 必须补验的项**：
+
+1. 16px 图标在 1.5 描边下的光学效果（可能偏粗）。
+2. 服务图标深色变体（现有主体 `#171717`，深色下对比约 1.3–1.5，U05 V5 已提，本层未给方案）。
+3. 地区旗帜在深色下的描边需求。
+4. HC 三态的全部配对。
+5. 840×560 在 120% 文字下的实际容纳量。
+
+**仍不达标的旧值**（本层修正后消除）：现有 `Selection`/`Surface` 1.13、`Hover` 1.18、输入边界 1.34、开关轨道 1.87。
 
 ### 6.4 第 5 层的尺寸声明
 
 第 5 层的控件尺寸直接引用 token，不写死值。以下现有硬编码将被替换，需计入迁移成本：`ProxySwitch` 38×20 → `switch-track` 42×24；图标按钮 26 → `icon-hit` 28；网站卡最小高 108 → `card-min`；组面板固定 110 → 内容驱动。
 
-**缩放规则**：几何 token 统一乘 `textScale/100`，下限为「文字行高 + 上下内边距」，低于下限不再压缩。四档实测目标：
+**技术路径**（先于数值）：
+
+1. token 以 `struct ThemeTokens { int controlMd; int rowForm; …; QColor canvas; … }` 持有，**四个实例**：`light` / `dark` / `hcLight` / `hcDark`。
+2. `styleSheet()` 从 token 生成，不做字符串替换——现有 `@Token` 替换存在前缀冲突风险（`@Control` 是 `@ControlFill` 的前缀），扩大 token 数量后必然出错。
+3. C++ 侧固定尺寸（`setFixedWidth(SidebarWidth)`、`ProxySwitch::sizeHint`、卡片网格 220/54）改为读 token，不保留常量。
+4. `QPalette` 从同一 token 派生，`QPalette::PlaceholderText` 当前错误映射到 `Secondary`（`UiTheme.cpp:62`），迁移时改 `textPlaceholder`。
+
+**缩放公式与取整规则**：
+
+```
+value = qRound(base * textScale / 100.0)   // 四舍五入，不额外取偶
+```
 
 | token | 90% | 100% | 110% | 120% |
 |---|---|---|---|---|
+| `control-sm` | 22 | 24 | 26 | 29 |
+| `control-md` | 27 | 30 | 33 | 36 |
+| `control-lg` | 32 | 36 | 40 | 43 |
+| `row-data` | 29 | 32 | 35 | 38 |
+| `row-form` | 43 | 48 | 53 | 58 |
+| `icon-hit` | 25 | 28 | 31 | 34 |
+| `statusbar` | 31 | 34 | 37 | 41 |
+| `switch-track` | 38×22 | 42×24 | 46×26 | 50×29 |
+| `row-menu` | 25 | 28 | 31 | 34 |
+
+以上四档全部由公式算出，可直接验算。
+
+**不缩放的两项**：
+
+- **侧栏宽度 172**：120% 下四个两字分区名加图标约需 81px，侧栏内宽 148px，余量充足。侧栏**项的 padding 与图标随比例缩放**，总宽由内边距吸收。
+- **图标尺寸**取最近档（16/20/24），不连续缩放；描边随档位调整（16px 用 1.25、24px 用 1.5），避免小图标描边过粗。
+
+---|---|---|---|---|
 | `control-md` | 28 | 30 | 33 | 36 |
 | `row-form` | 44 | 48 | 52 | 56 |
 | `row-data` | 29 | 32 | 35 | 38 |
