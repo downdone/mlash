@@ -993,6 +993,38 @@ U05 表未覆盖、但实施必需：
 | 表面层级 | `elevation-0/1/2` | canvas / surface / popup，深色逐级变亮 |
 | 禁用叠色 | `disabledOverlay` | 表面 40% 透明叠色 |
 
+### 6.2b 控件 → token 映射
+
+每个控件必须从下表取 token，**不得自行选色或量尺寸**。表中「状态」列列出的每种状态都要有对应取值，缺一种即为未完成。
+
+| 控件 | 表面 | 文字 | 边界 | 状态（悬停 / 按下 / 选中 / 焦点 / 禁用） | 几何 |
+|---|---|---|---|---|---|
+| **侧栏** | `sidebar` | `textSecondary` → 选中 `onAccent` | 右边 `separator` | 悬停 `hoverFill`；选中 `accent` 实心 | 宽 172，项高 32 |
+| **分区页签** | 底座 `surfaceRaised`，选中 `surface` | 选中 `textPrimary`，否则 `textSecondary` | 无 | 悬停 `hoverFill`；选中加 `elevation-1` | 高 30，圆角 `radius-md` |
+| **主按钮** | `accent` | `onAccent` | 无 | 悬停 `accentHover`；按下 `accentPressed`；禁用 `controlFill` + `textDisabled` | `control-lg` |
+| **次按钮** | `controlFill` | `textPrimary` | 无 | 悬停 `hoverFill`；按下 `pressedFill` | `control-md` |
+| **危险按钮** | 透明 | `danger` | 无 | 悬停 `danger` + 10% 叠色；按下 18% | `control-md` |
+| **输入框** | `surface` | `textPrimary`，占位 `textPlaceholder` | `borderStrong` | 焦点 `focusRing` 外环；禁用 `controlFill` | `control-md` |
+| **下拉** | `surface` | 同输入框 | `border` | 同输入框；展开时 chevron 翻转 | `control-md` |
+| **开关** | 开 `accent`，关 `switchTrackOff` | — | — | 悬停轨道加深 8%；按下滑块位移 | `switch-track` |
+| **勾选框** | 选中 `accent` | — | `borderStrong` | 同开关 | 18×18 |
+| **表格行** | 交替无 | `textPrimary` | 行底 `separator` | 悬停 `hoverFill`；选中 `selectionFill` + 左 2px `selectionBar`；焦点 `focusRing` 外环 | `row-data` |
+| **表头** | `surface` | `textSecondary` | 底 `separator` | 排序时箭头 + `textPrimary` | 高 32 |
+| **卡片** | `surface` | 主 `textPrimary`，次 `textSecondary` | 仅可点击卡片有 `border` | 悬停 `hoverFill`；选中 `selectionFill` + `selectionBar` | `card-min` / `radius-lg` |
+| **设置行** | 透明 | 名称 `textPrimary`，说明 `textSecondary` | 行底 `separator` | 悬停 `hoverFill` | `row-form` |
+| **菜单** | `popupSurface` | `textPrimary` | `popupBorder` | 悬停 `hoverFill`；禁用 `textDisabled` | 行高 28，`radius-md` |
+| **工具提示** | `popupSurface` | `textSecondary` | `popupBorder` | — | `radius-sm` |
+| **滚动条** | 透明轨道 | — | — | 常态 `scrollHandle`；悬停 `scrollHandleHover`；拖动加深 | 宽 8 |
+| **状态点** | — | — | — | `success`/`warning`/`danger`/`accent`/`textSecondary` | 10px + 形状编码 |
+| **徽标** | 实心四色 | 白字 | — | — | 24×18，`radius-sm` |
+| **分隔线** | `separator` | — | — | — | 1px |
+
+**取值的三个例外**：
+
+1. **表格与卡片不描边**（除可点击卡片），层级靠 `surface` 抬升与行底 `separator`。这是 P6 与 6.3 规则 1 的直接应用。
+2. **焦点环统一绘制**：2px `focusRing` + 1px 间隙，画在控件外围，不参与布局。禁止用「改 padding 防跳」的 QSS 写法（现有 `UiTheme.cpp` 有 5 处）。
+3. **禁用态只降文字与填充**，不改变控件尺寸与位置。
+
 ### 6.3 应用规则
 
 1. **层级靠表面抬升，不靠边框**。elevation-0 → 1 → 2；边框只给可交互容器与浮层。
@@ -1001,11 +1033,55 @@ U05 表未覆盖、但实施必需：
 4. **字号七档、间距 8pt、圆角四级**。页面代码禁止字面量。
 5. **几何随文字比例缩放**，覆盖 90–120%；给出最小字号 9pt 与最小行高 16px 下限，低于下限不再缩放。
 6. **状态多通道**。形状 + 颜色 + 文本，不只靠色相。
-7. **硬编码清零**，迁移清单：`WidgetStyle.cpp:118`（滚动条）、`WebsiteTestsPage.cpp:130`（内联样式）、`MainWindow.cpp:338`（状态点）、`NodePresentation.cpp:98-99`（徽标）、`OutboundDialog.cpp:22`（17pt 硬编码）、`HomeMetricsView.cpp:30`（被覆盖的死代码）；配合 P6 的构建检查脚本。
+7. **硬编码清零**。经逐处核对，真正的字面色值只有 4 处（`QColor(UiTheme::X)` 属正确用法，不在此列）：
+
+| 位置 | 内容 | 处理 |
+|---|---|---|
+| `WidgetStyle.cpp:118` | 下拉弹层内联 QSS 写死滚动条 `#d0d0d7` | 改用 `scrollHandle` token；该内联 QSS 目前会覆盖全局滚动条样式 |
+| `NodePresentation.cpp:98-99` | 节点徽标四色 + 浅底写死 | 改用 `badgeGroup/badgeReject/badgeDirect/badgeGeneric` 实心 + 白字 |
+| `MainWindowParts.h:269` | 开关滑块硬编码 `Qt::white` | 改用 `switchKnob` token |
+| `WebsiteTestsPage.cpp:130` | 每次刷新 `setStyleSheet` 覆盖标签色 | 改用 `setProperty("state",…)` + QSS 状态选择器 |
+
+另有 2 处「代码设定的字号」需并入 token：`OutboundDialog.cpp:22` 硬编码 17pt（不随文字比例缩放）；`HomeMetricsView.cpp:30` 的 `setPointSize(SectionPoints)` 被 QSS 覆盖，属死代码，应删除。配合 P6 的构建检查脚本守住后续。
+
+### 6.3b 对比度验证
+
+U05 的 token 取值已按 WCAG 2.x 相对亮度逐组复算（本轮实际执行，非引用）。19 组关键配对全部达标：
+
+| 配对 | 浅色 | 深色 | 门槛 |
+|---|---|---|---|
+| 主文字 / 表面 | 16.83 | 12.49 | 4.5 |
+| 次文字 / 表面 | 7.06 | 7.14 | 4.5 |
+| 弱文字 / 表面 | 6.42 | 5.11 | 4.5 |
+| 占位文字 / 表面 | 4.50 | — | 4.5 |
+| 输入边界 / 表面 | 3.71 | 3.66 | 3.0 |
+| 开关轨道 / 表面 | 3.21 | 3.28 | 3.0 |
+| 选中竖条 / 选中底 | 5.43 | — | 3.0 |
+| 主色 / 反白文字 | 5.69 | 4.81 | 4.5 |
+| 焦点环 / 画布 | 5.10 | 3.82 | 3.0 |
+| 危险 / 表面 | 6.54 | 6.28 | 4.5 |
+| 成功 / 表面 | 6.55 | — | 4.5 |
+
+**边界说明**：以上为静态计算，未在 Windows 实机、90–120% 文字或系统高对比下截图核对。高对比列（HC）未逐项复算——实施时需按 6.1 的三套平行 token 补验。
+
+**仍不达标的旧值**（本轮修正后消除）：现有实现的 `Selection` 对 `Surface` 仅 1.13、`Hover` 1.18、输入边界 1.34、开关轨道 1.87——这些正是 6.3 规则 2「叠色阶梯」要替换的对象。
 
 ### 6.4 第 5 层的尺寸声明
 
 第 5 层的控件尺寸直接引用 token，不写死值。以下现有硬编码将被替换，需计入迁移成本：`ProxySwitch` 38×20 → `switch-track` 42×24；图标按钮 26 → `icon-hit` 28；网站卡最小高 108 → `card-min`；组面板固定 110 → 内容驱动。
+
+**缩放规则**：几何 token 统一乘 `textScale/100`，下限为「文字行高 + 上下内边距」，低于下限不再压缩。四档实测目标：
+
+| token | 90% | 100% | 110% | 120% |
+|---|---|---|---|---|
+| `control-md` | 28 | 30 | 33 | 36 |
+| `row-form` | 44 | 48 | 52 | 56 |
+| `row-data` | 29 | 32 | 35 | 38 |
+| `switch-track` | 38×22 | 42×24 | 46×26 | 48×28 |
+| `statusbar` | 32 | 34 | 37 | 40 |
+| `sidebar` | 172 | 172 | 172 | 172（文字 120% 仍可容纳 4 项） |
+
+侧栏宽度不缩放——分区名短，缩放会挤压内容区。图标尺寸随比例取最近档（16/20/24），不做连续缩放。
 
 ---
 
