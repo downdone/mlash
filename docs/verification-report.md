@@ -18,7 +18,11 @@
 
 随后修复：更新上述陈旧断言以匹配当前契约（出口诊断统一从网站测试页进入、首页预选需点“切换”、设置不再拥有 DNS 行）；修复两个真实缺陷——`ConnectionOptions::fitDefault` 在 840 DIP 下把名称列压到 134（改为先按紧凑下限压缩其余列、再按比例兜底），`SettingsSearch::locate` 点击结果后菜单不关闭（补 `menu_->hide()`）。修复后五组全部通过，再跑完整 `scripts/test.ps1`：33 通过、0 失败、1 系统门禁跳过（34 项中），用时 442 秒。
 
-未验：Windows 实机原生交互、人工读屏、真实内核与系统代理/TUN 写入、性能与发行资格。UI 几何只在离屏自动检查中覆盖，人工理解度与视觉复核未执行。分发构建与打包未在本轮重新执行。
+本地分发验证：`scripts/package.ps1` 的默认输出名改为跟随 CMake 版本后，生成 `Mlash-1.17.1-windows-x64-portable`，34 文件白名单与完整性校验通过，`Mlash.exe --version` 实际输出 1.17.1，ZIP SHA256 `1332bc2a62604976f14278f1895ca8ba5727cb0b5e7f826dc7dbfee414d914e2`，`release_qualified=false`。
+
+发布：改动经 `feature/immediate-settings-core-history` 分支提交 `cb26fad` 并以 PR #3 合入 `main`（`50027ab`）；该 PR 的 CI 工作流通过。随后推送标签 `v1.17.1` 触发同一工作流，build/test/package/smoke/publish 全部成功，[GitHub 预发布](https://github.com/downdone/mlash/releases/tag/v1.17.1) 已生成，含 portable ZIP 与 SHA256、两份源码归档与 source.json、`package-verification.json` 共 8 个附件；经 API 复核标签版本匹配、`prerelease=true`、`draft=false`。CI 产物与本机包的 SHA256 不同属预期：两者各自独立构建，不以本机哈希替代 CI 证据。
+
+未验：Windows 实机原生交互、人工读屏、真实内核与系统代理/TUN 写入、性能与发行资格。UI 几何只在离屏自动检查中覆盖，人工理解度与视觉复核未执行。
 
 ## 本轮：U03 功能组织与完整任务重审（2026-10-28）
 
