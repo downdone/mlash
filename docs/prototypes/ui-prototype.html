@@ -1,0 +1,2380 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Mlash · 界面静态原型</title>
+<style>
+/* ============================================================
+   Token 层（名称取自 docs/ui-layered-design.md 第 6 层与 U05 token 表）
+   ============================================================ */
+:root {
+  color-scheme: light;
+
+  --font-family: "Segoe UI", "Microsoft YaHei UI", "Microsoft YaHei", system-ui, -apple-system, sans-serif;
+  /* 原型按 px 近似设计文档的 pt 字号阶：caption 9 / footnote 10 / body 11 /
+     label 11 / title3 13 / title2 15 / display 18。任务指定原型正文用 13px。 */
+  --font-caption: 11px;
+  --font-footnote: 12px;
+  --font-body: 13px;
+  --font-label: 13px;
+  --font-title3: 13px;
+  --font-title2: 20px;
+  --font-display: 24px;
+
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-7: 32px;
+  --space-8: 48px;
+
+  --radius-sm: 6px;
+  --radius-md: 8px;
+  --radius-lg: 12px;
+  --radius-pill: 999px;
+
+  --control-sm: 24px;
+  --control-md: 30px;
+  --control-lg: 36px;
+  --row-data: 32px;
+  --row-form: 48px;
+  --row-menu: 28px;
+  --statusbar: 34px;
+  --icon-hit: 28px;
+  --switch-track-w: 42px;
+  --switch-track-h: 24px;
+  --switch-knob-size: 20px;
+
+  --hairline: 1px;
+  --focus-ring-width: 2px;
+  --selection-bar-width: 2px;
+  --icon-stroke-sm: 1.25px;
+  --icon-stroke-md: 1.5px;
+
+  --icon-sm: 16px;
+  --icon-md: 20px;
+  --icon-lg: 24px;
+  --card-min-node: 54px;
+  --card-min-website: 108px;
+  --card-min-group: 54px;
+  --card-gap: 8px;
+  --grid-col-min-node: 220px;
+
+  --sidebar-width: 172px;
+  --window-w: 840px;
+  --window-h: 560px;
+  --page-w: 668px;
+  --menu-w: 272px;
+  --submenu-w: 208px;
+  --tray-w: 220px;
+  --state-card-min-h: 240px;
+  --search-w: 200px;
+  --usage-bar-h: 4px;
+  --usage-bar-radius: 2px;
+  --col-region-w: 80px;
+  --col-delay-w: 64px;
+  --col-updated-w: 100px;
+  --col-usage-w: 150px;
+
+  /* 颜色：浅色 */
+  --canvas: #F2F2F7;
+  --surface: #FFFFFF;
+  --surface-raised: #EDEDF2;
+  --sidebar: #E5E5EA;
+  --control-fill: #EFEFF3;
+  --hover-fill: #EAEAEF;
+  --pressed-fill: #D5D5DC;
+  --selection-fill: #D6E4F7;
+  --selection-bar: #0057B8;
+  --border: #CFCFD6;
+  --border-strong: #84848C;
+  --separator: #E4E4E9;
+  --text-primary: #1D1D1F;
+  --text-secondary: #58585E;
+  --text-tertiary: #5E5E66;
+  --text-placeholder: #6E6E76;
+  --text-disabled: #A6A6AD;
+  --accent: #0B63CE;
+  --accent-hover: #0A57B8;
+  --accent-pressed: #08479A;
+  --accent-text: #0057B8;
+  --on-accent: #FFFFFF;
+  --focus-ring: #0B63CE;
+  --success: #0C6B45;
+  --warning: #8A5400;
+  --danger: #B3261E;
+  --danger-tint: rgba(179, 38, 30, 0.10);
+  --switch-track-off: #8F8F97;
+  --switch-track-hover: #84848B;
+  --switch-knob: #FFFFFF;
+  --sidebar-hover: #D4D4DB;
+  --popup-surface: #FFFFFF;
+  --popup-border: #B0B0BA;
+  --popup-hover: #EFEFF3;
+  --scroll-handle: #B0B0B8;
+}
+
+body[data-theme="dark"] {
+  color-scheme: dark;
+
+  --canvas: #1C1C1E;
+  --surface: #2C2C2E;
+  --surface-raised: #36363B;
+  --sidebar: #26262A;
+  --control-fill: #38383C;
+  --hover-fill: #3E3E43;
+  --pressed-fill: #4A4A50;
+  --selection-fill: #1E3350;
+  --selection-bar: #7DB4FF;
+  --border: #48484D;
+  --border-strong: #82828C;
+  --separator: #3A3A3E;
+  --text-primary: #F2F2F7;
+  --text-secondary: #B9B9C0;
+  --text-tertiary: #9C9CA4;
+  --text-placeholder: #A0A0A8;
+  --text-disabled: #6E6E76;
+  --accent: #0E70DC;
+  --accent-hover: #1274E0;
+  --accent-pressed: #08509E;
+  --accent-text: #7DB4FF;
+  --on-accent: #FFFFFF;
+  --focus-ring: #0A84FF;
+  --success: #6ADBA1;
+  --warning: #F0C070;
+  --danger: #FF8E86;
+  --danger-tint: rgba(255, 142, 134, 0.12);
+  --switch-track-off: #7A7A83;
+  --switch-track-hover: #8A8A93;
+  --switch-knob: #FFFFFF;
+  --sidebar-hover: #3E3E43;
+  --popup-surface: #36363B;
+  --popup-border: #55555C;
+  --popup-hover: #4A4A50;
+  --scroll-handle: #7A7A82;
+}
+
+/* ============================================================
+   原型外框
+   ============================================================ */
+* { box-sizing: border-box; }
+
+html, body { margin: 0; }
+
+body {
+  font-family: var(--font-family);
+  font-size: var(--font-body);
+  line-height: 1.45;
+  color: var(--text-primary);
+  background: var(--canvas);
+  -webkit-font-smoothing: antialiased;
+}
+
+button {
+  font-family: inherit;
+  font-size: inherit;
+  color: inherit;
+  border: 0;
+  padding: 0;
+  background: none;
+  cursor: default;
+}
+
+.proto-header {
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  background: var(--canvas);
+  border-bottom: var(--hairline) solid var(--separator);
+}
+
+.proto-header-inner {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: var(--space-3) var(--space-5);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.proto-title {
+  font-size: var(--font-label);
+  font-weight: 600;
+}
+
+.proto-main {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: var(--space-4) var(--space-5) var(--space-8);
+}
+
+.demo {
+  padding: var(--space-6) 0;
+  border-top: var(--hairline) solid var(--separator);
+}
+
+.demo:first-child {
+  border-top: 0;
+  padding-top: var(--space-4);
+}
+
+.demo-label {
+  margin: 0 0 var(--space-3);
+  font-size: var(--font-caption);
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  color: var(--text-secondary);
+}
+
+/* ============================================================
+   通用控件
+   ============================================================ */
+.btn {
+  height: var(--control-md);
+  padding: 0 var(--space-3);
+  border-radius: var(--radius-sm);
+  background: var(--control-fill);
+  color: var(--text-primary);
+  font-size: var(--font-body);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-2);
+  white-space: nowrap;
+}
+
+.btn:hover { background: var(--hover-fill); }
+.btn:active { background: var(--pressed-fill); }
+
+.btn-primary {
+  background: var(--accent);
+  color: var(--on-accent);
+}
+.btn-primary:hover { background: var(--accent-hover); }
+.btn-primary:active { background: var(--accent-pressed); }
+
+.btn-lg {
+  height: var(--control-lg);
+  padding: 0 var(--space-5);
+  border-radius: var(--radius-md);
+}
+
+.btn-text {
+  background: transparent;
+  color: var(--accent-text);
+  height: var(--control-md);
+  padding: 0 var(--space-2);
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  white-space: nowrap;
+}
+.btn-text:hover { color: var(--text-primary); background: transparent; }
+
+.btn[disabled], .btn.disabled {
+  background: var(--control-fill);
+  color: var(--text-disabled);
+}
+
+/* 下拉（surface + border，control-md） */
+.select {
+  height: var(--control-md);
+  padding: 0 var(--space-3);
+  border: var(--hairline) solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  color: var(--text-primary);
+  font-size: var(--font-body);
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  white-space: nowrap;
+}
+.select:hover { background: var(--hover-fill); }
+
+/* 输入框（surface + borderStrong，control-md） */
+.input {
+  height: var(--control-md);
+  padding: 0 var(--space-3);
+  border: var(--hairline) solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  color: var(--text-primary);
+  font-size: var(--font-body);
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+.input .placeholder { color: var(--text-placeholder); }
+.input .clear { margin-left: auto; color: var(--text-tertiary); padding: 0 var(--space-1); }
+
+.search {
+  width: var(--search-w);
+  flex: none;
+}
+.search .placeholder {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.chev-down {
+  width: 0;
+  height: 0;
+  border-left: 4px solid transparent;
+  border-right: 4px solid transparent;
+  border-top: 5px solid currentColor;
+  flex: none;
+}
+.chev-right {
+  width: 0;
+  height: 0;
+  border-top: 4px solid transparent;
+  border-bottom: 4px solid transparent;
+  border-left: 5px solid currentColor;
+  flex: none;
+}
+.chev-up {
+  width: 0;
+  height: 0;
+  border-left: 3px solid transparent;
+  border-right: 3px solid transparent;
+  border-bottom: 4px solid currentColor;
+  flex: none;
+}
+
+.dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--text-secondary);
+  flex: none;
+}
+.dot-success { background: var(--success); }
+.dot-warning { background: var(--warning); }
+.dot-danger { background: var(--danger); }
+.dot-current { background: var(--accent-text); }
+
+.switch {
+  width: var(--switch-track-w);
+  height: var(--switch-track-h);
+  border-radius: var(--radius-pill);
+  background: var(--switch-track-off);
+  position: relative;
+  flex: none;
+}
+.switch::after {
+  content: "";
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: var(--switch-knob-size);
+  height: var(--switch-knob-size);
+  border-radius: 50%;
+  background: var(--switch-knob);
+}
+.switch.on { background: var(--accent); }
+.switch.on::after {
+  left: calc(var(--switch-track-w) - var(--switch-knob-size) - 2px);
+}
+.switch:hover { background: var(--switch-track-hover); }
+.switch.on:hover { background: var(--accent-hover); }
+
+.checkbox {
+  width: 18px;
+  height: 18px;
+  border: var(--icon-stroke-sm) solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  flex: none;
+  display: grid;
+  place-items: center;
+}
+.checkbox.checked {
+  background: var(--accent);
+  border-color: var(--accent);
+}
+.checkbox.checked::after {
+  content: "";
+  width: 8px;
+  height: 4px;
+  border-left: 2px solid var(--on-accent);
+  border-bottom: 2px solid var(--on-accent);
+  transform: rotate(-45deg) translateY(-1px);
+}
+
+/* ============================================================
+   侧栏（5.1 / 6.2b：宽 172，项高 32，选中 accent 实心）
+   ============================================================ */
+.window {
+  width: var(--window-w);
+  height: var(--window-h);
+  display: flex;
+  background: var(--canvas);
+  border: var(--hairline) solid var(--border);
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+}
+
+.sidebar {
+  width: var(--sidebar-width);
+  flex: none;
+  background: var(--sidebar);
+  border-right: var(--hairline) solid var(--separator);
+  padding: var(--space-3) var(--space-2);
+  display: flex;
+  flex-direction: column;
+}
+
+.brand {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-1) var(--space-2) var(--space-5);
+}
+
+.brand-mark {
+  width: 20px;
+  height: 20px;
+  border-radius: var(--radius-sm);
+  background: var(--accent);
+  display: grid;
+  place-items: center;
+}
+.brand-mark::after {
+  content: "";
+  width: 8px;
+  height: 8px;
+  border-radius: 2px;
+  background: var(--on-accent);
+}
+
+.brand-name {
+  font-size: var(--font-title2);
+  font-weight: 600;
+  letter-spacing: 0.01em;
+}
+
+.nav {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+.nav-item {
+  height: var(--row-data);
+  padding: 0 var(--space-2);
+  border-radius: var(--radius-sm);
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-size: var(--font-body);
+  color: var(--text-secondary);
+  text-align: left;
+}
+.nav-item:hover { background: var(--sidebar-hover); }
+.nav-item.selected {
+  background: var(--accent);
+  color: var(--on-accent);
+}
+
+.icon {
+  width: var(--icon-sm);
+  height: var(--icon-sm);
+  flex: none;
+  position: relative;
+  color: currentColor;
+}
+.icon-home { display: grid; place-items: center; }
+.icon-home::before {
+  content: "";
+  width: 10px;
+  height: 10px;
+  border: var(--icon-stroke-sm) solid currentColor;
+  border-radius: 2px;
+}
+.icon-list { display: grid; place-items: center; }
+.icon-list::before {
+  content: "";
+  width: 10px;
+  height: 1.5px;
+  background: currentColor;
+  box-shadow: 0 3.5px 0 currentColor, 0 7px 0 currentColor;
+}
+.icon-chart {
+  display: flex;
+  align-items: flex-end;
+  gap: 3px;
+  padding: 3px;
+}
+.icon-chart::before {
+  content: "";
+  width: 2px;
+  height: 5px;
+  background: currentColor;
+}
+.icon-chart::after {
+  content: "";
+  width: 2px;
+  height: 9px;
+  background: currentColor;
+}
+.icon-settings { display: grid; place-items: center; }
+.icon-settings::before {
+  content: "";
+  width: 10px;
+  height: 10px;
+  border: var(--icon-stroke-sm) solid currentColor;
+  border-radius: 50%;
+}
+.icon-settings::after {
+  content: "";
+  position: absolute;
+  width: 3px;
+  height: 3px;
+  border-radius: 50%;
+  background: currentColor;
+}
+
+.sidebar-status {
+  margin-top: auto;
+  border-top: var(--hairline) solid var(--separator);
+  padding: var(--space-2) var(--space-2) 0;
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-2);
+  color: var(--text-secondary);
+  font-size: var(--font-caption);
+  line-height: 1.4;
+  text-align: left;
+}
+.sidebar-status .dot { margin-top: 5px; }
+
+/* ============================================================
+   内容区骨架（第 4 层）
+   ============================================================ */
+.content {
+  flex: 1;
+  min-width: 0;
+  padding: var(--space-3) var(--space-4) var(--space-4);
+  display: flex;
+  flex-direction: column;
+}
+
+.page {
+  width: var(--page-w);
+  background: var(--canvas);
+  border: var(--hairline) solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: var(--space-4);
+  display: flex;
+  flex-direction: column;
+}
+.page-screen { height: var(--window-h); }
+
+.tab-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  flex: none;
+}
+
+.page-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.tabs {
+  display: inline-flex;
+  height: var(--control-md);
+  padding: 0;
+  background: var(--surface-raised);
+  border-radius: var(--radius-md);
+}
+
+.tab {
+  height: var(--control-md);
+  padding: 0 var(--space-4);
+  border-radius: var(--radius-md);
+  color: var(--text-secondary);
+  font-size: var(--font-body);
+  display: inline-flex;
+  align-items: center;
+}
+.tab:hover { background: var(--hover-fill); }
+.tab.selected {
+  background: var(--surface);
+  color: var(--text-primary);
+  font-weight: 500;
+}
+
+/* 页内分段（control-sm） */
+.segment {
+  display: inline-flex;
+  height: var(--control-md);
+  padding: 0;
+  background: var(--surface-raised);
+  border-radius: var(--radius-md);
+}
+.segment-sm { height: var(--control-sm); }
+.segment .seg {
+  height: 100%;
+  padding: 0 var(--space-3);
+  border-radius: var(--radius-sm);
+  color: var(--text-secondary);
+  font-size: var(--font-body);
+  display: inline-flex;
+  align-items: center;
+}
+.segment-sm .seg { font-size: var(--font-caption); padding: 0 var(--space-2); }
+.segment .seg:hover { background: var(--hover-fill); }
+.segment .seg.selected {
+  background: var(--surface);
+  color: var(--text-primary);
+  font-weight: 500;
+}
+
+/* 上下文条 */
+.context-bar {
+  margin-top: var(--space-4);
+  display: flex;
+  align-items: center;
+  gap: var(--space-5);
+  flex: none;
+}
+.context-item {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-width: 0;
+}
+.context-label {
+  font-size: var(--font-caption);
+  color: var(--text-tertiary);
+  white-space: nowrap;
+}
+.context-value {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-size: var(--font-body);
+  color: var(--text-primary);
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+/* 工具条 */
+.toolbar {
+  margin-top: var(--space-3);
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  flex: none;
+}
+
+/* 表格（5.3 / 6.2b：无外框，行底 separator，选中 selectionFill + 2px 竖条） */
+.table {
+  margin-top: var(--space-3);
+  background: var(--surface);
+  border-radius: var(--radius-md);
+  overflow: hidden;
+}
+
+.table-head {
+  height: var(--row-data);
+  padding: 0 var(--space-3);
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  border-bottom: var(--hairline) solid var(--separator);
+  color: var(--text-secondary);
+  font-size: var(--font-caption);
+}
+.table-head .sorted {
+  color: var(--text-primary);
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+}
+
+.table-row {
+  height: var(--row-data);
+  padding: 0 var(--space-3);
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  border-bottom: var(--hairline) solid var(--separator);
+  font-size: var(--font-body);
+  position: relative;
+}
+.table-row:last-child { border-bottom: 0; }
+.table-row:hover { background: var(--hover-fill); }
+.table-row.selected { background: var(--selection-fill); }
+.table-row.selected::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: var(--selection-bar-width);
+  background: var(--selection-bar);
+}
+
+.col-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.col-region { width: var(--col-region-w); flex: none; color: var(--text-secondary); }
+.col-delay { width: var(--col-delay-w); flex: none; text-align: right; font-variant-numeric: tabular-nums; }
+.delay-good { color: var(--success); }
+.delay-warn { color: var(--warning); }
+.delay-bad { color: var(--danger); }
+
+/* 提交条 */
+.commit {
+  margin-top: auto;
+  min-height: 56px;
+  padding: var(--space-2) var(--space-1);
+  border-top: var(--hairline) solid var(--separator);
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: var(--space-2);
+  flex: none;
+}
+.commit-echo {
+  margin-right: auto;
+  font-size: var(--font-caption);
+  color: var(--text-secondary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* ============================================================
+   订阅页
+   ============================================================ */
+.col-check { width: 18px; flex: none; }
+.col-updated { width: var(--col-updated-w); flex: none; color: var(--text-secondary); font-size: var(--font-caption); }
+.col-usage { width: var(--col-usage-w); flex: none; }
+
+.badge {
+  height: 18px;
+  padding: 0 var(--space-1);
+  border-radius: var(--radius-sm);
+  font-size: var(--font-caption);
+  display: inline-flex;
+  align-items: center;
+  flex: none;
+}
+.badge-running { background: var(--success); color: var(--surface); }
+.badge-candidate { background: var(--control-fill); color: var(--text-secondary); }
+
+.row-name {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-width: 0;
+}
+.row-name .text {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.usage {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+.usage-text {
+  font-size: var(--font-caption);
+  color: var(--text-secondary);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.usage-bar {
+  height: var(--usage-bar-h);
+  border-radius: var(--usage-bar-radius);
+  background: var(--control-fill);
+  overflow: hidden;
+}
+.usage-fill {
+  height: 100%;
+  border-radius: var(--usage-bar-radius);
+  background: var(--accent-text);
+}
+
+/* ============================================================
+   设置页
+   ============================================================ */
+.settings-page { height: auto; }
+
+.settings-search { width: var(--search-w); }
+
+.settings-body {
+  margin-top: var(--space-3);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+.settings-group {
+  background: var(--surface);
+  border-radius: var(--radius-md);
+  padding: var(--space-1) var(--space-4) var(--space-1);
+}
+
+.group-title {
+  height: var(--control-md);
+  display: flex;
+  align-items: center;
+  font-size: var(--font-title3);
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.setting-row {
+  height: var(--row-form);
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  border-bottom: var(--hairline) solid var(--separator);
+}
+.setting-row:last-child { border-bottom: 0; }
+.setting-row:hover { background: var(--hover-fill); }
+
+.setting-label {
+  flex: 1;
+  min-width: 0;
+  font-size: var(--font-label);
+  font-weight: 500;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.setting-value {
+  font-size: var(--font-body);
+  color: var(--text-secondary);
+  white-space: nowrap;
+}
+.setting-value.tertiary { color: var(--text-tertiary); }
+.setting-value.mono { font-variant-numeric: tabular-nums; }
+
+.input-number {
+  width: 76px;
+  justify-content: flex-end;
+  font-variant-numeric: tabular-nums;
+}
+
+/* ============================================================
+   菜单 / 浮层（popupSurface + popupBorder，行高 28）
+   ============================================================ */
+.menu-row {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-4);
+}
+
+.menu-cluster {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-1);
+}
+
+.menu {
+  width: var(--menu-w);
+  background: var(--popup-surface);
+  border: var(--hairline) solid var(--popup-border);
+  border-radius: var(--radius-md);
+  padding: var(--space-1);
+}
+
+.menu-item {
+  height: var(--row-menu);
+  padding: 0 var(--space-2);
+  border-radius: var(--radius-sm);
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-size: var(--font-body);
+  color: var(--text-primary);
+  white-space: nowrap;
+}
+.menu-item:hover { background: var(--popup-hover); }
+.menu-item .trail { margin-left: auto; display: inline-flex; align-items: center; color: var(--text-secondary); }
+.menu-item.disabled { color: var(--text-disabled); }
+.menu-item.disabled:hover { background: transparent; }
+.menu-item.danger { color: var(--danger); }
+.menu-item.danger:hover { background: var(--danger-tint); }
+.menu-item.open { background: var(--hover-fill); }
+
+.menu-sep {
+  height: var(--hairline);
+  margin: var(--space-1) var(--space-2);
+  background: var(--separator);
+}
+
+.submenu {
+  width: var(--submenu-w);
+  background: var(--popup-surface);
+  border: var(--hairline) solid var(--popup-border);
+  border-radius: var(--radius-md);
+  padding: var(--space-1);
+  margin-top: 106px;
+}
+
+.check {
+  width: 10px;
+  height: 5px;
+  border-left: 2px solid var(--accent-text);
+  border-bottom: 2px solid var(--accent-text);
+  transform: rotate(-45deg) translateY(-1px);
+}
+
+/* ============================================================
+   状态卡片（第 4 层「状态呈现规格」，共十态）
+   ============================================================ */
+.state-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: var(--space-3);
+}
+.state-grid-5 { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.state-card-left { align-items: stretch; text-align: left; justify-content: flex-start; min-height: 0; }
+.state-card {
+  min-height: var(--state-card-min-h);
+  padding: var(--space-5);
+  background: var(--surface);
+  border-radius: var(--radius-lg);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-2);
+  text-align: center;
+}
+
+.state-title {
+  font-size: var(--font-label);
+  font-weight: 600;
+  color: var(--text-primary);
+}
+.state-card-left .state-title,
+.state-card-left .state-reason { text-align: left; }
+
+
+.state-reason {
+  font-size: var(--font-caption);
+  color: var(--text-secondary);
+}
+
+.state-actions {
+  margin-top: var(--space-2);
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.empty-icon {
+  width: 28px;
+  height: 28px;
+  border: var(--icon-stroke-md) solid var(--text-tertiary);
+  border-radius: 50%;
+}
+
+.shape-square {
+  width: 10px;
+  height: 10px;
+  background: var(--danger);
+}
+.shape-triangle {
+  width: 0;
+  height: 0;
+  border-left: 5px solid transparent;
+  border-right: 5px solid transparent;
+  border-bottom: 9px solid var(--warning);
+}
+
+.skeleton {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+.skeleton i {
+  display: block;
+  height: 10px;
+  border-radius: var(--radius-sm);
+  background: var(--control-fill);
+}
+.skeleton i:nth-child(1) { width: 100%; }
+.skeleton i:nth-child(2) { width: 82%; }
+.skeleton i:nth-child(3) { width: 92%; }
+
+.stale-data {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+}
+.stale-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+  padding: var(--space-2) 0;
+  border-bottom: var(--hairline) solid var(--separator);
+  font-size: var(--font-caption);
+}
+.stale-row .name { color: var(--text-primary); }
+.stale-row .value { color: var(--text-secondary); font-variant-numeric: tabular-nums; }
+.stale-status {
+  margin-top: var(--space-2);
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-size: var(--font-caption);
+  color: var(--warning);
+}
+.stale-time {
+  font-size: var(--font-caption);
+  color: var(--text-secondary);
+}
+
+/* ---- U07 补屏：连接 / 日志 / 规则 / 网站测试 ---- */
+.log-stream {
+  margin-top: var(--space-3);
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+  background: var(--surface);
+  border-radius: var(--radius-md);
+  padding: var(--space-2) var(--space-3);
+  font-family: ui-monospace, "Cascadia Mono", Consolas, monospace;
+  font-size: var(--font-caption);
+}
+.log-line { display: flex; gap: var(--space-2); height: 20px; align-items: center; white-space: nowrap; }
+.log-time { color: var(--text-secondary); font-variant-numeric: tabular-nums; flex: none; }
+.log-level { flex: none; width: 44px; }
+.log-level.info { color: var(--text-secondary); }
+.log-level.warn { color: var(--warning); }
+.log-level.error { color: var(--danger); }
+.log-text { overflow: hidden; text-overflow: ellipsis; }
+
+.site-grid {
+  margin-top: var(--space-3);
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(var(--grid-col-min-node), 1fr));
+  gap: var(--card-gap);
+  flex: none;
+}
+.site-card {
+  min-height: var(--card-min-website);
+  padding: var(--space-3);
+  background: var(--surface);
+  border-radius: var(--radius-md);
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: var(--space-1);
+}
+.site-name { font-size: var(--font-label); font-weight: 600; color: var(--text-primary); }
+.site-result { font-size: var(--font-title3); color: var(--text-primary); }
+.site-meta { font-size: var(--font-caption); color: var(--text-secondary); }
+
+.context-bar { display: flex; align-items: center; gap: var(--space-2); }
+.context-label { font-size: var(--font-caption); color: var(--text-secondary); }
+.context-value { font-size: var(--font-body); color: var(--text-primary); }
+
+/* ---- 基础结构（原缺）：首页控制区、节点列表、抽屉、分隔符 ---- */
+.content {
+  flex: 1;
+  min-width: 0;
+  padding: var(--space-4);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.home-scroll {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+/* 独立整窗里 .page 自带边框和固定宽；放进 .window > .content 时改用容器宽度，
+   否则 668px 的页在 620px 的内容区里会横向溢出（08–11 屏）。 */
+.content > .page {
+  width: auto;
+  flex: 1;
+  min-height: 0;
+  border: 0;
+  border-radius: 0;
+  padding: 0;
+  background: transparent;
+}
+
+.control-group {
+  background: var(--surface);
+  border-radius: var(--radius-lg);
+  padding: var(--space-3) var(--space-4);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  flex: none;
+}
+
+.control-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  min-height: var(--control-md);
+}
+
+.control-main {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.control-label {
+  font-size: var(--font-caption);
+  color: var(--text-secondary);
+}
+
+.control-value {
+  font-size: var(--font-title3);
+  font-weight: 600;
+  color: var(--text-primary);
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-width: 0;
+}
+
+.control-meta {
+  font-size: var(--font-caption);
+  color: var(--text-secondary);
+}
+
+.control-action { flex: none; }
+
+.switch-btn {
+  height: var(--control-lg);
+  padding: 0 var(--space-5);
+  border-radius: var(--radius-pill);
+  background: var(--accent);
+  color: var(--on-accent);
+  font-size: var(--font-label);
+  font-weight: 600;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  white-space: nowrap;
+}
+.switch-btn:hover { background: var(--accent-hover); }
+.switch-btn:active { background: var(--accent-pressed); }
+.switch-btn.off {
+  background: var(--control-fill);
+  color: var(--text-primary);
+}
+/* 进行中：意图已表达、结果未确认；降低强调但不隐藏动作名 */
+.switch-btn.busy {
+  background: var(--control-fill);
+  color: var(--text-secondary);
+  cursor: progress;
+}
+
+.state-line {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+  font-size: var(--font-caption);
+  color: var(--text-secondary);
+  flex-wrap: wrap;
+}
+
+.sep { color: var(--separator-strong, var(--text-secondary)); opacity: 0.6; }
+.spacer { flex: 1; }
+
+.home-drawer {
+  background: var(--surface);
+  border-radius: var(--radius-md);
+  flex: none;
+}
+.home-drawer-head {
+  height: var(--control-md);
+  padding: 0 var(--space-3);
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-size: var(--font-body);
+  color: var(--text-secondary);
+}
+.home-drawer-body {
+  padding: 0 var(--space-3) var(--space-3);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.node-section { flex: none; display: flex; flex-direction: column; }
+.node-section-head {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+.node-section-title {
+  font-size: var(--font-label);
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.node-group { margin-top: var(--space-3); }
+.node-group-title {
+  height: var(--row-data);
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-size: var(--font-caption);
+  color: var(--text-secondary);
+}
+.node-group-title .count { flex: none; }
+
+.node-list {
+  background: var(--surface);
+  border-radius: var(--radius-md);
+  overflow: hidden;
+}
+
+.node-row {
+  height: var(--row-data);
+  padding: 0 var(--space-3);
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  border-bottom: var(--hairline) solid var(--separator);
+  font-size: var(--font-body);
+}
+.node-row:last-child { border-bottom: 0; }
+.node-row:hover { background: var(--hover-fill); }
+.node-row.current { background: var(--selection-fill); }
+.node-row.readonly { cursor: default; }
+
+.node-mark {
+  width: var(--icon-sm);
+  flex: none;
+  display: grid;
+  place-items: center;
+}
+.tick {
+  width: 10px;
+  height: 10px;
+  border-radius: var(--radius-pill);
+  background: var(--accent);
+}
+
+.node-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text-primary);
+}
+.node-proto {
+  flex: none;
+  font-size: var(--font-caption);
+  color: var(--text-secondary);
+}
+.node-delay {
+  flex: none;
+  width: var(--col-delay-w);
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  font-size: var(--font-caption);
+  color: var(--text-secondary);
+}
+
+.metric-value {
+  font-size: var(--font-display);
+  font-weight: 600;
+  color: var(--text-primary);
+  font-variant-numeric: tabular-nums;
+}
+
+/* 菜单分组标题与状态尾巴（对应 V4） */
+.menu-cluster {
+  padding: var(--space-2) var(--space-3) var(--space-1);
+  font-size: var(--font-caption);
+  color: var(--text-secondary);
+  user-select: none;
+}
+.menu-cluster.danger { color: var(--danger); }
+.menu-row { display: flex; align-items: center; gap: var(--space-2); }
+.trail {
+  margin-left: auto;
+  font-size: var(--font-caption);
+  color: var(--text-secondary);
+  flex: none;
+}
+
+/* ---- U07 P2：订阅用量条（对应 V2） ---- */
+.usage { display: flex; flex-direction: column; gap: 2px; width: 100%; }
+.usage-text { font-size: var(--font-caption); color: var(--text-secondary); font-variant-numeric: tabular-nums; }
+.usage-bar {
+  height: 4px;
+  border-radius: var(--radius-pill);
+  background: var(--track);
+  overflow: hidden;
+}
+.usage-fill { display: block; height: 100%; border-radius: var(--radius-pill); background: var(--accent); }
+/* 无额度信息时整列隐藏，不留空白列（实现同） */
+.col-usage.hidden { display: none; }
+</style>
+</head>
+<body data-theme="light">
+
+<header class="proto-header">
+  <div class="proto-header-inner">
+    <span class="proto-title">Mlash · 界面静态原型</span>
+    <button class="btn" id="theme-toggle" aria-label="切换主题">深色</button>
+  </div>
+</header>
+
+<main class="proto-main">
+
+  <!-- ============================================================
+       01 主窗口整体（侧栏 + 首页：控制区 → 节点列表，无页签）
+       ============================================================ -->
+  <section class="demo">
+    <h2 class="demo-label">01 · 主窗口整体 / 首页（默认视图）：控制区三行 → 节点列表，同一滚动</h2>
+    <div class="window">
+      <aside class="sidebar">
+        <div class="brand">
+          <span class="brand-mark"></span>
+          <span class="brand-name">Mlash</span>
+        </div>
+        <nav class="nav">
+          <button class="nav-item selected"><span class="icon icon-home"></span>首页</button>
+          <button class="nav-item"><span class="icon icon-list"></span>配置</button>
+          <button class="nav-item"><span class="icon icon-chart"></span>数据</button>
+          <button class="nav-item"><span class="icon icon-settings"></span>设置</button>
+        </nav>
+        <button class="sidebar-status">
+          <span class="dot dot-success"></span>
+          <span>内核运行中 · 系统代理已接管<br>TUN 未启用 · 订阅 A</span>
+        </button>
+      </aside>
+
+      <div class="content">
+        <div class="home-scroll">
+          <div class="control-group">
+            <div class="control-row">
+              <div class="control-main">
+                <span class="control-label">当前代理</span>
+                <span class="control-value">香港 01 <span class="node-proto" style="display:inline">· 自动选择</span></span>
+                <span class="state-line">
+                  <span class="dot dot-success"></span>内核运行中
+                  <span class="sep">·</span>系统代理已接管
+                  <span class="sep">·</span>目标可达
+                </span>
+              </div>
+              <button class="switch-btn control-action">关闭代理</button>
+            </div>
+            <div class="control-row">
+              <div class="control-main">
+                <span class="control-label">路由方式</span>
+              </div>
+              <div class="segment segment-sm control-action">
+                <button class="seg selected">规则</button>
+                <button class="seg">全局</button>
+                <button class="seg">直连</button>
+              </div>
+            </div>
+            <div class="control-row">
+              <div class="control-main">
+                <span class="control-label">连通性</span>
+                <span class="control-meta">GitHub 可达 · 14:02 测试</span>
+              </div>
+              <button class="btn control-action">测试</button>
+            </div>
+          </div>
+
+          <div class="home-drawer">
+            <div class="home-drawer-head">更多运行信息<span class="chev-down"></span></div>
+          </div>
+
+          <div class="node-section">
+            <div class="node-section-head">
+              <span class="node-section-title">节点</span>
+              <button class="btn-text">测速</button>
+            </div>
+            <div class="toolbar" style="margin-top: var(--space-2);">
+              <div class="input search">
+                <span class="placeholder">搜索节点</span>
+                <span class="clear">×</span>
+              </div>
+              <button class="select">延迟升序<span class="chev-down"></span></button>
+              <button class="btn">筛选</button>
+            </div>
+
+            <div class="node-group">
+              <div class="node-group-title">
+                <span>自动选择</span><span class="count">· 8 个节点</span>
+                <span class="spacer"></span>
+                <span class="count">自动选路</span>
+              </div>
+              <div class="node-list">
+                <div class="node-row current readonly">
+                  <span class="node-mark"><span class="tick"></span></span>
+                  <span class="node-name">香港 01</span>
+                  <span class="node-proto">自动</span>
+                  <span class="node-delay delay-good">38 ms</span>
+                </div>
+                <div class="node-row readonly">
+                  <span class="node-mark"></span>
+                  <span class="node-name">东京 02</span>
+                  <span class="node-proto">自动</span>
+                  <span class="node-delay delay-good">52 ms</span>
+                </div>
+                <div class="node-row readonly">
+                  <span class="node-mark"></span>
+                  <span class="node-name">新加坡 03</span>
+                  <span class="node-proto">自动</span>
+                  <span class="node-delay delay-good">76 ms</span>
+                </div>
+              </div>
+            </div>
+
+            <div class="node-group">
+              <div class="node-group-title">
+                <span>手动选择</span><span class="count">· 12 个节点</span>
+                <span class="spacer"></span>
+                <span class="count">单击即生效</span>
+              </div>
+              <div class="node-list">
+                <div class="node-row">
+                  <span class="node-mark"></span>
+                  <span class="node-name">洛杉矶 04</span>
+                  <span class="node-delay delay-warn">118 ms</span>
+                </div>
+                <div class="node-row">
+                  <span class="node-mark"></span>
+                  <span class="node-name">台北 05</span>
+                  <span class="node-delay delay-good">88 ms</span>
+                </div>
+                <div class="node-row">
+                  <span class="node-mark"></span>
+                  <span class="node-name">首尔 06</span>
+                  <span class="node-delay delay-warn">156 ms</span>
+                </div>
+                <div class="node-row">
+                  <span class="node-mark"></span>
+                  <span class="node-name">法兰克福 07</span>
+                  <span class="node-delay delay-bad">340 ms</span>
+                </div>
+                <div class="node-row">
+                  <span class="node-mark"></span>
+                  <span class="node-name">伦敦 08</span>
+                  <span class="node-delay delay-bad">超时</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============================================================
+       02 首页控制区：代理总开关的状态（ADR 0048 定义六态，此处示五种；与开启中… 对称的 关闭中… 见下方说明）
+       ============================================================ -->
+  <section class="demo">
+    <h2 class="demo-label">02 · 首页控制区 / 代理总开关状态：已接管 · 开启中… · 内核运行未接管 · 已关闭 · 失败（另有关闭中…，与开启中… 对称，文字换成「正在关闭…」）</h2>
+    <div class="state-grid state-grid-5">
+      <div class="state-card state-card-left">
+        <div class="control-group" style="width:100%;">
+          <div class="control-row">
+            <div class="control-main">
+              <span class="control-label">当前代理</span>
+              <span class="control-value">香港 01 · 自动选择</span>
+              <span class="state-line"><span class="dot dot-success"></span>内核运行中<span class="sep">·</span>系统代理已接管</span>
+            </div>
+            <button class="switch-btn control-action">关闭代理</button>
+          </div>
+        </div>
+        <span class="state-title">已启用</span>
+        <span class="state-reason">开关文案给出动词与结果，不留「开/关」孤字</span>
+      </div>
+
+      <div class="state-card state-card-left">
+        <div class="control-group" style="width:100%;">
+          <div class="control-row">
+            <div class="control-main">
+              <span class="control-label">当前代理</span>
+              <span class="control-value">香港 01 · 自动选择</span>
+              <span class="state-line"><span class="dot dot-warning"></span>内核启动中<span class="sep">·</span>未接管</span>
+            </div>
+            <button class="switch-btn busy control-action">正在开启…</button>
+          </div>
+        </div>
+        <span class="state-title">开启中</span>
+        <span class="state-reason">执行中显示进度文案；开关不可重复点击</span>
+      </div>
+
+      <div class="state-card state-card-left">
+        <div class="control-group" style="width:100%;">
+          <div class="control-row">
+            <div class="control-main">
+              <span class="control-label">当前代理</span>
+              <span class="control-value">—</span>
+              <span class="state-line"><span class="dot dot-warning"></span>内核运行中<span class="sep">·</span>未接管流量</span>
+            </div>
+            <button class="switch-btn off control-action">开启代理</button>
+          </div>
+        </div>
+        <span class="state-title">内核在跑但没接管</span>
+        <span class="state-reason">不得显示「已连接」；这是三个维度里的第二种</span>
+      </div>
+
+      <div class="state-card state-card-left">
+        <div class="control-group" style="width:100%;">
+          <div class="control-row">
+            <div class="control-main">
+              <span class="control-label">当前代理</span>
+              <span class="control-value">—</span>
+              <span class="state-line"><span class="dot"></span>已关闭</span>
+            </div>
+            <button class="switch-btn off control-action">开启代理</button>
+          </div>
+        </div>
+        <span class="state-title">已关闭</span>
+        <span class="state-reason">内核与接管均为关闭；未知用「—」，不填 0</span>
+      </div>
+
+      <div class="state-card state-card-left">
+        <div class="control-group" style="width:100%;">
+          <div class="control-row">
+            <div class="control-main">
+              <span class="control-label">当前代理</span>
+              <span class="control-value">—</span>
+              <span class="state-line"><span class="dot dot-danger"></span>失败：权限服务未安装</span>
+            </div>
+            <button class="switch-btn off control-action">开启代理</button>
+          </div>
+        </div>
+        <span class="state-title">失败</span>
+        <span class="state-reason">原因就地显示，重试入口与状态句同一行</span>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============================================================
+       03 首页「更多运行信息」抽屉（展开态）
+       ============================================================ -->
+  <section class="demo">
+    <h2 class="demo-label">03 · 首页「更多运行信息」展开 / 指标与内核启停在此，不在首屏</h2>
+    <div class="page">
+      <div class="home-scroll">
+        <div class="control-group">
+          <div class="control-row">
+            <div class="control-main">
+              <span class="control-label">当前代理</span>
+              <span class="control-value">香港 01 · 自动选择</span>
+              <span class="state-line"><span class="dot dot-success"></span>内核运行中<span class="sep">·</span>系统代理已接管</span>
+            </div>
+            <button class="switch-btn control-action">关闭代理</button>
+          </div>
+        </div>
+
+        <div class="home-drawer">
+          <div class="home-drawer-head">更多运行信息<span class="chev-down" style="transform: rotate(180deg);"></span></div>
+          <div class="home-drawer-body">
+            <div><span>运行版本</span><span class="metric-value">订阅 A</span></div>
+            <div><span>内核</span><span class="metric-value">运行中 · v1.19.0</span></div>
+            <div><span>接管</span><span class="metric-value">系统代理 + TUN</span></div>
+            <div><span>本次会话</span><span class="metric-value">↑ 1.2 MB/s</span></div>
+            <div><span>峰值</span><span class="metric-value">4.8 MB/s</span></div>
+            <div><span>最近启动</span><span class="metric-value">10-29 14:02</span></div>
+          </div>
+          <div class="home-drawer-body" style="border-top: var(--hairline) solid var(--separator); grid-template-columns: 1fr;">
+            <div style="display:flex;align-items:center;gap:var(--space-3);">
+              <span style="flex:1;font-size:var(--font-body);color:var(--text-primary);">内核单独启停</span>
+              <button class="btn">停止内核</button>
+            </div>
+          </div>
+        </div>
+
+        <div class="node-section">
+          <div class="node-section-head">
+            <span class="node-section-title">节点</span>
+            <button class="btn-text">测速</button>
+          </div>
+          <div class="node-group">
+            <div class="node-group-title"><span>手动选择</span><span class="count">· 12 个节点</span></div>
+            <div class="node-list">
+              <div class="node-row current">
+                <span class="node-mark"><span class="tick"></span></span>
+                <span class="node-name">洛杉矶 04</span>
+                <span class="node-delay delay-warn">118 ms</span>
+              </div>
+              <div class="node-row">
+                <span class="node-mark"></span>
+                <span class="node-name">台北 05</span>
+                <span class="node-delay delay-good">88 ms</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============================================================
+       04 订阅页
+       ============================================================ -->
+  <section class="demo">
+    <h2 class="demo-label">04 · 订阅页 · 工具条 → 列表 → 提交条</h2>
+    <div class="page page-screen">
+      <div class="tab-row">
+        <div class="tabs">
+          <button class="tab selected">订阅</button>
+          <button class="tab">规则</button>
+        </div>
+        <div class="page-actions">
+          <button class="btn">查看变化</button>
+          <button class="btn">添加</button>
+        </div>
+      </div>
+
+      <div class="toolbar">
+        <div class="input search">
+          <span class="placeholder">搜索订阅</span>
+          <span class="clear">×</span>
+        </div>
+        <button class="btn">更新所选</button>
+      </div>
+
+      <div class="table">
+        <div class="table-head">
+          <span class="col-check"></span>
+          <span class="col-name">名称</span>
+          <span class="col-updated">更新时间</span>
+          <span class="col-usage">用量</span>
+        </div>
+
+        <div class="table-row">
+          <span class="col-check"><span class="checkbox checked"></span></span>
+          <span class="col-name">
+            <span class="row-name"><span class="text">订阅 A</span><span class="badge badge-running">运行中</span></span>
+          </span>
+          <span class="col-updated">10-29 14:20</span>
+          <span class="col-usage">
+            <span class="usage">
+              <span class="usage-text">12.4 / 100 GB</span>
+              <span class="usage-bar"><span class="usage-fill" style="width:12%"></span></span>
+            </span>
+          </span>
+        </div>
+
+        <div class="table-row">
+          <span class="col-check"><span class="checkbox"></span></span>
+          <span class="col-name">
+            <span class="row-name"><span class="text">订阅 B</span><span class="badge badge-candidate">候选</span></span>
+          </span>
+          <span class="col-updated">10-28 09:05</span>
+          <span class="col-usage">
+            <span class="usage">
+              <span class="usage-text">4.8 / 50 GB</span>
+              <span class="usage-bar"><span class="usage-fill" style="width:10%"></span></span>
+            </span>
+          </span>
+        </div>
+
+        <div class="table-row">
+          <span class="col-check"><span class="checkbox"></span></span>
+          <span class="col-name">
+            <span class="row-name"><span class="text">订阅 C</span></span>
+          </span>
+          <span class="col-updated">10-21 22:47</span>
+          <span class="col-usage">
+            <span class="usage">
+              <span class="usage-text">34.6 / 200 GB</span>
+              <span class="usage-bar"><span class="usage-fill" style="width:17%"></span></span>
+            </span>
+          </span>
+        </div>
+      </div>
+
+      <div class="commit">
+        <span class="commit-echo">目标 · 订阅 A</span>
+        <button class="btn">应用更新</button>
+        <button class="btn btn-primary">使用并启动 · 订阅 A</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============================================================
+       05 设置页（常规 / 网络与内核）
+       ============================================================ -->
+  <section class="demo">
+    <h2 class="demo-label">05a · 设置页 / 常规 · 分类页签 + 搜索 + 分组行</h2>
+    <div class="page settings-page">
+      <div class="tab-row">
+        <div class="tabs">
+          <button class="tab selected">常规</button>
+          <button class="tab">网络与内核</button>
+          <button class="tab">备份与工具</button>
+        </div>
+        <div class="input settings-search">
+          <span class="placeholder">搜索设置</span>
+          <span class="clear">×</span>
+        </div>
+      </div>
+
+      <div class="settings-body">
+        <div class="settings-group">
+          <div class="group-title">启动与托盘</div>
+          <div class="setting-row">
+            <span class="setting-label">登录时启动</span>
+            <span class="switch on"></span>
+          </div>
+          <div class="setting-row">
+            <span class="setting-label">关闭窗口时最小化到托盘</span>
+            <span class="switch on"></span>
+          </div>
+          <div class="setting-row">
+            <span class="setting-label">托盘单击</span>
+            <button class="select">显示主窗口<span class="chev-down"></span></button>
+          </div>
+        </div>
+
+        <div class="settings-group">
+          <div class="group-title">外观与首页</div>
+          <div class="setting-row">
+            <span class="setting-label">主题</span>
+            <button class="select">跟随系统<span class="chev-down"></span></button>
+          </div>
+          <div class="setting-row">
+            <span class="setting-label">文字比例</span>
+            <button class="select">100%<span class="chev-down"></span></button>
+          </div>
+          <div class="setting-row">
+            <span class="setting-label">首页摘要</span>
+            <span class="setting-value">显示运行速率一行</span>
+            <span class="switch on"></span>
+          </div>
+        </div>
+
+        <div class="settings-group">
+          <div class="group-title">快捷键与导入</div>
+          <div class="setting-row">
+            <span class="setting-label">全局快捷键</span>
+            <span class="setting-value">Ctrl+Alt+M</span>
+            <button class="btn-text">管理…</button>
+          </div>
+          <div class="setting-row">
+            <span class="setting-label">导入设置</span>
+            <span class="setting-value tertiary">从未导入</span>
+            <button class="btn-text">从文件导入…</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="demo">
+    <h2 class="demo-label">05b · 设置页 / 网络与内核 · 行内显示当前值</h2>
+    <div class="page settings-page">
+      <div class="tab-row">
+        <div class="tabs">
+          <button class="tab">常规</button>
+          <button class="tab selected">网络与内核</button>
+          <button class="tab">备份与工具</button>
+        </div>
+        <div class="input settings-search">
+          <span class="placeholder">搜索设置</span>
+          <span class="clear">×</span>
+        </div>
+      </div>
+
+      <div class="settings-body">
+        <div class="settings-group">
+          <div class="group-title">网络与分流</div>
+          <div class="setting-row">
+            <span class="setting-label">系统代理</span>
+            <span class="switch on"></span>
+          </div>
+          <div class="setting-row">
+            <span class="setting-label">本地端口</span>
+            <div class="input input-number">17890</div>
+          </div>
+          <div class="setting-row">
+            <span class="setting-label">TUN 模式</span>
+            <span class="switch"></span>
+          </div>
+          <div class="setting-row">
+            <span class="setting-label">TUN 权限服务</span>
+            <span class="setting-value tertiary">未安装</span>
+            <button class="btn-text">管理…</button>
+          </div>
+        </div>
+
+        <div class="settings-group">
+          <div class="group-title">高级内核</div>
+          <div class="setting-row">
+            <span class="setting-label">内核更新</span>
+            <span class="setting-value">v1.19.0 · 已是最新</span>
+            <button class="btn-text">管理…</button>
+          </div>
+          <div class="setting-row">
+            <span class="setting-label">内核路径</span>
+            <span class="setting-value">cores\mihomo.exe</span>
+            <button class="btn-text">管理…</button>
+          </div>
+          <div class="setting-row">
+            <span class="setting-label">日志等级</span>
+            <button class="select">警告<span class="chev-down"></span></button>
+          </div>
+        </div>
+
+        <div class="settings-group">
+          <div class="group-title">连接与维护</div>
+          <div class="setting-row">
+            <span class="setting-label">统一延迟</span>
+            <span class="switch on"></span>
+          </div>
+          <div class="setting-row">
+            <span class="setting-label">DNS</span>
+            <span class="setting-value">系统 DNS</span>
+            <button class="btn-text">管理…</button>
+          </div>
+          <div class="setting-row">
+            <span class="setting-label">代理绕过</span>
+            <span class="setting-value">系统默认</span>
+            <button class="btn-text">管理…</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============================================================
+       06 菜单弹层
+       ============================================================ -->
+  <section class="demo">
+    <h2 class="demo-label">06 · 菜单弹层 / 订阅管理（五组重排）· 托盘菜单（5.9）</h2>
+    <div class="menu-row">
+      <div class="menu-cluster">
+        <div class="menu">
+          <div class="menu-item disabled">订阅 A · 运行中</div>
+          <div class="menu-sep"></div>
+          <div class="menu-cluster">使用</div>
+          <div class="menu-item">更新当前订阅</div>
+          <div class="menu-item">重新加载当前版本</div>
+          <div class="menu-item">回滚上次运行版本</div>
+          <div class="menu-sep"></div>
+          <div class="menu-cluster">编辑与配置</div>
+          <div class="menu-item open">编辑配置<span class="trail"><span class="chev-right"></span></span></div>
+          <div class="menu-sep"></div>
+          <div class="menu-cluster">对象维护</div>
+          <div class="menu-item">重命名…</div>
+          <div class="menu-item">来源与更新…</div>
+          <div class="menu-item">配置兼容性…</div>
+          <div class="menu-sep"></div>
+          <div class="menu-cluster">文件与目录</div>
+          <div class="menu-item">分享订阅二维码…</div>
+          <div class="menu-item">上移</div>
+          <div class="menu-item">下移</div>
+          <div class="menu-item">更换文件…</div>
+          <div class="menu-item">打开数据目录</div>
+          <div class="menu-sep"></div>
+          <div class="menu-cluster danger">危险</div>
+          <div class="menu-item danger">删除订阅…</div>
+        </div>
+
+        <div class="submenu">
+          <div class="menu-item">编辑节点与策略组…</div>
+          <div class="menu-item">节点来源…</div>
+          <div class="menu-item">DNS 设置…</div>
+          <div class="menu-item">上游代理链…</div>
+        </div>
+      </div>
+
+      <div class="menu" style="width: var(--tray-w);">
+        <div class="menu-item">显示主窗口</div>
+        <div class="menu-sep"></div>
+        <div class="menu-item">关闭代理</div>
+        <div class="menu-item">系统代理<span class="trail"><span class="check"></span></span></div>
+        <div class="menu-item">TUN 模式<span class="trail"><span class="check"></span></span></div>
+        <div class="menu-sep"></div>
+        <div class="menu-item">路由模式<span class="trail"><span class="chev-right"></span></span></div>
+        <div class="menu-item">策略组<span class="trail"><span class="chev-right"></span></span></div>
+        <div class="menu-item">停止内核</div>
+        <div class="menu-sep"></div>
+        <div class="menu-item">订阅<span class="trail"><span class="chev-right"></span></span></div>
+        <div class="menu-sep"></div>
+        <div class="menu-item">连接页…</div>
+        <div class="menu-item">设置…</div>
+        <div class="menu-sep"></div>
+        <div class="menu-item">退出 Mlash</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============================================================
+       06b 首页控制区 · 关闭代理后（内核仍在跑，未接管）
+       ============================================================ -->
+  <section class="demo">
+    <h2 class="demo-label">06b · 关闭代理后：撤销接管，内核继续运行（ADR 0048）</h2>
+    <div class="page">
+      <div class="home-scroll">
+        <div class="control-group">
+          <div class="control-row">
+            <div class="control-main">
+              <span class="control-label">当前代理</span>
+              <span class="control-value">—</span>
+              <span class="state-line">
+                <span class="dot dot-warning"></span>内核运行中
+                <span class="sep">·</span>未接管流量
+              </span>
+            </div>
+            <button class="switch-btn off control-action">开启代理</button>
+          </div>
+          <div class="control-row">
+            <div class="control-main">
+              <span class="control-label">路由方式</span>
+            </div>
+            <div class="segment segment-sm control-action">
+              <button class="seg selected">规则</button>
+              <button class="seg">全局</button>
+              <button class="seg">直连</button>
+            </div>
+          </div>
+          <div class="control-row">
+            <div class="control-main">
+              <span class="control-label">连通性</span>
+              <span class="control-meta">尚未测试</span>
+            </div>
+            <button class="btn control-action">测试</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============================================================
+       07 状态呈现（空 / 加载中 / 失败 / 过期）
+       ============================================================ -->
+  <section class="demo">
+    <h2 class="demo-label">07 · 状态呈现 / 空 · 加载中 · 失败 · 过期（同一卡片容器）</h2>
+    <div class="state-grid">
+      <div class="state-card">
+        <span class="empty-icon"></span>
+        <span class="state-title">还没有订阅</span>
+        <span class="state-reason">尚未添加任何订阅</span>
+        <span class="state-actions"><button class="btn">添加订阅</button></span>
+      </div>
+
+      <div class="state-card">
+        <div class="skeleton"><i></i><i></i><i></i></div>
+        <span class="state-title">正在读取订阅…</span>
+        <span class="state-actions"><button class="btn-text">取消</button></span>
+      </div>
+
+      <div class="state-card">
+        <span class="shape-square"></span>
+        <span class="state-title">读取订阅失败</span>
+        <span class="state-reason">连接超时（10 秒）</span>
+        <span class="state-actions">
+          <button class="btn">重试</button>
+          <button class="btn-text">查看日志</button>
+        </span>
+      </div>
+
+      <div class="state-card">
+        <div class="stale-data">
+          <div class="stale-row"><span class="name">订阅 A</span><span class="value">12.4 GB</span></div>
+          <div class="stale-row"><span class="name">订阅 B</span><span class="value">4.8 GB</span></div>
+        </div>
+        <span class="stale-status"><span class="shape-triangle"></span>已过期</span>
+        <span class="stale-time">10:42 的数据 · 可能已过期</span>
+        <span class="state-actions"><button class="btn-text">刷新</button></span>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============================================================
+       08 连接页（实现：视图 ID 4）· 页内分段 → 工具条 → 表格 → 提交条
+       差异：实现的分段是活动/已结束；状态行同时表达采样时间、过期与失败。
+       ============================================================ -->
+  <section class="demo">
+    <h2 class="demo-label">08 · 连接页 / 页内分段 → 工具条 → 表格 → 提交条；状态行同时表达采样时间、过期与失败</h2>
+    <div class="window">
+      <aside class="sidebar">
+        <div class="brand">
+          <span class="brand-mark"></span>
+          <span class="brand-name">Mlash</span>
+        </div>
+        <nav class="nav">
+          <button class="nav-item"><span class="icon icon-home"></span>首页</button>
+          <button class="nav-item"><span class="icon icon-list"></span>配置</button>
+          <button class="nav-item"><span class="icon icon-chart"></span>数据</button>
+          <button class="nav-item"><span class="icon icon-settings"></span>设置</button>
+        </nav>
+        <button class="sidebar-status">
+          <span class="dot dot-success"></span>
+          <span>内核运行中 · 系统代理已接管<br>TUN 未启用 · 订阅 A</span>
+        </button>
+      </aside>
+      <div class="content">
+        <div class="page">
+          <div class="tab-row">
+            <div class="tabs">
+              <button class="tab selected">活动</button>
+              <button class="tab">已结束</button>
+            </div>
+            <div class="page-actions">
+              <button class="btn">断开选中</button>
+              <button class="btn">暂停采样</button>
+            </div>
+          </div>
+
+          <div class="toolbar">
+            <div class="input search">
+              <span class="placeholder">搜索主机、进程或规则</span>
+              <span class="clear">×</span>
+            </div>
+            <button class="btn">刷新</button>
+          </div>
+
+          <div class="table">
+            <div class="table-head">
+              <span class="col-name sorted">主机</span>
+              <span class="col-region">规则</span>
+              <span class="col-delay">上行</span>
+              <span class="col-delay">下行</span>
+            </div>
+            <div class="table-row selected">
+              <span class="col-name"><span class="text">api.github.com:443</span></span>
+              <span class="col-region">DOMAIN-SUFFIX</span>
+              <span class="col-delay mono">1.2 KB</span>
+              <span class="col-delay mono">48 KB</span>
+            </div>
+            <div class="table-row">
+              <span class="col-name"><span class="text">cdn.example.net:443</span></span>
+              <span class="col-region">代理</span>
+              <span class="col-delay mono">640 B</span>
+              <span class="col-delay mono">2.1 MB</span>
+            </div>
+            <div class="table-row">
+              <span class="col-name"><span class="text">192.168.1.1:53</span></span>
+              <span class="col-region">直连</span>
+              <span class="col-delay mono">120 B</span>
+              <span class="col-delay mono">96 B</span>
+            </div>
+          </div>
+
+          <div class="commit">
+            <span class="commit-echo">更新于 14:02:11 · 采样中</span>
+            <button class="btn">暂停</button>
+            <button class="btn btn-primary">断开选中</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="page" style="margin-top: var(--space-5);">
+      <div class="state-grid" style="grid-template-columns: 1fr 1fr;">
+        <div class="state-card state-card-left">
+          <span class="state-title">刷新失败 · 显示上次快照</span>
+          <span class="state-reason">内核 API 未响应；下方保留 10:42 的快照，过期数据不冒充当前值。</span>
+          <span class="stale-status"><span class="shape-triangle"></span>已过期</span>
+          <span class="stale-time">上次成功采样 10:42:03</span>
+          <span class="state-actions"><button class="btn-text">重试</button></span>
+        </div>
+        <div class="state-card state-card-left">
+          <span class="state-title">内核未就绪</span>
+          <span class="state-reason">连接采样需要内核运行；内核启动后自动开始。</span>
+          <span class="state-actions"><button class="btn-text">启动内核</button></span>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============================================================
+       09 日志页（实现：视图 ID 5）· 工具条 → 文本流 → 结果摘要
+       差异：实现的四态（未就绪/无匹配/已暂停/还没有日志）都不能表现为空白面板。
+       ============================================================ -->
+  <section class="demo">
+    <h2 class="demo-label">09 · 日志页 / 工具条 → 文本流 → 结果摘要；四种空态各有说明，不用空白面板</h2>
+    <div class="window">
+      <aside class="sidebar">
+        <div class="brand">
+          <span class="brand-mark"></span>
+          <span class="brand-name">Mlash</span>
+        </div>
+        <nav class="nav">
+          <button class="nav-item"><span class="icon icon-home"></span>首页</button>
+          <button class="nav-item"><span class="icon icon-list"></span>配置</button>
+          <button class="nav-item"><span class="icon icon-chart"></span>数据</button>
+          <button class="nav-item"><span class="icon icon-settings"></span>设置</button>
+        </nav>
+        <button class="sidebar-status">
+          <span class="dot dot-success"></span>
+          <span>内核运行中 · 系统代理已接管<br>TUN 未启用 · 订阅 A</span>
+        </button>
+      </aside>
+      <div class="content">
+        <div class="page">
+          <div class="toolbar" style="margin-top: 0;">
+            <div class="input search">
+              <span class="placeholder">搜索日志</span>
+              <span class="clear">×</span>
+            </div>
+            <button class="select">全部级别<span class="chev-down"></span></button>
+            <button class="btn">暂停显示</button>
+            <button class="btn">复制选中</button>
+            <button class="btn-text">日志选项<span class="chev-down"></span></button>
+          </div>
+
+          <div class="log-stream">
+            <div class="log-line"><span class="log-time">14:02:11</span><span class="log-level info">INFO</span><span class="log-text">[TCP] 127.0.0.1:51022 --&gt; api.github.com:443 match DomainSuffix(github.com) using Proxy[A]</span></div>
+            <div class="log-line"><span class="log-time">14:02:11</span><span class="log-level info">INFO</span><span class="log-text">[DNS] github.com resolve 20.205.243.166</span></div>
+            <div class="log-line"><span class="log-time">14:02:12</span><span class="log-level warn">WARN</span><span class="log-text">[Rule] rule-provider "ads" expired, fallback to last snapshot</span></div>
+            <div class="log-line"><span class="log-time">14:02:13</span><span class="log-level info">INFO</span><span class="log-text">[TCP] 127.0.0.1:51024 --&gt; cdn.example.net:443 match DomainSuffix(example.net) using Proxy[B]</span></div>
+          </div>
+
+          <div class="commit">
+            <span class="commit-echo">显示 4 条 · 共 1,204 条 · 最多保留 2000 行</span>
+            <button class="btn">回到最新</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="page" style="margin-top: var(--space-5);">
+      <div class="state-grid" style="grid-template-columns: repeat(4, 1fr);">
+        <div class="state-card">
+          <span class="state-title">内核未就绪</span>
+          <span class="state-reason">启动内核后才有日志。</span>
+        </div>
+        <div class="state-card">
+          <span class="state-title">没有匹配的日志</span>
+          <span class="state-reason">当前级别与搜索条件没有命中。</span>
+          <span class="state-actions"><button class="btn-text">清除筛选</button></span>
+        </div>
+        <div class="state-card">
+          <span class="state-title">已暂停</span>
+          <span class="state-reason">暂停期间的新日志不进入视图。</span>
+          <span class="state-actions"><button class="btn-text">恢复显示</button></span>
+        </div>
+        <div class="state-card">
+          <span class="state-title">还没有日志</span>
+          <span class="state-reason">内核已就绪，尚未产生记录。</span>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============================================================
+       10 规则页（实现：视图 ID 3）· 上下文条 → 分段 → 列表 → 提交条
+       差异：内核实际规则区分未就绪/读取中/失败/无匹配/已就绪但为零，失败保留表格并可重试。
+       ============================================================ -->
+  <section class="demo">
+    <h2 class="demo-label">10 · 规则页 / 上下文条 → 分段 → 列表 → 提交条；内核实际规则的五种结论彼此区分</h2>
+    <div class="window">
+      <aside class="sidebar">
+        <div class="brand">
+          <span class="brand-mark"></span>
+          <span class="brand-name">Mlash</span>
+        </div>
+        <nav class="nav">
+          <button class="nav-item"><span class="icon icon-home"></span>首页</button>
+          <button class="nav-item"><span class="icon icon-list"></span>配置</button>
+          <button class="nav-item"><span class="icon icon-chart"></span>数据</button>
+          <button class="nav-item"><span class="icon icon-settings"></span>设置</button>
+        </nav>
+        <button class="sidebar-status">
+          <span class="dot dot-success"></span>
+          <span>内核运行中 · 系统代理已接管<br>TUN 未启用 · 订阅 A</span>
+        </button>
+      </aside>
+      <div class="content">
+        <div class="page">
+          <div class="tab-row">
+            <div class="context-bar">
+              <span class="context-label">订阅</span>
+              <span class="context-value">订阅 A · 运行中</span>
+            </div>
+            <div class="page-actions">
+              <button class="btn">规则源…</button>
+              <button class="btn">完整规则编辑…</button>
+            </div>
+          </div>
+
+          <div class="tabs" style="margin-top: var(--space-3); align-self: flex-start;">
+            <button class="tab selected">优先规则</button>
+            <button class="tab">内核实际规则</button>
+          </div>
+
+          <div class="toolbar">
+            <button class="select">DOMAIN-SUFFIX<span class="chev-down"></span></button>
+            <div class="input"><span class="placeholder">域名，如 example.com</span></div>
+            <button class="select">直连 · DIRECT<span class="chev-down"></span></button>
+            <button class="btn">添加</button>
+          </div>
+
+          <div class="table">
+            <div class="table-head">
+              <span class="col-name">类型</span>
+              <span class="col-name">匹配内容</span>
+              <span class="col-region">目标</span>
+            </div>
+            <div class="table-row">
+              <span class="col-name mono">DOMAIN-SUFFIX</span>
+              <span class="col-name"><span class="text">ads.example.com</span></span>
+              <span class="col-region">REJECT</span>
+            </div>
+            <div class="table-row">
+              <span class="col-name mono">IP-CIDR</span>
+              <span class="col-name"><span class="text">127.0.0.1/32</span></span>
+              <span class="col-region">DIRECT</span>
+            </div>
+          </div>
+
+          <div class="commit">
+            <span class="commit-echo">有未保存修改</span>
+            <button class="btn">放弃修改</button>
+            <button class="btn btn-primary">保存规则</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="page" style="margin-top: var(--space-5);">
+      <div class="state-grid" style="grid-template-columns: repeat(5, 1fr);">
+        <div class="state-card">
+          <span class="state-title">内核未就绪</span>
+          <span class="state-reason">启动后可读取实际生效的规则。</span>
+        </div>
+        <div class="state-card">
+          <span class="state-title">正在读取内核规则…</span>
+          <span class="skeleton" style="width: 60%; height: 8px;"></span>
+        </div>
+        <div class="state-card">
+          <span class="state-title">读取内核规则失败</span>
+          <span class="state-reason">下方保留上次成功的规则，不冒充当前。</span>
+          <span class="state-actions"><button class="btn-text">重试</button></span>
+        </div>
+        <div class="state-card">
+          <span class="state-title">内核已就绪，当前没有规则</span>
+          <span class="state-reason">订阅本身没有 rules 段。</span>
+        </div>
+        <div class="state-card">
+          <span class="state-title">没有匹配的内核规则</span>
+          <span class="state-reason">检索条件没有命中。</span>
+          <span class="state-actions"><button class="btn-text">清除检索</button></span>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============================================================
+       11 网站测试页（实现：视图 ID 7）· 目标卡片网格 → 结果行
+       卡片最小高度取 --card-min-website（108px）。
+       ============================================================ -->
+  <section class="demo">
+    <h2 class="demo-label">11 · 网站测试页 / 目标卡片网格 → 结果行；卡片上同时给出结论与时间</h2>
+    <div class="window">
+      <aside class="sidebar">
+        <div class="brand">
+          <span class="brand-mark"></span>
+          <span class="brand-name">Mlash</span>
+        </div>
+        <nav class="nav">
+          <button class="nav-item"><span class="icon icon-home"></span>首页</button>
+          <button class="nav-item"><span class="icon icon-list"></span>配置</button>
+          <button class="nav-item"><span class="icon icon-chart"></span>数据</button>
+          <button class="nav-item"><span class="icon icon-settings"></span>设置</button>
+        </nav>
+        <button class="sidebar-status">
+          <span class="dot dot-success"></span>
+          <span>内核运行中 · 系统代理已接管<br>TUN 未启用 · 订阅 A</span>
+        </button>
+      </aside>
+      <div class="content">
+        <div class="page">
+          <div class="tab-row">
+            <div class="tabs">
+              <button class="tab selected">测试</button>
+              <button class="tab">目标</button>
+            </div>
+            <div class="page-actions">
+              <button class="btn">开始测试</button>
+              <button class="btn">取消</button>
+            </div>
+          </div>
+
+          <div class="site-grid">
+            <div class="site-card">
+              <span class="site-name">GitHub</span>
+              <span class="site-result mono">184 ms</span>
+              <span class="site-meta">14:02:41 · 已响应</span>
+            </div>
+            <div class="site-card">
+              <span class="site-name">Google</span>
+              <span class="site-result mono">212 ms</span>
+              <span class="site-meta">14:02:43 · 已响应</span>
+            </div>
+            <div class="site-card">
+              <span class="site-name">YouTube</span>
+              <span class="site-result" style="color: var(--danger);">失败</span>
+              <span class="site-meta">连接被重置</span>
+            </div>
+            <div class="site-card">
+              <span class="site-name">Telegram</span>
+              <span class="site-result" style="color: var(--text-secondary);">未测试</span>
+              <span class="site-meta">—</span>
+            </div>
+          </div>
+
+          <div class="commit">
+            <span class="commit-echo">当前节点：香港 01 · 4 个目标中 3 个已测</span>
+            <button class="btn">导出结果…</button>
+            <button class="btn btn-primary">重新测试</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+</main>
+
+<script>
+  (function () {
+    var body = document.body;
+    var button = document.getElementById('theme-toggle');
+    button.addEventListener('click', function () {
+      var dark = body.getAttribute('data-theme') === 'dark';
+      body.setAttribute('data-theme', dark ? 'light' : 'dark');
+      button.textContent = dark ? '深色' : '浅色';
+    });
+  })();
+</script>
+
+</body>
+</html>

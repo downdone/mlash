@@ -1,4 +1,6 @@
 #include "TrayController.h"
+#include "StatusSentence.h"
+#include "FeedbackSync.h"
 #include "NodePresentation.h"
 #include "WidgetStyle.h"
 #include <QPainter>
@@ -35,11 +37,13 @@ QIcon TrayController::statusIcon(const AppState& state) {
     if (!icons.contains(key)) icons.insert(key, QIcon(":/brand/tray/" + key + ".png"));
     return icons.value(key);
 }
-QString TrayController::statusTooltip(const AppState& state) {
+QString TrayController::statusTooltip(const AppState& state, const Settings& settings, const QString& profileName) {
     const auto key = appearance(state);
     const QString title = key == "idle" ? "小象打盹 · 内核未就绪" : key == "working" ? "小象忙碌 · 正在启停" : key == "attention" ? "小象需要照顾 · 内核或代理入口异常" : key == "checking" ? "小象观察中 · 状态待确认" : key.startsWith("ready-") ? "小象待命 · 系统代理未开启" : key.startsWith("external-") ? "小象旁观 · 系统代理由其他程序管理" : "小象上岗 · Mlash 已接管系统代理";
     const QString mode = !state.ready ? "未就绪" : state.mode == "rule" ? "规则" : state.mode == "global" ? "全局" : state.mode == "direct" ? "直连" : "未知";
-    return "Mlash · " + (state.tunObserved?QString("小象上岗 · TUN 已接管"):title) + "\n内核：" + coreStateText(state.core) + " · 系统代理：" + proxyStateText(state.proxy) + "\n内核模式：" + mode;
+    // 前两行与侧栏状态条逐字相同（分层设计 P1/P2），第三行是托盘独有的内核模式。
+    const auto sentence = statusSentence(statusFacts(state, settings, profileName));
+    return "Mlash · " + title + QChar(10) + sentence.line1 + QChar(10) + sentence.line2 + QChar(10) + "内核模式：" + mode;
 }
 TrayController::TrayController(AppController* controller, QObject* parent)
     : QObject(parent), controller_(controller), tray_(this), available_(QSystemTrayIcon::isSystemTrayAvailable()) {
@@ -49,18 +53,30 @@ TrayController::TrayController(AppController* controller, QObject* parent)
     connect(&groupDwell_,&QTimer::timeout,this,[this] { if (autoTestGroups_ && activeGroupMenu_ && activeGroupMenu_->isVisible()) controller_->testTrayGroup(activeGroupMenu_->property("groupName").toString()); });
     connect(&menu_,&QMenu::aboutToHide,this,[this] { groupDwell_.stop(); activeGroupMenu_=nullptr; controller_->cancelTrayTests(); });
     connect(controller_,&AppController::trayDelaysChanged,this,&TrayController::updateGroupMenu);
-    clickTimer_.setSingleShot(true); connect(&clickTimer_,&QTimer::timeout,this,[this] { controller_->setSystemProxy(controller_->state().proxy!=ProxyState::Owned); });
+    clickTimer_.setSingleShot(true); connect(&clickTimer_,&QTimer::timeout,this,[this] {
+        // 与首页代理总开关同一命令与同一确认规则（5.9 约束）。
+        const auto& state=controller_->state(); const bool on = state.proxy==ProxyState::Owned || state.tunObserved;
+        if (!on && state.proxy==ProxyState::External) {
+            if (QMessageBox::question(nullptr,QStringLiteral("Mlash 接管系统代理"),QStringLiteral("系统已有代理/PAC/自动检测，允许暂时接管并在退出时恢复？"))!=QMessageBox::Yes) return;
+            controller_->setProxyEnabled(true,true); return;
+        }
+        controller_->setProxyEnabled(!on);
+    });
     connect(&tray_, &QSystemTrayIcon::activated, this, [this](QSystemTrayIcon::ActivationReason reason) {
         if (reason==QSystemTrayIcon::DoubleClick) { clickTimer_.stop(); emit showWindow(); return; } if (reason!=QSystemTrayIcon::Trigger) return;
         const auto action=controller_->settings().trayClick;
-        if (action=="proxy-page") emit showPage(2);
+        if (action=="proxy-page") emit showRoute(Route{0, -1, HomeAnchor::Nodes});
         else if (action=="toggle-proxy") clickTimer_.start(QApplication::doubleClickInterval());
         else emit showWindow();
     });
     connect(&menu_, &QMenu::aboutToShow, this, &TrayController::rebuildMenu);
     connect(controller_, &AppController::stateChanged, this, &TrayController::updateState);
-    connect(controller_, &AppController::operationFinished, this, [this](bool ok, const QString& text) {
-        if (!ok && available_ && !controller_->state().exiting) tray_.showMessage("Mlash", text, QSystemTrayIcon::Warning, 5000);
+    connect(controller_, &AppController::operationFinished, this, [this](bool ok, const QString& text, OperationId id) {
+        // 只用气泡承载「没有页面可以显示」的失败（P4.1）：页面级结果已经落在所属页面，
+        // 窗口可见时再弹一次就是同一句话出现两遍。
+        if (ok || !available_ || controller_->state().exiting) return;
+        if (feedbackTarget(id).kind != FeedbackTarget::StatusNotice) return;
+        tray_.showMessage("Mlash", text, QSystemTrayIcon::Warning, 5000);
     });
     updateState(); if (available_) tray_.show();
 }
@@ -72,10 +88,16 @@ bool TrayController::eventFilter(QObject* watched,QEvent* event) {
     if (action && action->objectName()=="trayRetestGroup" && action->isEnabled()) { action->trigger(); return true; }
     return QObject::eventFilter(watched,event);
 }
+QString TrayController::activeProfileName() const {
+    const auto id = controller_->state().activeProfile;
+    if (id.isEmpty()) return {};
+    for (const auto& profile : controller_->profiles()) if (profile.id == id) return profile.name;
+    return {};
+}
 void TrayController::updateState() {
     const auto& state = controller_->state(); const auto key = appearance(state);
     if (key != visualKey_) { visualKey_ = key; tray_.setIcon(statusIcon(state)); }
-    const auto tooltip = statusTooltip(state); if (tray_.toolTip() != tooltip) tray_.setToolTip(tooltip);
+    const auto tooltip = statusTooltip(state, controller_->settings(), activeProfileName()); if (tray_.toolTip() != tooltip) tray_.setToolTip(tooltip);
     if (!state.ready || state.busy || state.exiting) { groupDwell_.stop(); controller_->cancelTrayTests(); }
     updateGroupMenu();
 }
@@ -107,30 +129,49 @@ void TrayController::rebuildMenu() {
     for (const auto& child : previousMenus) if (child) delete child.data();
     menuIcons_.clear();
     const auto state = controller_->state(); const bool enabled = !state.busy && !state.exiting;
+    // 跨对象六组（设计 5.9）：窗口 / 代理 / 运行控制 / 订阅 / 页面 / 退出。
+    // 托盘只承载动作与状态，不镜像完整页面列表；「节点」不再单独占入口（策略组子菜单已承担）。
     auto* status=menu_.addAction("Mlash · "+(state.ready?QString("内核运行中"):"内核"+coreStateText(state.core)));
-    status->setEnabled(false); status->setToolTip(statusTooltip(state)); menu_.setToolTipsVisible(true);
-    for (const auto& p : controller_->profiles()) if (p.id == state.activeProfile) menu_.addAction("当前订阅 · " + p.name)->setEnabled(false);
+    status->setEnabled(false); status->setObjectName("trayStatusHeader"); status->setToolTip(statusTooltip(state, controller_->settings(), activeProfileName())); menu_.setToolTipsVisible(true);
+    connect(menu_.addAction("显示主窗口"), &QAction::triggered, this, &TrayController::showWindow);
     menu_.addSeparator();
+
+    const bool takingOver = state.proxy == ProxyState::Owned || state.tunObserved;
+    auto* master = menu_.addAction(takingOver ? "关闭代理" : "开启代理"); master->setObjectName("trayProxyMaster");
+    master->setEnabled(enabled && !state.activeProfile.isEmpty());
+    connect(master, &QAction::triggered, this, [this] {
+        const auto& s = controller_->state(); const bool on = s.proxy == ProxyState::Owned || s.tunObserved;
+        if (!on && s.proxy == ProxyState::External) {
+            if (QMessageBox::question(nullptr, QStringLiteral("Mlash 接管系统代理"), QStringLiteral("系统已有代理/PAC/自动检测，允许暂时接管并在退出时恢复？")) != QMessageBox::Yes) return;
+            controller_->setProxyEnabled(true, true); return;
+        }
+        controller_->setProxyEnabled(!on);
+    });
     auto* proxy = menu_.addAction("系统代理"); proxy->setCheckable(true); proxy->setChecked(state.proxy == ProxyState::Owned); proxy->setEnabled(enabled && (state.ready || state.proxy == ProxyState::Owned));
     connect(proxy, &QAction::triggered, this, [this](bool checked) {
         bool allow = false;
         if (checked && controller_->state().proxy == ProxyState::External) {
-            allow = QMessageBox::question(nullptr, "Mlash 接管系统代理", "系统已有代理/PAC/自动检测，允许暂时接管并在退出时恢复？") == QMessageBox::Yes;
+            allow = QMessageBox::question(nullptr, QStringLiteral("Mlash 接管系统代理"), QStringLiteral("系统已有代理/PAC/自动检测，允许暂时接管并在退出时恢复？")) == QMessageBox::Yes;
             if (!allow) return;
         }
         controller_->setSystemProxy(checked, allow);
     });
-    auto* tun=menu_.addAction("TUN 虚拟网卡"); tun->setObjectName("trayTunSwitch"); tun->setCheckable(true); tun->setChecked(state.tunObserved); tun->setEnabled(enabled&&!state.readOnly&&!state.activeProfile.isEmpty()); connect(tun,&QAction::triggered,controller_,&AppController::setTunEnabled);
-    auto* mode = menu_.addMenu("代理模式"); mode->setEnabled(enabled && state.ready);
+    auto* tun=menu_.addAction("TUN 虚拟网卡"); tun->setObjectName("trayTunSwitch"); tun->setCheckable(true); tun->setChecked(state.tunObserved); tun->setEnabled(enabled&&!state.readOnly&&!state.activeProfile.isEmpty());
+    connect(tun,&QAction::triggered,this,[this](bool checked) { controller_->setTunEnabled(checked); });
+    menu_.addSeparator();
+
+    const auto routeLabel = state.mode == "global" ? QString("全局") : state.mode == "direct" ? QString("直连") : QString("规则");
+    auto* mode = menu_.addMenu("路由模式 · " + routeLabel); mode->setEnabled(enabled && state.ready);
     for (const auto& entry : QList<QPair<QString, QString>>{{"规则","rule"},{"全局","global"},{"直连","direct"}}) {
         auto* action = mode->addAction(entry.first); action->setCheckable(true); action->setChecked(entry.second == state.mode);
         connect(action, &QAction::triggered, this, [this, entry] { controller_->setMode(entry.second); });
     }
     auto* groups = menu_.addMenu("策略组"); groups->setEnabled(enabled && state.ready);
-    auto* automatic=groups->addAction("展开时测延迟"); automatic->setObjectName("trayAutoTestGroups"); automatic->setCheckable(true); automatic->setChecked(autoTestGroups_); automatic->setToolTip("本次启动有效；停留 300ms 后测速，复用 60 秒结果，关闭菜单停止");
+    auto* automatic=groups->addAction("展开时测延迟"); automatic->setObjectName("trayAutoTestGroups"); automatic->setCheckable(true); automatic->setChecked(autoTestGroups_); automatic->setToolTip("本次启动有效；复用 60 秒结果");
     connect(automatic,&QAction::toggled,this,[this](bool checked) { autoTestGroups_=checked; if (!checked) { groupDwell_.stop(); controller_->cancelTrayTests(); } }); groups->addSeparator();
     const auto& proxies = controller_->proxies();
-    auto names=proxies.keys(); const auto common=controller_->nodePreferences().value("common_groups").toArray(); std::stable_sort(names.begin(),names.end(),[common](const QString& a,const QString& b) { return common.contains(a)&&!common.contains(b); });
+    auto names=proxies.keys(); const auto common=controller_->nodePreferences().value("common_groups").toArray();
+    std::stable_sort(names.begin(),names.end(),[common](const QString& a,const QString& b) { return common.contains(a) && !common.contains(b); });
     for (const auto& name:names) {
         const auto group=proxies.value(name).toObject(); if (!group.value("all").isArray()) continue;
         auto* sub = groups->addMenu((common.contains(name)?QString("★ "):QString())+name); sub->setProperty("groupName",name); sub->setToolTipsVisible(true); sub->installEventFilter(this);
@@ -149,7 +190,11 @@ void TrayController::rebuildMenu() {
         });
         connect(sub,&QMenu::aboutToHide,this,[this,sub] { if (activeGroupMenu_!=sub) return; groupDwell_.stop(); activeGroupMenu_=nullptr; controller_->cancelTrayTests(); });
     }
-    groups->addSeparator(); auto* browse=groups->addAction("打开节点页…"); connect(browse,&QAction::triggered,this,[this] { emit showPage(2); });
+    groups->addSeparator(); auto* browse=groups->addAction("打开节点页…"); connect(browse,&QAction::triggered,this,[this] { emit showRoute(Route{0, -1, HomeAnchor::Nodes}); });
+    auto* core = menu_.addAction(state.core == CoreState::Running ? "停止内核" : "启动内核"); core->setEnabled(enabled);
+    connect(core, &QAction::triggered, this, [this] { if (controller_->state().core == CoreState::Running) controller_->stopCore(); else controller_->startCore(); });
+    menu_.addSeparator();
+
     auto* subscriptions = menu_.addMenu("订阅"); subscriptions->setEnabled(enabled);
     for (const auto& profile : controller_->profiles()) {
         auto* action = subscriptions->addAction(profile.name); action->setCheckable(true); action->setChecked(profile.id == state.activeProfile);
@@ -159,14 +204,12 @@ void TrayController::rebuildMenu() {
     bool canUpdate = false; for (const auto& p : controller_->profiles()) if (p.id == state.activeProfile && p.sourceType == "url") canUpdate = true;
     update->setEnabled(canUpdate);
     connect(update, &QAction::triggered, this, [this] { controller_->updateProfile(controller_->settings().activeProfile); });
-    auto* core = menu_.addAction(state.core == CoreState::Running ? "停止内核" : "启动内核"); core->setEnabled(enabled);
-    connect(core, &QAction::triggered, this, [this] { if (controller_->state().core == CoreState::Running) controller_->stopCore(); else controller_->startCore(); });
-    menu_.addSeparator(); connect(menu_.addAction("打开主窗口"), &QAction::triggered, this, &TrayController::showWindow);
-    connect(menu_.addAction("节点"), &QAction::triggered, this, [this] { emit showPage(2); });
-    connect(menu_.addAction("连接"), &QAction::triggered, this, [this] { emit showPage(4); });
-    auto* pages=menu_.addMenu("更多页面"); pages->setObjectName("trayMorePages");
-    for (const auto& page:QList<QPair<QString,int>>{{"网站测试",7},{"订阅管理",1},{"规则",3},{"日志",5}}) connect(pages->addAction(page.first),&QAction::triggered,this,[this,page] { emit showPage(page.second); });
-    connect(menu_.addAction("设置"), &QAction::triggered, this, [this] { emit showPage(6); });
+    connect(subscriptions->addAction("打开订阅页…"), &QAction::triggered, this, [this] { emit showPage(1); });
+    menu_.addSeparator();
+
+    // 页面只保留连接与设置；网站测试、规则、日志只走侧栏，不在托盘重复。
+    connect(menu_.addAction("连接…"), &QAction::triggered, this, [this] { emit showPage(4); });
+    connect(menu_.addAction("设置…"), &QAction::triggered, this, [this] { emit showPage(6); });
     menu_.addSeparator();
     connect(menu_.addAction("退出 Mlash"), &QAction::triggered, this, &TrayController::exitRequested);
 }

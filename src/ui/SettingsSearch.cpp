@@ -10,6 +10,9 @@
 #include <QRegularExpression>
 #include <QStyle>
 namespace mlash {
+void SettingsSearch::remapAnchor(const QString& name,QWidget* anchor) {
+    for (auto& entry:entries_) if (entry.anchor&&entry.anchor->property("settingSearchName").toString()==name) entry.anchor=anchor;
+}
 SettingsSearch::SettingsSearch(QWidget* catalog,QScrollArea* scroll,QWidget* parent):QWidget(parent),scroll_(scroll) {
     setObjectName("settingsLocator"); auto* layout=new QHBoxLayout(this); layout->setContentsMargins(0,0,0,0); layout->setSpacing(6);
     search_=new QLineEdit; search_->setObjectName("settingsSearch"); search_->setAccessibleName("搜索设置与功能"); search_->setPlaceholderText("搜索设置或功能 · Ctrl+F"); search_->setMaxLength(80); search_->setClearButtonEnabled(true); search_->setMinimumWidth(160); layout->addWidget(search_,1);
@@ -25,7 +28,8 @@ SettingsSearch::SettingsSearch(QWidget* catalog,QScrollArea* scroll,QWidget* par
     markTimer_.setSingleShot(true); markTimer_.setInterval(1800); connect(&markTimer_,&QTimer::timeout,this,&SettingsSearch::clearMark);
     shortcut_=new QShortcut(QKeySequence::Find,parent?parent:this); shortcut_->setEnabled(false); connect(shortcut_,&QShortcut::activated,this,[this] { search_->setFocus(Qt::ShortcutFocusReason); search_->selectAll(); }); refresh();
 }
-void SettingsSearch::addRoute(const QString& title,const QString& terms,int page) { if (entries_.size()>=96) return; entries_.append({title,title+' '+terms,{},page}); refresh(); }
+void SettingsSearch::addRoute(const QString& title,const QString& terms,int page) { if (entries_.size()>=96) return; entries_.append({title,title+' '+terms,{},page,{},false}); refresh(); }
+void SettingsSearch::addRoute(const QString& title,const QString& terms,Route route) { if (entries_.size()>=96) return; entries_.append({title,title+' '+terms,{},-1,route,true}); refresh(); }
 void SettingsSearch::clearMark() { markTimer_.stop(); if (!marked_) return; marked_->setProperty("located",false); marked_->style()->unpolish(marked_); marked_->style()->polish(marked_); marked_->update(); marked_=nullptr; }
 void SettingsSearch::refresh() {
     menu_->hide(); clearMark(); matches_.clear(); current_=-1; const auto words=search_->text().trimmed().split(QRegularExpression("\\s+"),Qt::SkipEmptyParts);
@@ -35,8 +39,12 @@ void SettingsSearch::refresh() {
 void SettingsSearch::locate(int match) {
     if (match<0||match>=matches_.size()) return; clearMark(); current_=match; const auto& entry=entries_[matches_[match]];
     count_->setAccessibleName(QString("%1，共%2项：%3").arg(match+1).arg(matches_.size()).arg(entry.title)); count_->setToolTip(entry.title); menu_->hide();
+    if (entry.hasRoute) { emit routeRequested(entry.route); return; }
     if (entry.page>=0) { emit pageRequested(entry.page); return; }
-    if (!entry.anchor) return; emit anchorRequested(entry.anchor); const QPointer<QWidget> anchor=entry.anchor; QTimer::singleShot(0,this,[this,anchor] { if (anchor) scroll_->ensureWidgetVisible(anchor,8,12); }); marked_=entry.anchor; marked_->setProperty("located",true); marked_->style()->unpolish(marked_); marked_->style()->polish(marked_); marked_->update(); markTimer_.start();
+    if (!entry.anchor) return;
+    const QPointer<QWidget> anchor=entry.anchor; emit anchorRequested(anchor);
+    QTimer::singleShot(0,this,[anchor] { if (!anchor) return; for (auto* parent=anchor->parentWidget();parent;parent=parent->parentWidget()) if (auto* scroll=qobject_cast<QScrollArea*>(parent)) { scroll->ensureWidgetVisible(anchor,8,12); break; } });
+    marked_=anchor; marked_->setProperty("located",true); marked_->style()->unpolish(marked_); marked_->style()->polish(marked_); marked_->update(); markTimer_.start();
 }
 void SettingsSearch::showMatches() {
     menu_->clear(); if (matches_.isEmpty()) { menu_->addAction("没有匹配项")->setEnabled(false); }

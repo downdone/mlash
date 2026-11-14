@@ -165,13 +165,13 @@ private slots:
     }
     void roundTripAndNoSystemIntent() {
         QTemporaryDir data, target; auto platform = std::make_shared<BackupPlatform>(); ProfileStore source(data.path(),platform), destination(target.path(),platform); QVERIFY(source.load().result.ok); QVERIFY(destination.load().result.ok);
-        const auto profile = seed(source); QVERIFY(isId(profile.id)); Settings original; original.homeSummaryMask=5; original.mixedPort = 19001; original.desiredProxy = true; original.autoStart = true; QVERIFY(source.save(original,{profile}).ok);
+        const auto profile = seed(source); QVERIFY(isId(profile.id)); Settings original; original.homeProbeSeconds=60; original.mixedPort = 19001; original.desiredProxy = true; original.autoStart = true; QVERIFY(source.save(original,{profile}).ok);
         const auto archive = data.path()+"/snapshot.mlashbackup"; auto result = BackupArchive::create(source,original,{profile},archive,password); QVERIFY2(result.ok,qUtf8Printable(result.error)); QByteArray bytes; QVERIFY(readFile(archive,bytes).ok); QVERIFY(!bytes.contains("node-private-secret")); QVERIFY(!bytes.contains("subscription-private-token"));
         const auto preview = BackupArchive::inspect(archive,password); QVERIFY(preview.ok); QCOMPARE(preview.data.value("profiles").toArray().size(),1); QVERIFY(!QJsonDocument(preview.data).toJson().contains("private-token"));
         Settings current; current.autoStart = false; current.corePath = QString(MLASH_SOURCE_DIR)+"/cores/mihomo.exe"; current.hotkeys={{"show-proxy","Ctrl+Alt+P"}}; current.previousCorePath="local-machine-previous.exe";
         auto restored = BackupArchive::prepareRestore(destination,platform,current,{},archive,password,preview.data.value("sha256").toString(),true); QVERIFY2(restored.snapshot.result.ok,qUtf8Printable(restored.snapshot.result.error)); QCOMPARE(restored.snapshot.profiles.size(),1); const auto copy = restored.snapshot.profiles[0];
         QVERIFY(copy.id != profile.id); QVERIFY(copy.candidate != profile.candidate); QVERIFY(copy.active != profile.active); QCOMPARE(copy.source,profile.source); QCOMPARE(copy.customRules,profile.customRules); QCOMPARE(copy.proxyEdits,profile.proxyEdits); QVERIFY(!copy.autoUpdate);
-        QCOMPARE(restored.snapshot.settings.homeSummaryMask,5); QCOMPARE(restored.snapshot.settings.mixedPort,19001); QVERIFY(!restored.snapshot.settings.startCore); QVERIFY(!restored.snapshot.settings.desiredProxy); QVERIFY(!restored.snapshot.settings.restoreProxy); QVERIFY(!restored.snapshot.settings.autoStart); QVERIFY(restored.snapshot.settings.activeProfile.isEmpty()); QCOMPARE(restored.snapshot.settings.corePath,current.corePath);
+        QCOMPARE(restored.snapshot.settings.homeProbeSeconds,60); QCOMPARE(restored.snapshot.settings.mixedPort,19001); QVERIFY(!restored.snapshot.settings.startCore); QVERIFY(!restored.snapshot.settings.desiredProxy); QVERIFY(!restored.snapshot.settings.restoreProxy); QVERIFY(!restored.snapshot.settings.autoStart); QVERIFY(restored.snapshot.settings.activeProfile.isEmpty()); QCOMPARE(restored.snapshot.settings.corePath,current.corePath);
         QCOMPARE(restored.snapshot.settings.hotkeys,current.hotkeys);
         QCOMPARE(restored.snapshot.settings.previousCorePath,current.previousCorePath);
         QVERIFY(destination.save(restored.snapshot.settings,restored.snapshot.profiles).ok); QVERIFY(destination.load().result.ok);
@@ -206,6 +206,27 @@ private slots:
         platform->failSealAt = platform->seals+2; controller.restoreBackup(path,password,preview.data.value("sha256").toString(),true); QTRY_COMPARE_WITH_TIMEOUT(finished.size(),1,15000); QVERIFY(!finished[0][0].toBool()); QVERIFY(controller.profiles().isEmpty()); QByteArray after; QVERIFY(readFile(target.path()+"/state.dat",after).ok); QCOMPARE(after,before); QVERIFY(QDir(target.path()+"/profiles").entryList(QDir::Dirs|QDir::NoDotAndDotDot).isEmpty());
         platform->failSealAt = -1; QPointer<BackupDialog> dialog = new BackupDialog(&controller,true); dialog->show(); dialog->findChild<QLineEdit*>("backupPath")->setText(path); dialog->findChild<QLineEdit*>("backupPassword")->setText(password); QVERIFY(!dialog->findChild<QPushButton*>("submitBackup")->isEnabled()); dialog->findChild<QPushButton*>("previewBackup")->click(); QTRY_VERIFY_WITH_TIMEOUT(dialog->findChild<QPushButton*>("submitBackup")->isEnabled(),15000); QVERIFY(dialog->findChild<QListWidget*>("backupSelection")->item(0)->text().contains(profile.name)); dialog->findChild<QLineEdit*>("backupPassword")->setText("changed password"); QVERIFY(!dialog->findChild<QPushButton*>("submitBackup")->isEnabled());
         dialog->findChild<QLineEdit*>("backupPassword")->setText(password); dialog->findChild<QPushButton*>("previewBackup")->click(); QTRY_VERIFY_WITH_TIMEOUT(dialog->findChild<QPushButton*>("submitBackup")->isEnabled(),15000); dialog->findChild<QPushButton*>("submitBackup")->click(); QTRY_VERIFY_WITH_TIMEOUT(dialog.isNull(),15000); QCOMPARE(controller.profiles().size(),1); QVERIFY(!controller.state().ready); QVERIFY(!controller.settings().desiredProxy); QCOMPARE(platform->writes,0);
+    }
+    void closingTheWindowDoesNotAbortTheTask() {
+        // 长流程契约（分层设计 4「生命周期契约」）：关闭窗口只隐藏，不中止已开始的任务。
+        QTemporaryDir data, target; auto platform = std::make_shared<BackupPlatform>();
+        ProfileStore source(data.path(), platform), destination(target.path(), platform);
+        QVERIFY(source.load().result.ok); QVERIFY(destination.load().result.ok);
+        AppController controller(target.path(), true, nullptr, platform);
+        QSignalSpy initialized(&controller, &AppController::initialized), finished(&controller, &AppController::operationFinished);
+        controller.initialize(); QTRY_COMPARE(initialized.size(), 1);
+        QPointer<BackupDialog> dialog = new BackupDialog(&controller, false);
+        dialog->show(); dialog->findChild<QLineEdit*>("backupPath")->setText(target.path() + "/closing.mlashbackup");
+        dialog->findChild<QLineEdit*>("backupPassword")->setText("fixture-password");
+        dialog->findChild<QLineEdit*>("backupPasswordConfirm")->setText("fixture-password");
+        QTRY_VERIFY(dialog->findChild<QPushButton*>("submitBackup")->isEnabled());
+        dialog->findChild<QPushButton*>("submitBackup")->click();
+        QVERIFY(controller.state().busy);
+        dialog->close();
+        QTRY_VERIFY(dialog.isNull());                 // 关窗销毁窗口
+        QTRY_COMPARE_WITH_TIMEOUT(finished.size(), 1, 15000);
+        QVERIFY(finished.last()[0].toBool());          // 任务照常完成，未被中止
+        QVERIFY(QFile::exists(target.path() + "/closing.mlashbackup"));
     }
 };
 QTEST_MAIN(BackupTests)

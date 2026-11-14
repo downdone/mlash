@@ -39,7 +39,7 @@ private:
 ImportDialog::ImportDialog(QWidget* parent) : QDialog(parent) {
     setWindowTitle("添加订阅 · Mlash"); setObjectName("importDialog"); resize(520, 460); setMinimumSize(420,340);
     auto* outer = new QVBoxLayout(this); outer->setContentsMargins(16,16,16,14); outer->setSpacing(10);
-    auto* title = new QLabel("添加订阅"); title->setObjectName("pageTitle"); outer->addWidget(title);
+    auto* title = new QLabel("添加订阅"); title->setObjectName("dialogTitle"); outer->addWidget(title);
     auto* scroll=new QScrollArea; scroll->setObjectName("importScroll"); scroll->setWidgetResizable(true); scroll->setFrameShape(QFrame::NoFrame); auto* body=new QWidget; auto* layout=new QVBoxLayout(body); layout->setContentsMargins(0,0,0,0); layout->setSpacing(10); scroll->setWidget(body); outer->addWidget(scroll,1);
     tabs_ = new ImportSourceTabs; tabs_->setObjectName("importTabs");
     auto* urlPage = new QWidget; urlPage->setObjectName("importSource"); urlPage->setAttribute(Qt::WA_StyledBackground, true); auto* urlForm = new QVBoxLayout(urlPage);

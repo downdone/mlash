@@ -63,6 +63,7 @@ int main(int argc, char** argv) {
     auto showWindow = [&] { gui.show(); };
     QObject::connect(&tray, &mlash::TrayController::showWindow, &app, showWindow);
     QObject::connect(&tray, &mlash::TrayController::showPage, &app, [&](int page) { gui.show(page); });
+    QObject::connect(&tray, &mlash::TrayController::showRoute, &app, [&](mlash::Route route) { gui.show(route); });
     QObject::connect(&tray, &mlash::TrayController::exitRequested, &app, [&] { gui.requestExit(); });
     QObject::connect(&controller,&mlash::AppController::openPageRequested,&app,[&](int page) { gui.show(page); });
     QObject::connect(&controller, &mlash::AppController::exitReady, &app, &QApplication::quit);
@@ -80,8 +81,16 @@ int main(int argc, char** argv) {
                 mlash::runTask(&controller, [path, bytes] { return mlash::writeAtomic(path, bytes); }, [&controller](mlash::Result r) { if (!r.ok) controller.diagnostics()->append("error", r.error); });
             }
             const auto output = parser.value("screenshots-dir"); if (!output.isEmpty()) QDir().mkpath(output);
+            // 每次切页之间留 200ms：setPage() 只换栈索引，新页面的子控件几何要等
+            // 下一次布局请求处理完才更新，紧跟着抓图会拿到「新页面、旧几何」。
             for (int page = 0; page < 8; ++page) QTimer::singleShot(250 + page * 200, &app, [&, page, output] {
-                if (auto* window = gui.window()) { window->setPage(page); if (!output.isEmpty()) window->grab().save(output + QString("/page-%1.png").arg(page)); }
+                if (auto* window = gui.window()) {
+                    window->setPage(page);
+                    // Let the newly visible scroll area complete its resize/layout pass.
+                    if (!output.isEmpty()) QTimer::singleShot(50, &app, [&, page, output] {
+                        if (auto* readyWindow=gui.window()) readyWindow->grab().save(output + QString("/page-%1.png").arg(page));
+                    });
+                }
             });
             QTimer::singleShot(2000, &controller, &mlash::AppController::requestExit);
         }

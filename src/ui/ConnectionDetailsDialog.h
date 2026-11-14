@@ -23,5 +23,6 @@ private:
     QPushButton *locate_,*rule_,*disconnect_;
     QList<QToolButton*> copies_;
     bool disconnecting_=false;
+    quint64 generation_=0;
 };
 }

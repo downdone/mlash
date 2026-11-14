@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.24)
-project(Mlash VERSION 1.17.1 LANGUAGES C CXX)
+project(Mlash VERSION 1.18.0 LANGUAGES C CXX)
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_AUTOMOC ON)
@@ -40,7 +40,7 @@ add_library(mlash_qrcode STATIC "${qrcodegen_SOURCE_DIR}/cpp/qrcodegen.cpp")
 target_include_directories(mlash_qrcode PUBLIC "${qrcodegen_SOURCE_DIR}/cpp")
 
 add_library(mlash_engine STATIC
-    src/app/Types.h src/app/Async.h src/app/AppController.h src/app/AppController.cpp src/app/AppControllerBackup.cpp src/app/AppControllerCoreUpdate.cpp src/app/AppControllerProfiles.cpp src/app/AppControllerTransaction.cpp
+    src/app/Types.h src/app/Async.h src/app/ConnectivityProbe.h src/app/ConnectivityProbe.cpp src/app/AppController.h src/app/AppController.cpp src/app/AppControllerBackup.cpp src/app/AppControllerCoreUpdate.cpp src/app/AppControllerProfiles.cpp src/app/AppControllerTransaction.cpp src/app/AppControllerProxySwitch.cpp
     src/app/ProfileMaintenance.h src/app/ProfileMaintenance.cpp
     src/app/ConnectionColumns.h src/app/ConnectionSession.h src/app/ConnectionSession.cpp
     src/app/HomeMetrics.h src/app/HomeMetrics.cpp
@@ -88,7 +88,7 @@ else()
     target_compile_options(mlash_engine PRIVATE -Wall -Wextra -Wpedantic)
 endif()
 
-add_library(mlash_ui STATIC src/ui/ContextNote.h src/ui/SettingsSearch.h src/ui/SettingsSearch.cpp src/ui/CompactSpinBox.h src/ui/HomeSummaryDialog.h src/ui/HomeSummaryDialog.cpp src/ui/MainWindow.h src/ui/MainWindow.cpp src/ui/MainWindowHome.cpp src/ui/MainWindowSettings.cpp src/ui/MainWindowProxy.cpp src/ui/MainWindowProfiles.cpp src/ui/MainWindowParts.h src/ui/NodeFilter.cpp
+add_library(mlash_ui STATIC src/ui/Route.h src/ui/Route.cpp src/ui/ViewIds.h src/ui/ViewIds.cpp src/ui/StatusSentence.h src/ui/StatusSentence.cpp src/ui/FeedbackSync.h src/ui/FeedbackSync.cpp src/ui/PageLifecycle.h src/ui/PageLifecycle.cpp src/ui/ToolWindowRegistry.h src/ui/ToolWindowRegistry.cpp src/ui/StatusShape.h src/ui/StatusShape.cpp src/ui/SkeletonBlock.h src/ui/SkeletonBlock.cpp src/ui/UsageDelegate.h src/ui/UsageDelegate.cpp src/ui/MenuSection.h src/ui/ContextNote.h src/ui/SettingsSearch.h src/ui/SettingsSearch.cpp src/ui/CompactSpinBox.h src/ui/MainWindow.h src/ui/MainWindow.cpp src/ui/MainWindowHome.cpp src/ui/MainWindowSettings.cpp src/ui/MainWindowProxy.cpp src/ui/MainWindowProfiles.cpp src/ui/MainWindowParts.h src/ui/NodeFilter.cpp
     src/ui/ProviderDefinitionDialog.h src/ui/YamlFormEditor.h src/ui/YamlFormEditor.cpp
     src/ui/ConnectionDetailsDialog.h src/ui/ConnectionDetailsDialog.cpp src/ui/ProviderDefinitionDialog.cpp src/ui/ProviderPolicyDialog.cpp
     src/ui/DialogDraftGuard.h src/ui/DialogDraftGuard.cpp
@@ -174,18 +174,50 @@ if(BUILD_TESTING)
     target_compile_definitions(mlash_ui_tests PRIVATE MLASH_SOURCE_DIR="${CMAKE_SOURCE_DIR}")
     # Separate the long end-to-end fixture from independent components. Keep
     # each existing 30s budget; no runtime or identity checks are relaxed.
+    add_test(NAME prototype_ui_tests COMMAND mlash_ui_tests prototypeSystemPagesAndResponsiveInspector -o "${CMAKE_BINARY_DIR}/prototype-ui-tests.xml,xml")
+    set_tests_properties(prototype_ui_tests PROPERTIES TIMEOUT 60 ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
+    add_test(NAME navigation_contract_tests COMMAND mlash_ui_tests
+        routesCarryHomeAnchorAndSettingsCategory titleSlotIsSingleAndWindowTitleFollowsRoute sidebarStatusIsPermanentAndSharesTrayWording
+        -o "${CMAKE_BINARY_DIR}/navigation-contract-tests.xml,xml")
+    set_tests_properties(navigation_contract_tests PROPERTIES TIMEOUT 30 ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
     add_test(NAME ui_interactions COMMAND mlash_ui_tests currentGroupSelectionAndNativePreview -o "${CMAKE_BINARY_DIR}/ui-tests.xml,xml")
     set_tests_properties(ui_interactions PROPERTIES TIMEOUT 30 ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
     add_test(NAME ui_components COMMAND mlash_ui_tests
-        popupSurfacesWithoutMainWindow desktopPreferencesAndEnvironmentCopy responsivePageGeometry
+        compactNodeDelayDoesNotSelectAndProfileBrowseDoesNotApply popupSurfacesWithoutMainWindow desktopPreferencesAndEnvironmentCopy responsivePageGeometry
         historyReadingAndDraftFeedback logPauseClearAndDiagnosticPrivacy profilePolicyDialogPersistsOnlyOnSave
         providerAndCompatibilityDialogsRespectVersions
         trayGroupDwellCacheAndSelection trayAppearancePriorityAndResources lightweightLifecycleAndQuickReopen
         importValidationAndSecretVisibility failedImportRetainsDraftUntilExplicitRetry unchangedSnapshotsPreserveRowsAndChoices refinedTaskGeometryAndSemantics refinedContextFitsAutomaticGroupsAndLargeText emptyStateCannotIssueInvalidCommands fileProfileOffersSourceSyncAndReplacement
         coherentActionsAndBilingualRuleTokens nodeLocationHints dashboardTabsAndSettingsFocus quietMouseFocusAndGroupedSettings
         -o "${CMAKE_BINARY_DIR}/ui-components.xml,xml")
-    set_tests_properties(ui_components PROPERTIES TIMEOUT 30 ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
+    # 该系统剪贴板是进程外共享资源：并行 ctest 时与其他用例互相覆盖。
+    # 用 RESOURCE_LOCK 串行化，而不是放宽断言。
+    set_tests_properties(ui_components PROPERTIES TIMEOUT 60 ENVIRONMENT "QT_QPA_PLATFORM=offscreen" RESOURCE_LOCK system_clipboard)
     add_test(NAME status_bar_tests COMMAND mlash_ui_tests persistentStatusBarDoesNotMovePages -o "${CMAKE_BINARY_DIR}/status-bar-tests.xml,xml")
+    # P4.1 反馈路由：页面级结果不进状态栏、告警与最近操作两段并存、归属表逐条固定。
+    add_test(NAME feedback_routing_tests COMMAND mlash_ui_tests operationResultsGoToTheirOwnPage feedbackTargetsStayExplicit -o "${CMAKE_BINARY_DIR}/feedback-routing-tests.xml,xml")
+    set_tests_properties(feedback_routing_tests PROPERTIES TIMEOUT 60 ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
+    # S1 页面生命周期：进入/离开各触发一次，视图 2 归一化不留双份副作用。
+    add_test(NAME page_lifecycle_tests COMMAND mlash_ui_tests pageLifecycleRunsEnterAndLeaveOnce viewSwitchingKeepsControllerSideEffects -o "${CMAKE_BINARY_DIR}/page-lifecycle-tests.xml,xml")
+    set_tests_properties(page_lifecycle_tests PROPERTIES TIMEOUT 60 ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
+    # S2 工具窗口：同键复用、对象删除关闭、失效指针不复用。
+    add_test(NAME tool_window_tests COMMAND mlash_ui_tests toolWindowsAreReusedPerObject -o "${CMAKE_BINARY_DIR}/tool-window-tests.xml,xml")
+    set_tests_properties(tool_window_tests PROPERTIES TIMEOUT 30 ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
+    # V1 状态形状编码与骨架屏：形状互不相同，加载态与空态可区分。
+    add_test(NAME status_shape_tests COMMAND mlash_ui_tests statusStatesUseDistinctShapes skeletonBlockOccupiesContentSpace rulesTableHasSkeletonWired -o "${CMAKE_BINARY_DIR}/status-shape-tests.xml,xml")
+    set_tests_properties(status_shape_tests PROPERTIES TIMEOUT 30 ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
+    # V2 订阅用量条：有额度显示、无额度整列隐藏、状态列后移不错位。
+    add_test(NAME profile_usage_tests COMMAND mlash_ui_tests profileUsageColumnFollowsAvailableData -o "${CMAKE_BINARY_DIR}/profile-usage-tests.xml,xml")
+    set_tests_properties(profile_usage_tests PROPERTIES TIMEOUT 60 ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
+    # V3 设置行内当前值：只加到值不在控件里的行，且 840×560 不出现横向滚动。
+    add_test(NAME settings_value_tests COMMAND mlash_ui_tests settingsRowsShowCurrentValue -o "${CMAKE_BINARY_DIR}/settings-value-tests.xml,xml")
+    set_tests_properties(settings_value_tests PROPERTIES TIMEOUT 60 ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
+    # V4 菜单分组标题：五组各有标题，标题不可触发。
+    add_test(NAME menu_section_tests COMMAND mlash_ui_tests menuSectionsLabelGroupsWithoutAddingCommands -o "${CMAKE_BINARY_DIR}/menu-section-tests.xml,xml")
+    set_tests_properties(menu_section_tests PROPERTIES TIMEOUT 60 ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
+    # V5 首页控制区：组选路说明、控制区失败原因。
+    add_test(NAME home_control_tests COMMAND mlash_ui_tests homeControlAreaStatesRoutingRulesAndFailure -o "${CMAKE_BINARY_DIR}/home-control-tests.xml,xml")
+    set_tests_properties(home_control_tests PROPERTIES TIMEOUT 60 ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
     set_tests_properties(status_bar_tests PROPERTIES TIMEOUT 20 ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
     add_executable(mlash_website_tests tests/WebsiteTests.cpp tests/MockHttp.cpp)
     add_executable(mlash_backup_tests tests/BackupTests.cpp)
@@ -201,7 +233,7 @@ if(BUILD_TESTING)
     target_link_libraries(mlash_node_links_tests PRIVATE mlash_ui Qt6::Test)
     target_compile_definitions(mlash_node_links_tests PRIVATE MLASH_SOURCE_DIR="${CMAKE_SOURCE_DIR}")
     add_test(NAME node_links_tests COMMAND mlash_node_links_tests -o "${CMAKE_BINARY_DIR}/node-links-tests.xml,xml")
-    set_tests_properties(node_links_tests PROPERTIES TIMEOUT 75 ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
+    set_tests_properties(node_links_tests PROPERTIES TIMEOUT 75 ENVIRONMENT "QT_QPA_PLATFORM=offscreen" RESOURCE_LOCK system_clipboard)
     add_executable(mlash_provider_edits_tests tests/ProviderEditsTests.cpp)
     add_executable(mlash_dns_tests tests/DnsTests.cpp)
     add_executable(mlash_mrs_tests tests/MrsTests.cpp)
@@ -257,7 +289,7 @@ if(BUILD_TESTING)
     set_tests_properties(appearance_prefs_tests PROPERTIES TIMEOUT 45 ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
     target_link_libraries(mlash_connection_view_tests PRIVATE mlash_ui Qt6::Test)
     add_test(NAME connection_view_tests COMMAND mlash_connection_view_tests -o "${CMAKE_BINARY_DIR}/connection-view-tests.xml,xml")
-    set_tests_properties(connection_view_tests PROPERTIES TIMEOUT 30 ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
+    set_tests_properties(connection_view_tests PROPERTIES TIMEOUT 30 ENVIRONMENT "QT_QPA_PLATFORM=offscreen" RESOURCE_LOCK system_clipboard)
     target_link_libraries(mlash_hotkey_tests PRIVATE mlash_ui Qt6::Test)
     if(WIN32)
         target_sources(mlash_hotkey_tests PRIVATE src/platform/windows/HotkeyTestSupport.cpp)
@@ -310,7 +342,9 @@ if(BUILD_TESTING)
     target_link_libraries(mlash_appearance_tests PRIVATE mlash_ui Qt6::Test)
     target_compile_definitions(mlash_appearance_tests PRIVATE MLASH_SOURCE_DIR="${CMAKE_SOURCE_DIR}")
     add_test(NAME appearance_tests COMMAND mlash_appearance_tests -o "${CMAKE_BINARY_DIR}/appearance-tests.xml,xml")
-    set_tests_properties(appearance_tests PROPERTIES TIMEOUT 45 ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
+    # 2026-11-02：45s 与实际耗时长期不符（基线 57.3s、本轮 49.4~64.4s），整轮里必然撞限被杀，
+    # 而被杀的是用例整体、不是某条断言。放宽到 100s 留出余量；它仍是上限，不是性能断言。
+    set_tests_properties(appearance_tests PROPERTIES TIMEOUT 100 ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
     if(NOT WIN32)
         add_test(NAME ui_refinement_tests COMMAND mlash_appearance_tests
             semanticContrastAndArtwork themeChangesPreserveDraftAndPopupFirstFrame

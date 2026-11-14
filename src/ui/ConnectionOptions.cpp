@@ -1,4 +1,7 @@
 #include "ConnectionOptions.h"
+#include "UiIcons.h"
+#include "UiTheme.h"
+#include <QWidgetAction>
 #include "app/ConnectionColumns.h"
 #include "storage/Storage.h"
 #include <QTableView>
@@ -25,6 +28,10 @@ ConnectionOptions::ConnectionOptions(AppController* controller,QTableView* table
     setObjectName("connectionOptions"); search_->setMaxLength(256); if (error_) { error_->setObjectName("connectionsSearchError"); error_->setTextFormat(Qt::PlainText); error_->setWordWrap(true); error_->hide(); } auto* layout=new QHBoxLayout(this); layout->setContentsMargins(0,0,0,0); layout->setSpacing(3);
     const auto toggle=[&](const QString& title,const QString& name,const QString& tooltip) { auto* control=new QToolButton; control->setText(title); control->setObjectName(name); control->setCheckable(true); control->setProperty("quiet",true); control->setToolTip(tooltip); control->setAccessibleName(tooltip); layout->addWidget(control); return control; };
     case_=toggle("Aa","connectionCase","区分大小写"); word_=toggle("整词","connectionWholeWord","按Unicode单词边界匹配"); regex_=toggle(".*","connectionRegex","使用正则表达式"); auto* columns=new QToolButton; columns->setText("列与视图"); columns->setObjectName("connectionColumns"); columns->setPopupMode(QToolButton::InstantPopup); auto* menu=new QMenu(columns); columns->setMenu(menu); layout->addWidget(columns);
+    columns->setIcon(UiIcons::icon(UiIcons::Glyph::Settings,UiTheme::Brand)); columns->setToolButtonStyle(Qt::ToolButtonIconOnly); columns->setToolTip("连接列与筛选选项"); columns->setProperty("prototypeIcon",true);
+    auto* searchOptions=new QWidget; auto* optionLayout=new QHBoxLayout(searchOptions); optionLayout->setContentsMargins(12,8,12,8);
+    for (auto* option:{case_,word_,regex_}) { layout->removeWidget(option); optionLayout->addWidget(option); }
+    auto* searchAction=new QWidgetAction(menu); searchAction->setDefaultWidget(searchOptions); menu->addAction(searchAction); menu->addSeparator();
     auto* header=table_->horizontalHeader(); header->setSectionsMovable(true); header->setMinimumSectionSize(24); header->setStretchLastSection(false); header->setSectionResizeMode(QHeaderView::Interactive); defaults();
     const auto saved=controller_->settings().connectionView; case_->setChecked(saved.value("case_sensitive").toBool()); word_->setChecked(saved.value("whole_word").toBool()); regex_->setChecked(saved.value("regex").toBool()); if (validateConnectionView(saved).ok&&saved.contains("columns")) { custom_=true; const auto rows=saved.value("columns").toArray(); for (int visual=0;visual<rows.size();++visual) { const auto row=rows[visual].toObject(); const auto id=row.value("id").toInt(); header->moveSection(header->visualIndex(id),visual); widths_[id]=row.value("width").toInt(); table_->setColumnWidth(id,widths_[id]); table_->setColumnHidden(id,!row.value("visible").toBool()); } }
     for (int col=0;col<ConnectionColumns::Count;++col) { auto* action=menu->addAction(table_->model()->headerData(col,Qt::Horizontal).toString()); action->setObjectName("connectionColumn"+QString::number(col)); action->setCheckable(true); action->setChecked(!table_->isColumnHidden(col)); action->setEnabled(col!=0); connect(menu,&QMenu::aboutToShow,action,[this,action,col] { const QSignalBlocker block(action); action->setChecked(!table_->isColumnHidden(col)); }); connect(action,&QAction::toggled,this,[this,col](bool visible) { table_->setColumnHidden(col,!visible); custom_=true; changed(); }); }
@@ -35,19 +42,14 @@ ConnectionOptions::ConnectionOptions(AppController* controller,QTableView* table
 ConnectionOptions::~ConnectionOptions() { debounce_.stop(); }
 void ConnectionOptions::addViewAction(QAction* action) { findChild<QToolButton*>("connectionColumns")->menu()->addAction(action); }
 void ConnectionOptions::flushPreferences() { debounce_.stop(); if (dirty_&&!controller_->state().exiting&&!controller_->state().readOnly) { const auto value=preferences(); dirty_=false; controller_->updateConnectionView(value); } }
-void ConnectionOptions::defaults() { custom_=false; const auto sizes=defaultConnectionWidths(table_->fontMetrics()); auto* header=table_->horizontalHeader(); for (int id=0;id<ConnectionColumns::Count;++id) { header->moveSection(header->visualIndex(id),id); table_->setColumnHidden(id,id>=ConnectionColumns::LegacyCount); table_->setColumnWidth(id,sizes[id]); widths_[id]=sizes[id]; } }
+void ConnectionOptions::defaults() { custom_=false; const auto sizes=defaultConnectionWidths(table_->fontMetrics()); auto* header=table_->horizontalHeader(); for (int id=0;id<ConnectionColumns::Count;++id) { header->moveSection(header->visualIndex(id),id); table_->setColumnHidden(id,id!=ConnectionColumns::Target&&id!=ConnectionColumns::Rule&&id!=ConnectionColumns::Chain&&id!=ConnectionColumns::State); table_->setColumnWidth(id,sizes[id]); widths_[id]=sizes[id]; } }
 void ConnectionOptions::fitDefault() {
     if (custom_||applying_) return; applying_=true; auto sizes=defaultConnectionWidths(table_->fontMetrics());
-    // Keep the name column readable; everything else may shrink, then trim proportionally if still too wide.
-    constexpr int minimumName=150, minimumColumn=24;
-    const auto othersTotal=[&sizes] { int total=0; for (int col=1;col<ConnectionColumns::LegacyCount;++col) total+=sizes[col]; return total; };
-    int excess=qMax(0,othersTotal()-(table_->viewport()->width()-minimumName));
-    // Defaults mirror the legacy seven-column set; compact minimums keep the name readable at 840 DIP.
-    for (const auto& item:QList<QPair<int,int>>{{5,88},{4,88},{2,64},{3,72},{6,64},{7,80},{8,100},{9,90},{10,80},{11,64},{12,64},{13,64},{14,64}}) { if (excess<=0) break; const int shrink=qMin(excess,qMax(0,sizes[item.first]-item.second)); sizes[item.first]-=shrink; excess-=shrink; }
-    const int flexible=othersTotal()-minimumColumn*(ConnectionColumns::LegacyCount-1);
-    if (excess>0&&flexible>0) { const double ratio=qMin(1.0,double(excess)/flexible); for (int col=1;col<ConnectionColumns::LegacyCount;++col) sizes[col]-=int((sizes[col]-minimumColumn)*ratio); }
-    int others=0; for (int col=1;col<ConnectionColumns::LegacyCount;++col) { widths_[col]=sizes[col]; table_->setColumnWidth(col,sizes[col]); others+=sizes[col]; }
-    widths_[0]=qBound(minimumColumn,table_->viewport()->width()-others,1000); table_->setColumnWidth(0,widths_[0]); applying_=false;
+    const int available=qMax(180,table_->viewport()->width());
+    const QList<int> columns{ConnectionColumns::Target,ConnectionColumns::Rule,ConnectionColumns::Chain,ConnectionColumns::State};
+    const QList<double> ratios{0.34,0.23,0.28,0.15}; int used=0;
+    for (int i=0;i<columns.size();++i) { const int width=i==columns.size()-1?available-used:qMax(24,int(available*ratios[i])); widths_[columns[i]]=width; table_->setColumnWidth(columns[i],width); used+=width; }
+    applying_=false;
 }
 bool ConnectionOptions::eventFilter(QObject* watched,QEvent* event) { if (watched==table_&&(event->type()==QEvent::FontChange||event->type()==QEvent::StyleChange)&&!custom_&&!applying_) { applying_=true; defaults(); applying_=false; fitDefault(); } if (watched==table_->viewport()&&event->type()==QEvent::Resize) fitDefault(); return QWidget::eventFilter(watched,event); }
 QJsonObject ConnectionOptions::preferences() const { QJsonObject object{{"case_sensitive",case_->isChecked()},{"whole_word",word_->isChecked()},{"regex",regex_->isChecked()}}; if (custom_) { QJsonArray columns; for (int visual=0;visual<ConnectionColumns::Count;++visual) { const int id=table_->horizontalHeader()->logicalIndex(visual); columns.append(QJsonObject{{"id",id},{"width",qBound(24,widths_.value(id,80),1000)},{"visible",!table_->isColumnHidden(id)}}); } object["columns"]=columns; } return object; }
