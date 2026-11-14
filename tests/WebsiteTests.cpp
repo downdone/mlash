@@ -17,6 +17,7 @@
 #include <QComboBox>
 #include <QFrame>
 #include <QLabel>
+#include <QMessageBox>
 #include <QListWidget>
 #include <QPushButton>
 #include <QScrollArea>
@@ -56,7 +57,7 @@ private slots:
     void customTargetEditorPersistenceAndReset() {
         QTemporaryDir data; ProfileStore store(data.path(),createPlatformServices()); QVERIFY(store.load().result.ok); Settings settings; settings.startCore=false; QVERIFY(store.save(settings,{}).ok);
         AppController controller(data.path(),true); QSignalSpy initialized(&controller,&AppController::initialized), finished(&controller,&AppController::operationFinished); controller.initialize(); QTRY_COMPARE(initialized.size(),1); MainWindow window(&controller); window.show(); window.setPage(7);
-        auto* edit = window.findChild<QPushButton*>("editWebsiteTargets"); QVERIFY(edit); edit->click(); QPointer<WebsiteTargetsDialog> dialog = window.findChild<WebsiteTargetsDialog*>(); QVERIFY(dialog); auto* table = dialog->findChild<QTableWidget*>("websiteTargetsTable"); QCOMPARE(table->rowCount(),12); table->item(0,0)->setText("Cancelled"); dialog->reject(); QTRY_VERIFY(dialog.isNull()); QVERIFY(controller.settings().websiteTargets.isEmpty()); QCOMPARE(finished.size(),0);
+        auto* edit = window.findChild<QPushButton*>("editWebsiteTargets"); QVERIFY(edit); edit->click(); QPointer<WebsiteTargetsDialog> dialog = window.findChild<WebsiteTargetsDialog*>(); QVERIFY(dialog); auto* table = dialog->findChild<QTableWidget*>("websiteTargetsTable"); QCOMPARE(table->rowCount(),12); table->item(0,0)->setText("Cancelled"); QTimer::singleShot(0,[] { if (auto* box=qobject_cast<QMessageBox*>(QApplication::activeModalWidget())) box->button(QMessageBox::Yes)->click(); }); dialog->reject(); QTRY_VERIFY(dialog.isNull()); QVERIFY(controller.settings().websiteTargets.isEmpty()); QCOMPARE(finished.size(),0);
         edit->click(); dialog = window.findChild<WebsiteTargetsDialog*>(); QVERIFY(dialog); table = dialog->findChild<QTableWidget*>("websiteTargetsTable"); dialog->findChild<QPushButton*>("addWebsiteTarget")->click(); QCOMPARE(table->rowCount(),13); table->closePersistentEditor(table->item(12,0)); table->setCurrentCell(0,0); table->item(12,0)->setText("Custom service"); table->item(12,1)->setText("https://example.test/check"); dialog->findChild<QDialogButtonBox*>()->button(QDialogButtonBox::Save)->click(); QTRY_VERIFY(dialog.isNull()); QTRY_COMPARE(finished.size(),1); QVERIFY(finished[0][0].toBool()); QCOMPARE(controller.websiteTests()->targets().size(),13); QCOMPARE(window.findChildren<QFrame*>("websiteCard").size(),13);
         const auto loaded = store.load(); QVERIFY(loaded.result.ok); QCOMPARE(loaded.settings.websiteTargets.size(),13); settings = loaded.settings; QByteArray before; QVERIFY(readFile(data.path()+"/state.dat",before).ok); auto malformed = settings.websiteTargets; auto bad = malformed[0].toObject(); bad["url"] = "not-a-url"; malformed[0] = bad; settings.websiteTargets=malformed; QVERIFY(!store.save(settings,{}).ok); QByteArray after; QVERIFY(readFile(data.path()+"/state.dat",after).ok); QCOMPARE(after,before);
         AppController reopened(data.path(),true); QSignalSpy again(&reopened,&AppController::initialized); reopened.initialize(); QTRY_COMPARE(again.size(),1); QCOMPARE(reopened.websiteTests()->targets().size(),13); QVERIFY(!reopened.websiteTests()->running());

@@ -8,6 +8,8 @@
 #include "ui/CoreUpdateDialog.h"
 #include "ui/ProxyBypassDialog.h"
 #include "ui/BackupDialog.h"
+#include "ui/OutboundDialog.h"
+#include "app/OutboundDiagnostics.h"
 #include "ui/UiTheme.h"
 #include "profile/ProfileStore.h"
 #include "storage/Storage.h"
@@ -47,6 +49,18 @@ class FlatWorkspaceTests final:public QObject {
     static void snapshot(QWidget* widget,const QString& name) { const auto out=qEnvironmentVariable("MLASH_UI_SCREENSHOTS"); if (!out.isEmpty()) { QDir().mkpath(out); QVERIFY(widget->grab().save(out+"/u12-"+name+".png")); } }
 private slots:
     void cleanup() { UiTheme::setPreferences("system",100); }
+    void diagnosticWorkspaceDestructionClearsSnapshots() {
+        QTemporaryDir root; auto platform=std::make_shared<WorkspacePlatform>(); AppController controller(root.path(),true,nullptr,platform);
+        QSignalSpy initialized(&controller,&AppController::initialized); controller.initialize(); QTRY_COMPARE(initialized.size(),1);
+        auto* window=new MainWindow(&controller); window->show(); window->setPage(7); window->findChild<QPushButton*>("websiteDiagnostics")->click();
+        QPointer<OutboundDialog> diagnostic=window->findChild<OutboundDialog*>(); QVERIFY(diagnostic);
+        auto* service=diagnostic->findChild<QTabWidget*>("outboundTabs"); service->setCurrentIndex(1);
+        auto* state=const_cast<OutboundDiagnostics*>(controller.outboundDiagnostics());
+        const_cast<QJsonObject&>(state->result())={{"kind","services"},{"route","direct"},{"services",QJsonArray{QJsonObject{{"id","youtube"},{"name","YouTube"},{"state","unknown"},{"http_status",403},{"target","https://example.test/check"}}}}}; state->changed();
+        diagnostic->findChild<QTableWidget*>("serviceDiagnosticsTable")->selectRow(0); diagnostic->findChild<QPushButton*>("viewServiceEvidence")->click();
+        QPointer<QDialog> evidence=window->findChild<QDialog*>("serviceEvidenceSnapshot"); QVERIFY(evidence&&evidence->isVisible()&&!evidence->isWindow());
+        delete window; QVERIFY(diagnostic.isNull()); QVERIFY(evidence.isNull()); QVERIFY(state->result().isEmpty()); QVERIFY(!state->busy());
+    }
     void compactRowsKeepSeparateMouseTargets() {
         for (int scale:{100,120}) {
             UiTheme::setPreferences("dark",scale);

@@ -264,7 +264,10 @@ void MainWindow::applyAppearance() {
     for (auto* view:QList<QAbstractItemView*>{nodeList_,nodeCards_,connectionsTable_}) view->viewport()->update();
     updateState();
 }
-MainWindow::~MainWindow() { NodePresentation::clearTransientCache(); if (connectionOptions_) connectionOptions_->flushPreferences(); controller_->setHomeVisible(false); controller_->setWebsiteTestsVisible(false); controller_->clearWebsiteTests(); controller_->setRulesVisible(false); controller_->setConnectionsVisible(false); controller_->setDiagnosticsVisible(false); }
+MainWindow::~MainWindow() {
+    // End diagnostic callbacks while the main page widgets still exist.
+    if (outboundDialog_) delete outboundDialog_.data();
+    NodePresentation::clearTransientCache(); if (connectionOptions_) connectionOptions_->flushPreferences(); controller_->setHomeVisible(false); controller_->setWebsiteTestsVisible(false); controller_->clearWebsiteTests(); controller_->setRulesVisible(false); controller_->setConnectionsVisible(false); controller_->setDiagnosticsVisible(false); }
 QWidget* MainWindow::dataPage() {
     // K6（原型 · 数据页）：一条页签行 + 一个面板栈。四个页签各自持有自己的面板，
     // 可见性由 updateDataPanelVisibility 按「当前页签」合成——不可见的面板不再接收采样。

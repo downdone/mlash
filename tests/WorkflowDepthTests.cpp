@@ -113,7 +113,7 @@ private slots:
         url->setText("https://example.test/edited"); platform->failSeal=true; dialog->findChild<QDialogButtonBox*>()->button(QDialogButtonBox::Save)->click();
         QTRY_COMPARE(finished.size(),5); QVERIFY(!finished.last()[0].toBool()); QVERIFY(dialog->isVisible()); QCOMPARE(c.nodePreferences(p.id),prefs); platform->failSeal=false;
         if (!output.isEmpty()) { QCoreApplication::processEvents(); QVERIFY(dialog->grab().save(output+"/node-preferences-failure.png")); }
-        dialog->reject(); host.dispose(); QCOMPARE(platform->writes,0);
+        answer(QMessageBox::Yes); dialog->reject(); host.dispose(); QCOMPARE(platform->writes,0);
     }
     void optInSelectionOnlyClosesPreexistingAffectedConnections() {
         QTemporaryDir root; auto platform=std::make_shared<DepthPlatform>(); ProfileStore store(root.path(),platform); QVERIFY(store.load().result.ok); Settings settings; settings.startCore=false; Profile p; p.id=newId(); p.name="Connections"; p.sourceType="file"; const auto prepared=store.prepare(p,"proxies: [{name: A, type: direct}, {name: B, type: direct}]\nproxy-groups: [{name: G, type: select, proxies: [A, B]}]\nrules: [\"MATCH,G\"]\n",settings,19090,QString(64,'a')); QVERIFY(prepared.result.ok); p=prepared.profile; settings.activeProfile=p.id; QVERIFY(store.save(settings,{p}).ok); AppController c(root.path(),true,nullptr,platform); QSignalSpy init(&c,&AppController::initialized),finished(&c,&AppController::operationFinished); c.initialize(); QTRY_COMPARE(init.size(),1); auto& state=const_cast<AppState&>(c.state()); state.ready=true; state.core=CoreState::Running;

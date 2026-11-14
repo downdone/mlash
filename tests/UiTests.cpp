@@ -203,7 +203,7 @@ private slots:
     }
     void persistentStatusBarDoesNotMovePages() {
         QTemporaryDir data; AppController controller(data.path(),true); QSignalSpy initialized(&controller,&AppController::initialized); controller.initialize(); QTRY_COMPARE(initialized.size(),1);
-        MainWindow window(&controller); window.resize(840,560); window.show(); auto* status=window.findChild<QStatusBar*>("operationStatusBar"); auto* message=window.findChild<QLabel*>("operationMessage"); auto* pages=window.findChild<QStackedWidget*>(); auto* details=window.findChild<QToolButton*>("statusDetails"); QVERIFY(status&&message&&pages&&details); QVERIFY(!message->wordWrap());
+        MainWindow window(&controller); window.resize(840,560); window.show(); auto* status=window.findChild<QStatusBar*>("operationStatusBar"); auto* message=window.findChild<QLabel*>("operationMessage"); auto* pages=window.findChild<QStackedWidget*>("mainPages"); auto* details=window.findChild<QToolButton*>("statusDetails"); QVERIFY(status&&message&&pages&&details); QVERIFY(!message->wordWrap());
         const QString longMessage="连接失败 <原始文本>\n"+QString(4096,QChar(0x6D4B));
         for (int page=0;page<8;++page) {
             window.setPage(page); QCoreApplication::processEvents(); const auto central=window.centralWidget()->geometry(),pageRect=pages->geometry(),barRect=status->geometry();
@@ -274,7 +274,7 @@ private slots:
         QPointer<QDialog> dialog = window.findChild<QDialog*>("profilePolicyDialog"); QVERIFY(dialog);
         auto* automatic = dialog->findChild<QCheckBox*>("profileAutoUpdate"); auto* hours = dialog->findChild<QSpinBox*>("profileUpdateHours"); QVERIFY(!automatic->isChecked()); QVERIFY(!hours->isEnabled()); automatic->setChecked(true); hours->setValue(3);
         dialog->findChild<QComboBox*>("downloadRoute")->setCurrentIndex(1); dialog->findChild<QLineEdit*>("downloadUserAgent")->setText("Cancelled-Agent/1");
-        dialog->findChild<QDialogButtonBox*>()->button(QDialogButtonBox::Cancel)->click(); QTRY_VERIFY(dialog.isNull()); QCOMPARE(finished.size(), 0); QVERIFY(!controller.profiles()[0].autoUpdate); QCOMPARE(controller.profiles()[0].download.route, QString("direct")); QVERIFY(controller.profiles()[0].download.userAgent.isEmpty());
+        QTimer::singleShot(0,[] { if (auto* box=qobject_cast<QMessageBox*>(QApplication::activeModalWidget())) box->button(QMessageBox::Yes)->click(); }); dialog->findChild<QDialogButtonBox*>()->button(QDialogButtonBox::Cancel)->click(); QTRY_VERIFY(dialog.isNull()); QCOMPARE(finished.size(), 0); QVERIFY(!controller.profiles()[0].autoUpdate); QCOMPARE(controller.profiles()[0].download.route, QString("direct")); QVERIFY(controller.profiles()[0].download.userAgent.isEmpty());
         // 「更多操作」菜单是 WA_DeleteOnClose：对话框打开时菜单已销毁，缓存的 QAction 不能再用。
         // 第二次按用户路径重新点开抽屉与菜单。
         QTest::mouseClick(list->viewport(), Qt::LeftButton, {}, list->visualRect(list->model()->index(0,0)).center()); QCoreApplication::processEvents();
@@ -558,7 +558,7 @@ private slots:
         QCoreApplication::processEvents();
         auto* scroll=window.findChild<QScrollArea*>("websiteScroll"); auto* surface=window.findChild<QWidget*>("websiteSurface");
         const int columns=surface->property("columns").toInt(); QVERIFY(columns>=2&&columns<=3);
-        for (auto* details:window.findChildren<QToolButton*>("websiteResultDetails")) { QVERIFY2(details->isVisible(),qPrintable(QString("details target=%1 hidden=%2 parentVis=%3 websiteSurfaceVis=%4 surfaceHidden=%5 stackIdx=%6 stackCount=%7").arg(details->property("targetId").toString()).arg(details->isHidden()).arg(details->parentWidget()->isVisible()).arg(window.findChild<QWidget*>("websiteSurface")?window.findChild<QWidget*>("websiteSurface")->isVisible():-1).arg(window.findChild<QWidget*>("websiteSurface")?window.findChild<QWidget*>("websiteSurface")->isHidden():-1).arg(window.findChild<QStackedWidget*>()->currentIndex()).arg(window.findChild<QStackedWidget*>()->count()))); QVERIFY(details->focusPolicy()!=Qt::NoFocus); QVERIFY(details->property("quiet").toBool()); }
+        for (auto* details:window.findChildren<QToolButton*>("websiteResultDetails")) { QVERIFY2(details->isVisible(),qPrintable(QString("details target=%1 hidden=%2 parentVis=%3 websiteSurfaceVis=%4 surfaceHidden=%5 stackIdx=%6 stackCount=%7").arg(details->property("targetId").toString()).arg(details->isHidden()).arg(details->parentWidget()->isVisible()).arg(window.findChild<QWidget*>("websiteSurface")?window.findChild<QWidget*>("websiteSurface")->isVisible():-1).arg(window.findChild<QWidget*>("websiteSurface")?window.findChild<QWidget*>("websiteSurface")->isHidden():-1).arg(window.findChild<QStackedWidget*>("mainPages")->currentIndex()).arg(window.findChild<QStackedWidget*>("mainPages")->count()))); QVERIFY(details->focusPolicy()!=Qt::NoFocus); QVERIFY(details->property("quiet").toBool()); }
         const auto output=qEnvironmentVariable("MLASH_UI_SCREENSHOTS"); if (!output.isEmpty()) { QDir().mkpath(output); const QJsonObject geometry{{"node_viewport_height",cards->viewport()->height()},{"content_span",span},{"website_columns",columns},{"website_viewport_width",scroll->viewport()->width()},{"dpr",window.devicePixelRatioF()}}; QVERIFY(writeAtomic(output+"/refinement-geometry.json",QJsonDocument(geometry).toJson()).ok); QVERIFY(window.grab().save(output+"/refined-website.png")); window.setPage(2); QVERIFY(window.grab().save(output+"/refined-nodes.png")); }
         window.resize(840,560); QCoreApplication::processEvents(); QVERIFY(cards->viewport()->height()>=108);
         state.ready=false;
@@ -802,7 +802,7 @@ private slots:
         // K5：「更多运行信息」抽屉已删除；指标视图整体搬到「数据 › 流量」，所以它
         // 不再属于首页子树——只断言首页里没有它（控件本身仍在数据页）。
         QVERIFY(!window.findChild<QWidget*>("homeAdditionalInfo"));
-        QWidget* homePage = window.findChild<QStackedWidget*>()->widget(int(ViewIds::Home)); QVERIFY(homePage);
+        QWidget* homePage = window.findChild<QStackedWidget*>("mainPages")->widget(int(ViewIds::Home)); QVERIFY(homePage);
         QVERIFY(!homePage->findChild<QWidget*>("homeMetrics"));
         window.setPage(2);
         // H3：先等上一轮切换的保存与回读都结束，再发起导入（导入在忙碌时会被拒绝）。
@@ -1062,7 +1062,7 @@ private slots:
         QTemporaryDir data; AppController controller(data.path(),true); QSignalSpy initialized(&controller,&AppController::initialized); controller.initialize(); QTRY_COMPARE(initialized.size(),1);
         MainWindow window(&controller); window.resize(940,620); window.show(); QCoreApplication::processEvents();
         // ADR 0048 + K1：节点页并入首页、网站测试并入数据页签，页面栈只剩五个视图。
-        auto* stack=window.findChild<QStackedWidget*>(); QVERIFY(stack); QCOMPARE(stack->count(),5);
+        auto* stack=window.findChild<QStackedWidget*>("mainPages"); QVERIFY(stack); QCOMPARE(stack->count(),5);
         auto* nodes=window.findChild<QWidget*>("nodeSection"); auto* home=window.findChild<QScrollArea*>("homeScroll"); auto* views=window.findChild<QStackedWidget*>("nodeViews");
         QVERIFY(nodes && home && views); QCOMPARE(views->parentWidget(),nodes);
         int homeIndex=-1; for (int i=0;i<stack->count();++i) if (stack->widget(i)->isAncestorOf(home)) homeIndex=i;
