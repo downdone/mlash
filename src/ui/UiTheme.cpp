@@ -23,20 +23,37 @@ QFont bodyFont() {
 #ifdef Q_OS_MACOS
     font.setFamilies({".AppleSystemUIFont","Helvetica Neue","PingFang SC"});
 #else
-    font.setFamilies({"Segoe UI","Microsoft YaHei UI","Noto Sans CJK SC"});
+    font.setFamilies({"Microsoft YaHei UI","Segoe UI","Noto Sans CJK SC"});
 #endif
     font.setPointSizeF(BodyPoints*percent/100.0); font.setStyleHint(QFont::SansSerif); return font;
 }
 void setPreferences(const QString& appearance,int scale) { if (!validAppearance(appearance,scale)) return; if (preferred==appearance&&percent==scale) { if (!installed) install(); return; } preferred=appearance; percent=scale; if (!installed) install(); else updatePreferred(); }
 void applyAppearance(Qt::ColorScheme scheme,bool highContrast) {
     dark=scheme==Qt::ColorScheme::Dark;
-    Window=dark?"#202124":"#F5F5F7"; Sidebar=dark?"#292A2D":"#EBEBED"; Surface=dark?"#2B2C30":"#FFFFFF";
-    Ink=dark?"#F5F5F7":"#1D1D1F"; Secondary=dark?"#C0C1C7":"#606067"; Muted=dark?"#B1B2B9":"#65656D"; Disabled=dark?"#86878F":"#96969E";
-    Border=highContrast?(dark?"#B8BECA":"#60646C"):(dark?"#45464B":"#DEDEE3"); Separator=highContrast?Border:(dark?"#3B3C41":"#EBEBEF");
-    Brand=dark?"#91BEFF":"#0062CC"; Primary=dark?"#0064CB":"#0068D9"; OnPrimary="#FFFFFF";
-    Selection=dark?"#30415B":"#EAF2FF"; Hover=dark?"#383A40":"#EAECEF"; Focus=dark?"#9BCBFF":"#0068D9";
-    Control=dark?"#36373C":"#F1F1F4"; Pressed=dark?"#484A52":"#DFE2E7"; PrimaryPressed=dark?"#0056B0":"#0057B8";
-    Success=dark?"#7AD7B5":"#08745B"; Warning=dark?"#F2BF75":"#965A00"; Error=dark?"#FF9BA5":"#BF303C"; Track=dark?"#606979":"#B8BEC7";
+    // 高对比是第四套并行取值（分层设计 6.3 规则 3）：不只加深边框，表面分级、
+    // 选中、控件填充与焦点环同时增强。HC 下表面不再「逐级变亮」，而是靠边框与
+    // 更大的明度差区分；取值经 WCAG 相对亮度复算，见 ui-r9-tokens.md。
+    if (highContrast) {
+        Window=dark?"#000000":"#FFFFFF"; Sidebar=dark?"#000000":"#FFFFFF"; Surface=dark?"#101010":"#FFFFFF";
+        Ink=dark?"#FFFFFF":"#000000"; Secondary=dark?"#FFFFFF":"#1A1A1A"; Muted=dark?"#E6E6E6":"#333333"; Disabled=dark?"#8C8C8C":"#6B6B6B";
+        Border=dark?"#FFFFFF":"#000000"; Separator=dark?"#FFFFFF":"#000000";
+        Brand=dark?"#FFD60A":"#0B3D91"; Primary=dark?"#FFD60A":"#0B3D91"; OnPrimary=dark?"#000000":"#FFFFFF";
+        Selection=dark?"#3A2F00":"#DCE6F7"; Hover=dark?"#262626":"#EDEDED";
+        Focus=dark?"#FFD60A":"#0B63CE";
+        Control=dark?"#1C1C1C":"#F2F2F2"; Pressed=dark?"#333333":"#D9D9D9"; PrimaryPressed=dark?"#FFE44D":"#082C6B";
+        Success=dark?"#5CFFA8":"#00552E"; Warning=dark?"#FFD60A":"#6B3A00"; Error=dark?"#FF8A9A":"#A30018"; Track=dark?"#FFFFFF":"#4A4A4A";
+    } else {
+        // K 版（U08 §7.3）：深色直接取 GPT 原型 token；浅色按同一层级关系取，
+        // 不复制原型的暗色值。高对比仍是第四套独立取值（上一分支）。
+        Window=dark?"#000000":"#F2F2F7"; Sidebar=dark?"#202020":"#F5F5F7"; Surface=dark?"#1C1C1E":"#FFFFFF";
+        Ink=dark?"#F5F5F7":"#1D1D1F"; Secondary=dark?"#A1A1AA":"#63636B"; Muted=dark?"#868d99":"#5f6877"; Disabled=dark?"#5c6069":"#A7ADB8";
+        Border=dark?"#343436":"#E3E3E8"; Separator=dark?"#343436":"#E3E3E8";
+        // U11: shared prototype roles; primary fill remains separate from link/icon accent.
+        Brand=dark?"#4DA3FF":"#0066CC"; Primary=dark?"#075FBE":"#0066CC"; OnPrimary="#FFFFFF";
+        Selection=dark?"#132B43":"#E7F0FA"; Hover=dark?"#29292C":"#ECEEF3"; Focus=dark?"#3798ff":"#0066CC";
+        Control=dark?"#242529":"#F0F1F4"; Pressed=dark?"#333538":"#E2E5EA"; PrimaryPressed=dark?"#3798ff":"#0066CC";
+        Success=dark?"#64C98A":"#18724A"; Warning=dark?"#EFB66A":"#865000"; Error=dark?"#FF8A96":"#B32636"; Track=dark?"#696970":"#8B8B91";
+    }
     qApp->setFont(bodyFont());
     qApp->setPalette(palette()); qApp->setStyleSheet(styleSheet()); qApp->style()->setObjectName("mlash-refined"); emit notifier()->changed();
     for (auto* widget:QApplication::topLevelWidgets()) widget->update();
@@ -78,42 +95,98 @@ QPalette palette() {
 QString styleSheet() {
     QString sheet=R"(
         QWidget { font-family: @UiFamily; font-size: @BodyPoints; color: @Ink; }
-        QWidget#websiteSurface, QWidget#pageSurface, QWidget#mainSurface, QWidget#settingsSurface, QWidget#settingsCanvas, QStackedWidget, QScrollArea { background: @Window; }
+        QWidget#websiteSurface, QWidget#pageSurface, QWidget#mainSurface, QWidget#settingsSurface, QWidget#settingsCanvas, QWidget#profilesSurface, QStackedWidget, QScrollArea { background: @Window; }
         QStackedWidget#nodeViews { background: @Surface; border-radius: 8px; }
         QDialog#importDialog, QDialog#profilePolicyDialog { background: @Window; }
         QWidget#importSource { background: @Surface; }
-        QFrame#homeOnboarding, QFrame#websiteCard, QFrame#overview, QFrame#panel, QFrame#homeMetrics, QFrame#settingsApplication, QFrame#settingsCore, QFrame#settingsTools { background: @Surface; border: 1px solid @Border; border-radius: 12px; }
+        QFrame#profileImportGroup, QFrame#websiteCard, QFrame#overview, QFrame#panel, QFrame#homeControlCard, QFrame#settingsGroup, QFrame#trafficChart { background: @Surface; border: 1px solid @Border; border-radius: 12px; }
+        /* K1：内容区首行固定 72px（原型 topbar）。左标题/副标题，右状态胶囊与图标钮。 */
+        QWidget#topbar { background: @Sidebar; border: none; border-bottom: 1px solid @Separator; }
+        QPushButton[directoryAction="true"] { text-align: left; background: transparent; border: none; border-bottom: 1px solid @Separator; border-radius: 0; padding: 8px 6px; }
+        QPushButton[directoryAction="true"]:hover { background: @Hover; }
+        QPushButton[directoryAction="true"]:focus[keyboardFocus="true"] { border: 1px solid @Focus; border-radius: 5px; }
+        QFrame#remoteProfileGroup, QFrame#localProfileGroup, QFrame#prototypeGroup { background: @Surface; border: none; border-radius: 10px; }
+        QLabel#remoteProfileHeading, QLabel#localProfileHeading, QLabel#prototypeSection { padding: 10px 16px 0px 16px; font-weight: 500; }
+        QPushButton[prototypeRow="true"] { text-align: left; background: transparent; border: none; border-bottom: 1px solid @Separator; border-radius: 0; padding: 0; }
+        QPushButton[prototypeRow="true"]:hover { background: @Hover; }
+        QPushButton[prototypeRow="true"][keyboardFocus="true"]:focus { border: 1px solid @Focus; }
+        QPushButton[backLink="true"] { background: transparent; border: none; color: @Brand; padding: 3px 0; }
+        QLabel[caption="true"] { font-size: 9pt; }
+        QToolButton[prototypeIcon="true"] { background: transparent; border: none; padding: 5px; color: @Brand; }
+        QToolButton#browseGroup { color: @Ink; padding-right: 22px; }
+        QToolButton[prototypeIcon="true"]:hover { background: @Hover; }
+        QWidget#settingsCanvas, QWidget#settingsDirectory, QWidget#profileDetailsPage { background: @Window; }
+        QFrame#panel { border: none; }
+        QFrame#homeControlCard { border: none; border-radius: 10px; }
+        QTabBar#dataTabs { background: @Sidebar; border-radius: 7px; }
+        QTabBar#dataTabs::tab { border: none; background: transparent; color: @Secondary; padding: 6px 16px; margin: 3px; border-radius: 5px; }
+        QTabBar#dataTabs::tab:selected { background: @Surface; color: @Ink; }
+        QLabel#topbarTitle { font-size: @TitlePoints; font-weight: 700; }
+        QLabel#topbarSubtitle { color: @Secondary; }
+        QWidget#topbarStatus { border: 1px solid @Border; border-radius: 15px; background: @Surface; }
+        QLabel#topbarDot[state="success"] { color: @Success; }
+        QLabel#topbarDot[state="warning"] { color: @Warning; }
+        QLabel#topbarDot[state="error"] { color: @Error; }
+        QLabel#topbarDot[state="active"] { color: @Brand; }
+        QLabel#topbarDot[state="idle"] { color: @Secondary; }
+        /* K6：数据页四个 tab 用同一套胶囊样式（QTabBar 基础规则已给出）。 */
+        QTabBar#dataTabs::tab { padding: 5px 16px; }
+        QLabel#sectionHeading { font-size: @SectionPoints; font-weight: 600; }
+        QLabel#sectionCount { color: @Secondary; }
         QWidget#sidebar { background: @Sidebar; border: none; border-right: 1px solid @Border; }
         QLabel#brand { font-size: @SectionPoints; font-weight: 600; }
-        QLabel#pageTitle { font-size: @PagePoints; font-weight: 600; }
+        QLabel#dialogTitle { font-size: @DialogPoints; font-weight: 600; }
         QLabel#overviewTitle { font-size: @SectionPoints; font-weight: 600; }
+        QLabel#homeControlTitle { font-weight: 500; }
+        QLabel#homeControlValue { color: @Secondary; }
+        QLabel#homeControlChevron { color: @Secondary; font-size: @SectionPoints; }
+        QWidget#homeControlRow[first="true"] { border: none; }
+        /* K2：第 2 行是按钮（点开浮层菜单），其余两行是普通行；同一套行样式用 property 选中。 */
+        QPushButton[controlRow="true"] { background: transparent; border: none; border-radius: 6px; padding: 0; text-align: left; }
+        QPushButton[controlRow="true"]:hover { background: @Hover; }
+        QPushButton[controlRow="true"]:pressed { background: @Pressed; }
+        QPushButton[controlRow="true"][expanded="true"] { background: @Selection; }
+        QPushButton[controlRow="true"][keyboardFocus="true"]:focus { border: 1px solid @Focus; }
+        QWidget#homeInlineStat { border: none; }
+        QToolButton#homeStatDetails { color: @Brand; }
         QLabel#currentMember { font-size: @BodyPoints; font-weight: 600; }
-        QLabel#secondaryText, QLabel[secondary="true"] { color: @Secondary; }
+        QLabel#secondaryText, QLabel[secondary="true"] { color: @Secondary; font-size: 9pt; }
+        QLabel#statusDot[state="success"] { color: @Success; }
+        QLabel#statusDot[state="warning"] { color: @Warning; }
+        QLabel#statusDot[state="error"] { color: @Error; }
+        QLabel#statusDot[state="active"] { color: @Brand; }
+        QLabel#statusDot[state="idle"] { color: @Secondary; }
+        QLabel#logEmptyState { color: @Secondary; }
+        QListView#nodeCards[flat="true"] { border: none; background: transparent; outline: none; }
+        QLabel#websiteDelay[state="ok"] { color: @Success; font-weight: 600; }
+        QLabel#websiteDelay[state="failed"] { color: @Error; font-weight: 600; }
+        QLabel#websiteDelay[state="cancelled"] { color: @Secondary; font-weight: 600; }
+        QLabel#websiteDelay[state="pending"] { color: @Brand; font-weight: 600; }
+        QLabel#sidebarStatusDot[state="success"] { color: @Success; }
+        QLabel#sidebarStatusDot[state="warning"] { color: @Warning; }
+        QLabel#sidebarStatusDot[state="error"] { color: @Error; }
+        QLabel#sidebarStatusDot[state="secondary"] { color: @Secondary; }
+        QToolButton#sidebarStatus { background: transparent; border: none; border-top: 1px solid @Separator; border-radius: 0; text-align: left; }
+        QToolButton#sidebarStatus:hover { background: @Hover; }
+        QLabel#sidebarStatusLine1 { color: @Secondary; }
+        QLabel#sidebarStatusLine2 { color: @Secondary; }
         QLabel[role="headline"] { font-size: @ValuePoints; font-weight: 600; }
         QLabel#settingsSubheading { font-size: @BodyPoints; font-weight: 600; padding-bottom: 3px; }
-        QToolButton#homeDetailsDisclosure { border-color: transparent; background: transparent; color: @Secondary; }
-        QToolButton#homeDetailsDisclosure:hover { background: @Hover; color: @Brand; }
         QPushButton#proxyManagement::menu-indicator { image: none; width: 0; height: 0; }
         QLabel#sectionTitle { font-size: @SectionPoints; font-weight: 600; }
         QLabel#settingName { font-weight: 500; }
         QWidget#settingRow[located="true"] { background: @Selection; border-radius: 6px; }
         QLabel#websiteName { font-weight: 600; }
-        QPushButton#dashboardCard { text-align: left; padding: 0; }
-        QPushButton#dashboardCard { border-radius: 12px; min-height: 104px; }
-        QPushButton#dashboardCard[tier="primary"] { min-height: 114px; }
-        QFrame#dashboardCard { background: @Surface; border: 1px solid @Border; border-radius: 12px; }
         QPushButton[quiet="true"], QToolButton[quiet="true"] { background: transparent; border-color: transparent; }
         QPushButton[quiet="true"]:hover, QToolButton[quiet="true"]:hover { background: @Hover; }
         QPushButton[quiet="true"]:pressed, QToolButton[quiet="true"]:pressed { background: @Pressed; }
         QPushButton[quiet="true"][keyboardFocus="true"]:focus, QToolButton[quiet="true"][keyboardFocus="true"]:focus { border-color: @Focus; }
-        QLabel#websiteMark { background: @Control; border-radius: 9px; }
+        QLabel#websiteMark { background: @ArtworkSurface; border-radius: 9px; }
         QLabel#websiteDelay { font-size: @ValuePoints; font-weight: 600; }
-        QLabel#dashboardIcon { background: @Selection; border-radius: 7px; }
         QLabel#statValue[tier="primary"] { font-size: @ValuePoints; font-weight: 600; }
         QLabel[metricValue="true"] { font-size: @ValuePoints; font-weight: 600; }
         QLabel#statValue[tier="secondary"] { font-size: @BodyPoints; font-weight: 600; }
         QListWidget#proxyGroups { border: none; background: transparent; outline: none; }
-        QLabel#statusDot { color: @Muted; font-size: 18px; }
         QLabel#statValue { font-size: @BodyPoints; font-weight: 600; }
         QListWidget#navigation { border: none; background: transparent; outline: none; }
         QListWidget#navigation::item { padding: 8px 10px; margin: 2px 0px; border-radius: 7px; }
@@ -123,6 +196,8 @@ QString styleSheet() {
         QPushButton:hover, QToolButton:hover { background: @Hover; }
         QPushButton:pressed, QToolButton:pressed { background: @Pressed; }
         QPushButton[keyboardFocus="true"]:focus, QToolButton[keyboardFocus="true"]:focus { border: 1px solid @Focus; }
+        QToolButton::menu-indicator { image: none; width: 0px; }
+        QListView#nodeList { background: @Surface; border: none; border-radius: 10px; outline: none; }
         QToolButton#testGroupButton { padding-right: 22px; }
         QToolButton#testGroupButton::menu-button { width: 20px; border: none; background: transparent; }
         QToolButton#testGroupButton::menu-arrow { image: none; }
@@ -160,8 +235,13 @@ QString styleSheet() {
         QTabBar::tab { padding: 5px 12px; margin: 3px; background: transparent; border: 1px solid transparent; border-radius: 6px; }
         QTabBar::tab:selected { background: @Surface; color: @Ink; border-color: @Border; }
         QTabBar::tab:hover:!selected { background: @Hover; }
-        QWidget#settingRow { border-bottom: 1px solid @Separator; }
-        QFrame#settingsApplication, QFrame#settingsCore, QFrame#settingsTools { border-radius: 12px; }
+        /* K8：设置页三组平铺行，52px 高，行间只用分隔线（原型 .setting-row）。 */
+        QWidget#settingRow { border-bottom: 1px solid @Separator; min-height: @SettingRowHeight; }
+        QWidget#settingRow[last="true"] { border-bottom: none; }
+        QLabel#settingIcon { background: transparent; border-radius: 7px; }
+        QLabel#settingChevron { color: @Muted; font-size: @BodyPoints; }
+        QLabel#settingValue { color: @Muted; }
+        QWidget#settingsActions { border-top: 1px solid @Separator; padding-top: 10px; }
         QDialog { background: @Window; }
         QDialogButtonBox QPushButton { min-width: 64px; }
         QScrollBar:horizontal { background: transparent; height: 8px; margin: 0; }
@@ -173,6 +253,13 @@ QString styleSheet() {
         QStatusBar { background: @Sidebar; border-top: 1px solid @Border; }
         QStatusBar::item { border: none; }
         QStatusBar QLabel#operationMessage { padding-left: 10px; color: @Secondary; }
+        /* 控制区的失败原因行（V5）：用告警色，与普通说明文字区分；成功时不显示。 */
+        QLabel#homeControlHint[state="error"] { color: @Error; }
+        QLabel#nodeGroupHint { color: @Secondary; }
+        /* 菜单分组标题（V4）：禁用 action 默认会被画成灰色，这里统一压低对比并缩小上下留白。 */
+        QMenu::item:disabled { color: @Muted; }
+        QStatusBar QLabel#operationAlarm { padding-left: 10px; color: @Error; }
+        QStatusBar QLabel#operationAlarm[state="warning"] { color: @Warning; }
         QToolButton#websiteResultDetails { min-height: 0; padding: 3px; }
         QToolButton#contextHelp, QToolButton#websiteMethod { min-width: 0; min-height: 0; padding: 0; border-radius: 13px; color: @Secondary; }
         QToolButton#websiteResultDetails[keyboardFocus="true"]:focus { padding: 3px; }
@@ -180,11 +267,16 @@ QString styleSheet() {
         QToolButton#statusDetails:hover { background: @Hover; }
         QToolButton#statusDetails[keyboardFocus="true"]:focus { border-color: @Focus; padding: 1px 7px; }
         QPushButton[mode] { min-width: 35px; }
-        QFrame#modeControl { background: @Control; border-radius: 7px; }
-        QFrame#modeControl QPushButton { border-color: transparent; background: transparent; padding: 3px 8px; }
-        QFrame#modeControl QPushButton:checked { background: @Surface; border-color: @Border; color: @Brand; }
-        QFrame#modeControl QPushButton:pressed { background: @Pressed; color: @Brand; }
-        QFrame#modeControl QPushButton[keyboardFocus="true"]:focus { border-color: @Focus; padding: 2px 7px; }
+        /* K7：配置页行高 76px（原型 .profile-row），图标 37px 方形。 */
+        QListView#remoteProfileList, QListView#localProfileList { border: none; background: transparent; outline: none; }
+        QListView#remoteProfileList::item, QListView#localProfileList::item { border-bottom: 1px solid @Separator; }
+        QLabel#profileRowMark { background: @Control; border-radius: 10px; }
+        /* K3：右侧抽屉（410px），原型 .drawer。 */
+        QDialog#nodeDetailsDrawer { background: @Surface; border-left: 1px solid @Border; }
+        QLabel#drawerTitle { font-size: @SectionPoints; font-weight: 700; }
+        QLabel#drawerSub { color: @Secondary; }
+        QWidget#drawerKeyValue { border-bottom: 1px solid @Separator; min-height: 47px; }
+        QLabel#drawerKey { color: @Secondary; }
     )";
     sheet.replace("@UiFamily",QString('"')+bodyFont().family()+QString('"'));
 #ifdef Q_OS_MACOS
@@ -193,11 +285,14 @@ QString styleSheet() {
     sheet.replace("@MonoFamily",QString('"')+QFontDatabase::systemFont(QFontDatabase::FixedFont).family()+QString('"'));
 #endif
     sheet.replace("@BodyPoints",QString::number(BodyPoints)+"pt");
-    sheet.replace("@PagePoints",QString::number(PagePoints)+"pt");
+    sheet.replace("@DialogPoints",QString::number(DialogPoints)+"pt");
     sheet.replace("@SectionPoints",QString::number(SectionPoints)+"pt");
     sheet.replace("@ValuePoints",QString::number(ValuePoints)+"pt");
+    sheet.replace("@TitlePoints",QString::number(TitlePoints)+"pt");
+    sheet.replace("@SettingRowHeight",QString::number(SettingRowHeight)+"px");
     sheet.replace("@PrimaryPressed",PrimaryPressed);
     sheet.replace("@Control",Control); sheet.replace("@Pressed",Pressed);
+    sheet.replace("@ArtworkSurface",ArtworkSurface);
     sheet.replace("@OnPrimary",OnPrimary);
     sheet.replace("@Primary",Primary);
     sheet.replace("@Separator",Separator);

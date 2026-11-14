@@ -2,6 +2,7 @@
 #include "app/AppController.h"
 #include <QSystemTrayIcon>
 #include <QMenu>
+#include "Route.h"
 
 namespace mlash {
 class TrayController : public QObject {
@@ -13,13 +14,15 @@ public:
     static QIcon icon();
     static QString appearance(const AppState& state);
     static QIcon statusIcon(const AppState& state);
-    static QString statusTooltip(const AppState& state);
+    static QString statusTooltip(const AppState& state, const Settings& settings, const QString& profileName = QString());
+    QString activeProfileName() const;
     QString visualKey() const { return visualKey_; }
     qint64 measureMenuPreparation();
 signals:
     void exitRequested();
     void showWindow();
     void showPage(int index);
+    void showRoute(Route route);
 protected:
     bool eventFilter(QObject* watched, QEvent* event) override;
 private:

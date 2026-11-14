@@ -1,4 +1,6 @@
 #include "NodePresentation.h"
+#include "UiIcons.h"
+#include "UiTheme.h"
 #include <QPainter>
 #include <QRegularExpression>
 #include <QImage>
@@ -81,6 +83,11 @@ QString NodePresentation::iconKey(const QString& name, bool group) {
 QIcon NodePresentation::icon(const QString& name, bool group) {
     const auto region=location(name);
     const auto key=!region.code.isEmpty()?region.code:group?QString("group"):name=="DIRECT"?QString("direct"):name=="REJECT"||name=="REJECT-DROP"?QString("reject"):QString("unknown");
+    if (region.code.isEmpty()) {
+        static QCache<QString,QIcon> glyphs(16); const auto identity=key+QString(UiTheme::Brand);
+        if (const auto* cached=glyphs.object(identity)) return *cached;
+        const auto icon=UiIcons::icon(group?UiIcons::Glyph::Layers:key=="reject"?UiIcons::Glyph::Close:key=="direct"?UiIcons::Glyph::Route:UiIcons::Glyph::Globe,UiTheme::Brand); glyphs.insert(identity,new QIcon(icon)); return icon;
+    }
     static QHash<QString,QIcon> assets;
     if (const auto cached=assets.constFind(key); cached!=assets.cend()) return cached.value();
     if (!region.code.isEmpty()) {

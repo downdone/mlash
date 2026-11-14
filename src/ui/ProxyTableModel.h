@@ -16,6 +16,10 @@ public:
     QVariant data(const QModelIndex& index, int role = Qt::DisplayRole) const override;
     QVariant headerData(int section, Qt::Orientation orientation, int role) const override;
     void setGroup(const QJsonObject& proxies, const QString& group);
+    // 手动策略组里「正在生效」的成员。节点行列表用它画勾选并拒绝重复提交；
+    // 自动组（URLTest/Fallback）的 now 由内核选路，不能按同一语义理解为「用户选中」。
+    void setCurrent(const QString& name) { if (current_ == name) return; current_ = name; if (!names_.isEmpty()) emit dataChanged(index(0,0),index(names_.size()-1,columnCount()-1)); }
+    QString current() const { return current_; }
     void setDelay(const QString& name, int delay, const QString& error,const QDateTime& time=QDateTime::currentDateTimeUtc());
     void setTestContext(const QString& url) { if (testUrl_!=url) { testUrl_=url; clearDelays(); } }
     void setFavorites(const QSet<QString>& names) { if (favorites_==names) return; favorites_=names; if (!names_.isEmpty()) emit dataChanged(index(0,0),index(names_.size()-1,0)); }
@@ -25,6 +29,7 @@ public:
 private:
     QStringList names_;
     QString now_;
+    QString current_;
     QJsonObject proxies_;
     QHash<QString, int> delays_;
     QHash<QString, QString> errors_;

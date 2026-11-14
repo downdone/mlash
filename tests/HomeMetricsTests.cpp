@@ -2,13 +2,16 @@
 #include "app/AppController.h"
 #include "ui/HomeMetricsView.h"
 #include "ui/MainWindow.h"
+#include "ui/ViewIds.h"
 #include "ui/UiTheme.h"
 #include "diagnostics/ProcessMetrics.h"
 #include "MockHttp.h"
 #include "storage/Storage.h"
 #include <QtTest>
+#include <QPushButton>
 #include <QJsonDocument>
 #include <QLabel>
+#include <QToolButton>
 #include <QTemporaryDir>
 #include <QScrollArea>
 using namespace mlash;
@@ -29,7 +32,28 @@ private slots:
 #ifdef Q_OS_WIN
         const auto memory=processMemory(QCoreApplication::applicationPid()); QVERIFY(memory.ok); QVERIFY(memory.data.value("working_set").toDouble()>0); QVERIFY(!processMemory(0).ok);
 #endif
-        QTemporaryDir root; AppController controller(root.path(),true); MainWindow window(&controller); window.resize(840,560); window.show(); QTest::qWait(50); auto* metrics=window.findChild<HomeMetricsView*>(); QVERIFY(metrics); QVERIFY(!metrics->isVisible()); QVERIFY(window.findChild<QWidget*>("homeOnboarding")->isVisible()); auto& presentation=const_cast<AppState&>(controller.state()); presentation.activeProfile=newId(); presentation.ready=true; emit controller.stateChanged(); QVERIFY(metrics->isVisible()); QVERIFY(!controller.homeMetrics()->sampling()); window.setPage(4); QVERIFY(!metrics->isVisible()); window.hide(); QVERIFY(controller.homeMetrics()->snapshot().isEmpty()); window.show(); window.setPage(0); QVERIFY(metrics->isVisible()); auto* scroll=window.findChild<QScrollArea*>("homeScroll"); QVERIFY(scroll); scroll->ensureWidgetVisible(metrics,0,0); QCoreApplication::processEvents(); QVERIFY(scroll->viewport()->rect().contains(metrics->mapTo(scroll->viewport(),metrics->rect().bottomRight())));
+        // K5/K6：流量指标与曲线移进「数据 › 流量」，首页不再有指标段与展开入口。
+        // 采样仍然只在指标可见时进行，这条才是本用例的要点。
+        QTemporaryDir root; AppController controller(root.path(),true); MainWindow window(&controller); window.resize(840,560); window.show(); QTest::qWait(50);
+        auto* metrics=window.findChild<HomeMetricsView*>(); QVERIFY(metrics); QVERIFY(!metrics->isVisible());
+        QVERIFY(!window.findChild<QToolButton*>("homeDetailsDisclosure"));
+        QVERIFY(!window.findChild<QWidget*>("homeOnboarding"));
+        // K6：指标块在「数据 › 流量」面板里，四个页签共用一个 QStackedWidget；
+        // 显示与否由「视图可见 && 当前页签」两块决定，所以先挑到一个数据页签，再决定显示窗口。
+        window.setPage(4); QCoreApplication::processEvents();
+        QCOMPARE(window.currentRoute().view,int(ViewIds::Data));
+        // 旧编号 4 是「数据 · 连接」，所以进来先停在连接页签；指标块在「流量」页签。
+        window.navigate(Route{ViewIds::Data, kNoCategory, HomeAnchor::Control, int(ViewIds::DataTab::Traffic)});
+        QCoreApplication::processEvents();
+        QCOMPARE(window.currentRoute().tab,int(ViewIds::DataTab::Traffic));
+        QVERIFY(metrics->isHidden()); auto* details=window.findChild<QPushButton*>("trafficDetails"); QVERIFY(details); details->click();
+        QVERIFY(!metrics->isHidden());   // 已选中的堆叠页：不再 hidden，只随数据页一起显示/隐藏
+        window.show(); QTest::qWait(20); QVERIFY(metrics->isVisible());
+        // 首页不含指标块；切回合页后它随数据页一起隐藏。
+        window.setPage(0); QCoreApplication::processEvents();
+        QCOMPARE(window.currentRoute().view,int(ViewIds::Home));
+        QVERIFY(!metrics->isVisible());
+        window.hide(); QVERIFY(!window.isVisible());
     }
 };
 QTEST_MAIN(HomeMetricsTests)

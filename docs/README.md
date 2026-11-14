@@ -1,6 +1,6 @@
 # 文档导航
 
-面向当前 **1.17.1** 基线。首次使用从使用指南开始，开发修改先读工程方法与架构。历史分析和方案集中归档，不能用其中的阶段判断替代当前状态。
+面向当前 **1.18.0** 基线。首次使用从使用指南开始，开发修改先读工程方法与架构。历史分析和方案集中归档，不能用其中的阶段判断替代当前状态。
 
 ## 使用与发行
 
@@ -14,6 +14,12 @@
 
 ## 开发与当前契约
 
+[U11 UI 系统规范](design/u11-ui-system.md)：以已确认最终原型为唯一基准，规定信息架构、全局布局、组件、视觉 token、输入状态及逐页对照门禁；修正 U10 的结构偏差；本轮已原生实施，实际验证范围见验证报告。
+
+[U10 紧凑版施工设计](design/u10-implementation.md)：最终原型进入原生开发，尺寸与浏览/应用边界见 [ADR 0050](adr/0050-shadowrocket-compact-widgets.md)。
+
+[U09 整体设计评审稿](ui-u09-shadowrocket.md)：macOS 原则、Shadowrocket 元素提炼及 UI；关联 [系统六层设计](design/u09-system-design.md)、[技术选型](design/u09-technology-review.md) 与 [最终交互原型](design/u09-final.html) 与 [最终稿说明](design/u09-final-spec.md)。设计稿已进入 U10 实施，完成范围以施工记录为准。 [结合 Verge 的补充评审](design/u09-verge-review.md) 说明可吸收的八项操作/模型优点及取舍。
+
 | 文档 | 唯一职责 |
 |---|---|
 | [开发构建](development/build.md) | 可重建依赖、环境变量、构建/测试/打包命令 |
@@ -22,8 +28,26 @@
 | [总体架构](architecture.md) | 进程、模块、线程、状态、存储事务和 OS 恢复 |
 | [功能模块契约](development/feature-contracts.md) | 有界字段、计划、并发、快照与取消细则 |
 | [内核 API 契约](api-contracts.md) | 固定内核行为、错误/超时和实际回读 |
-| [当前交互契约](ui-interactions.md) | 四分区八视图、托盘、反馈、视觉与完整操作链 |
+| [当前交互契约](ui-interactions.md) | 四分区任务层级、托盘、反馈、视觉与完整操作链 |
 | [界面精修审视](ui-apple-review.md) | Apple 风格精修的逐页、控件、按钮与密度设计及复核 |
+| [界面系统重构方案](ui-system-review.md) | U05 全量评审：信息架构、视觉 token、实施阶段与验收边界 |
+| [界面分层设计](ui-layered-design.md) | U06 六层设计：架构、原则、分类、容器、Widget、视觉 |
+| [R2 施工记录：标题槽](ui-r2-title-slot.md) | R2 片的实施前设计与实施后结果：单一页签宿主、窗口标题、图标收敛 |
+| [R2.5 施工记录：侧栏状态条](ui-r2-5-sidebar-status.md) | R2.5 片的实施前设计与实施后结果：共用状态句、侧栏常驻、托盘同源 |
+| [R3 施工记录：首页合并](ui-r3-home-merge.md) | R3 片的实施前设计与实施后结果：代理总开关命令、首页单滚动、栈索引映射 |
+| [R4 施工记录：订阅与节点](ui-r4-subscription-nodes.md) | R4 片：订阅菜单五组重排、首页单击即生效 |
+| [R3b 施工记录：连通性行](ui-r3b-connectivity.md) | R3b 片：首页控制区第三行的只读探测 |
+| [R7 施工记录：空态组件](ui-r7-empty-state.md) | R7 片：空态从透明标签改为「图标 + 原因 + 可聚焦动作」 |
+| [R8 施工记录：托盘](ui-r8-tray.md) | R8 片：托盘按跨对象六组重排，总开关与首页同源 |
+| [R5 施工记录：十态](ui-r5-states.md) | R5 片：连接/日志/规则的加载、失败、过期与冻结状态 |
+| [R6 施工记录：工具窗口](ui-r6-tool-windows.md) | R6 片：关闭直接丢弃草稿、取消才询问；长流程关窗不中止 |
+| [R9 施工记录：Token](ui-r9-tokens.md) | R9 片：`check_ui_tokens.py` 与硬编码清零 |
+| [R10 施工记录：反馈路由](ui-r10-feedback-routing.md) | P4.1 片：`OperationId`、页面级结果归属与状态栏两段 |
+| [U07 工作计划](ui-u07-plan.md) | 原型补全（P1–P2）与视觉结构对齐（S1–S2、V1–V5）的分片计划 |
+| [U08 工作计划](ui-u08-plan.md) | 首页对齐 GPT 原型：第一版 H1–H4；第二版按原型逐屏照做（K1–K9：顶栏、浮层菜单、抽屉、数据页四页签、配置行列表、设置三组） |
+| [静态原型](prototypes/ui-prototype.html) | 按 U06 渲染的 HTML 静态原型，用于观感复核；不是实现，不作验收依据 |
+| [GPT 原型](prototypes/Mlash_Shadowrocket_Style_Interactive_Prototype_from_chatgpt.html) | U08 第二版的直接规格（四分区交互原型）；第一版期间「不是验收依据」的注记已被 2026-11-02 用户指令取代，见 [U08 §7](ui-u08-plan.md) |
+| [对标调研](ui-benchmark-research.md) | U07 Clash Verge 2.5.9 源码与 Shadowrocket 的结构调研及证据等级 |
 | [原始产品规格](Mlash_Codex_Design_Spec_v2.0.md) | 需求和验收基线；接受的偏差由 ADR 说明 |
 | [架构决策索引](adr/README.md) | 编号 ADR、后续替代关系和设计理由 |
 

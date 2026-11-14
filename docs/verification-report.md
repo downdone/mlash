@@ -2,6 +2,408 @@
 
 本文只记录实际结果，区分本轮执行、历史匿名汇总与尚未验证的资格。原始配置、私人环境、真实订阅及原始诊断不进入公开文档。
 
+## R18：1.18.0 提交与预发布准备（2026-11-14）
+
+- 更新 CMake、产品入口说明、CHANGELOG 和版本发布说明为 1.18.0；保留历史验证事实。现有 Windows 工作流调用的测试脚本补上系统字体目录，再执行原默认隔离测试，不增加系统写入或放宽超时。
+- 本机构建通过；完整 44 组首轮 42 通过、1 失败、1 系统门禁跳过，451.60 秒。失败为网站 GUI 测试仍要求规则页保留数据导航，违反 ADR 0051 的配置归属；修正旧断言后网站组复测通过，12.05 秒。没有将多次结果冒充一次完整全绿。
+- 1.18.0 便携 ZIP 白名单/完整性 34 文件通过，CLI/PE 版本一致，包与构建 EXE 字节一致。ZIP SHA256：`a06b6b1c6fff14e1e4464148e578df616a2da30e821261a798d8ec8d2274807f`。两份 EXE 的 16/24/32/48/64/128/256 图标与源图一致。
+- `ci_smoke.ps1` 清理 Qt/PATH 外部依赖后运行包内程序通过，八页截图齐全，Schannel TLS 可用。未覆盖日常使用包，release_qualified=false。
+- 已提交源码与发布准备；实际推送因没有 GitHub 登录凭据被拒绝。本轮尚无远端新标签、线上运行或 Release 可核验。不能把本地发布准备称为 GitHub 发布成功。
+- 文档链接 110 份、隐私 117 份、文档工具四项单测和 UI token 检查通过。真实系统、正式发行与第三方材料边界沿用发布验收文档。
+
+## U11 最终原型原生实施（2026-11-14）
+
+按 [系统规范](design/u11-ui-system.md) 先记录设计，再完成共享行/分组、AppShell、NodeRow、Inspector 及四分区装配，决策见 [ADR 0051](adr/0051-prototype-ui-task-hierarchy.md)。保留进入本轮前的 U08/U10 未提交工作，不将整个工作区差异都计作本轮新增。
+
+### 实施与原型对照
+
+- 首页三行控制区、真实组名/当前成员/数量、国旗节点连续列表、独立延迟和信息命中、搜索/定位/测试/更多；当前勾选与预选分开，自动组只读。品牌置底，居中标题，状态栏固定在内容区。
+- 配置列表进入对象详情，再进入规则、DNS、节点与组、拨号链、维护、Provider 和来源任务。候选先预览再显式应用；浏览、下载、详情不激活配置。
+- 设置默认分组目录，启动/网络/内核/备份/工具使用单份原字段和草稿。网络 URL 失焦不保存；保存失败保留输入。修复早期校验拒绝未标记 SettingsApply 导致保存状态不结束的问题，取消/返回语义已回归。
+- 数据采用流量/连接/测试/日志四页签。连接默认目标/规则/链/状态四列，原列偏好保留；连接详情复用快照并增加版本/代次检查，新规则仍仅预填。
+- Inspector 宽窗实际收窄正文并列，窄窗替代正文，关闭恢复布局与焦点。共享主题、分隔线、行高、字体后备与图标统一；深色开关圆钮和品牌原色图标底托经实机复核修正。
+
+### 实际执行结果
+
+- `scripts/build.ps1` 构建通过。全量 43 组首轮：35 通过、7 失败、1 系统门禁跳过，482.38 秒。失败涉及旧入口/断言及实际布局、导航、设置失败反馈缺陷，已修复后复测，没有将首轮记录改写为全通过。
+- 修复后的 9 组回归全部通过（workflow_depth、prototype_ui、ui_interactions、ui_components、feedback_routing、page_lifecycle、home_control、connection_view、appearance），90.51 秒；TUN 状态与首页指标组在前一轮针对性复测通过。新增导航契约组单独通过，2.01 秒。开关/搜索修正后，原型、导航、外观三组再次通过，35.32 秒；末次品牌图标底托修正后，外观组再通过，30.57 秒，原生网站卡片用例通过。各组最终成功证据来自多次执行，未声称一次最终全量通过。
+- 原生 Windows QTest：原型任务流/窄宽 Inspector 通过；填充页面深浅主题、100%/120% 文字与三尺寸检查、网站响应卡片测试通过；连接嵌入 Inspector 与规则预填/取消用例通过。数据为隔离合成配置、本地 Mock HTTP，未访问真实订阅或写入系统代理。
+- 原生截图实际复核：首页、配置列表/详情、设置目录/网络编辑、节点和连接窄宽 Inspector、数据页签及网站响应卡片。截图只证明对应状态，未完成真人可用性实验、完整读屏或独立切换系统 DPI 的矩阵；原型 HTML 浏览器渲染因工具策略未执行，不宣称同屏像素差分。
+- `scripts/package.ps1` 生成独立 U11 UI 预览包；34 文件白名单与完整性校验通过。包内程序隔离原生冒烟输出八页，TLS/Schannel 可用；未替换日常包、增加真实用户数据、变更发布版本或上传。
+- 文档包含未跟踪文件的链接/导航检查 109 份 Markdown 零问题，文档与 HTML 隐私检查零命中，UI token 检查零命中。
+
+这是本轮 UI 实施与预览验证，不是重新声明正式发行资格。没有执行系统代理写入、TUN 权限实机、干净机器部署、Windows 10 或长稳验收。Qt 商业 SDK 许可服务仍有告警；没有接受条款或设置绕过选项，工具链发行授权仍未由本轮验证。
+
+## U11 系统设计复核（2026-11-14，仅设计）
+
+按用户优先 UI 系统方法的要求，重新读取最终原型 CSS、页面渲染/详情函数，与 U10 的外壳、首页、节点、配置、设置、连接详情和 UiTheme 对照。形成 [U11 规范](design/u11-ui-system.md)，逐项列出结构偏差、共享组件、明确尺寸、原型颜色、字体后备、状态语义及 G1–G6 门禁。没有修改产品源码、依赖、已确认原型或运行包；没有将既有自动测试通过作为原型视觉达标证据。
+
+包含未跟踪文档的实际链接/导航检查为 108 份 Markdown、零问题；文档及 HTML 隐私检查零命中，相关文档空白检查通过。纯设计变更未重跑产品构建和测试。
+
+## U10 紧凑版原生首切片（2026-11-14）
+
+范围和设计后复核见 [U10 施工记录](design/u10-implementation.md)，行为决策见 [ADR 0050](adr/0050-shadowrocket-compact-widgets.md)。保留进入本轮之前的未提交 U08 工作；没有将其全部计作本轮新实现。
+
+- `scripts/build.ps1` 构建通过。Qt 商业 SDK 的许可服务仍输出条款接受告警；未代为接受、未设置绕过选项，不能据此宣称开源工具链或发行授权验证完成。
+- `scripts/test.ps1` 筛选 8 组：workflow_depth_tests、ui_interactions、ui_components、status_bar_tests、feedback_routing_tests、page_lifecycle_tests、settings_value_tests、appearance_tests 全通过，合计 90.61 秒。离屏测试使用系统字体目录；限时不变。
+- 新回归固定订阅浏览不激活、显式应用、延迟点击不发选择、禁用延迟不测试；已有真实内核隔离流程继续覆盖选择/配置重载/轻量重建。没有执行系统代理写入、TUN 权限、干净部署或长稳测试。
+- 窄窗、主题、100%/120% 字号布局自动检查通过。原生 Windows 八页截图复核修正文字裁切和旧几何抓图；不等同于完整人工键盘/读屏验收。
+- `scripts/package.ps1` 生成独立 UI 预览，34 文件白名单及完整性检查通过；暂存程序原生冒烟输出八图，Qt 6.10.2、Schannel TLS 可用。没有替换日常使用包或公开发布。
+- 包含新文档的链接/导航检查 107 份 Markdown 零问题；文档和 HTML 隐私检查零命中；UI token 检查零命中。原始构建、测试及截图证据留在忽略的构建目录。
+
+初次构建缺少测试头文件、旧断言仍期望下拉即激活及隐藏按钮的旧几何，均已修正后重跑。缺省离屏插件无字体时的超时不计成功；最终使用可用系统字体的完整筛选结果。产品全部最终稿功能与正式发行资格仍未完成。
+
+## U09-V Verge 设计补充（2026-11-13，仅静态评审）
+
+只读复核声明版本 2.5.9 的参考源码：组工具/成员/组导航、延迟状态、订阅项、连接页/详情、当前代理及 mutate 协调；并交叉检查 Mlash 节点偏好/定位/测试 URL、配置维护和连接详情的已有基础。输出 [U09-V](design/u09-verge-review.md) 八项采纳建议、不同优先级及不照搬清单，同步 U09 UI 和系统设计。参考路径/符号和选取文件哈希在该文档维护，不记录工作站路径或真实订阅。
+
+包含未跟踪设计文件的实际检查：104 份 Markdown 文件链接/导航零问题，新评审文档隐私规则零命中。没有编译/运行 Verge、执行用户可用性实验或性能比较；只证明所读取客户端代码存在相应入口/逻辑，不证明插件内实现或实机行为。Mlash 产品源码、依赖、原型和现有未提交实现未修改，未重跑产品构建/回归，不将设计补充计作功能交付。
+
+## U09 设计评审稿（2026-11-13，仅设计）
+
+交付 [UI 方案](ui-u09-shadowrocket.md)、[系统设计](design/u09-system-design.md)、[Widgets/QML 评审](design/u09-technology-review.md) 和 [离线预览](design/u09-preview.html)。技术评审结合现有 CMake/模块/状态/路由/GUI 生命周期以及 Qt 6.10 官方资料；未运行框架样片，不宣称性能或资源优势。
+
+实际检查：将未跟踪的新设计文件也纳入文档导航检查，103 份 Markdown 的文件链接和导航零问题；新设计四文件隐私规则零命中；HTML 唯一静态 ID、相对说明链接、六地区内置旗帜路径检查通过，未包含远程脚本或网络/存储 API；提取脚本经 node --check 通过。八种候选文本/背景组合对比度均 >=4.5:1，实际为 16.83、15.63、5.33、6.64、5.57、6.48、5.57、6.20；未测的其他组合不能据此标通过。
+
+浏览器工具拒绝 file:// 本地页面，原因是协议安全策略；未通过改地址、服务或其他浏览器绕过。故预览的浏览器渲染、实际交互、响应式几何和焦点/读屏尚未验证，静态检查不等同视觉验收。原型只演示合成会话，按钮无真实代理、文件或网络副作用。
+
+本轮只修改设计/索引/状态/验证文档，未修改 src、CMake、运行依赖和已有 U08 未提交代码。原始规格不改，未把新方案强写成已实施 ADR。产品构建/完整回归未重跑，因为没有产品实现变化；后续先做核心组件样片和选型门禁，再按系统设计顺序固化接口及实施。
+
+## U08 第二版：按 GPT 原型逐项照做（2026-11-02）
+
+计划、验收点与逐片结果见 [U08 工作计划 §7](ui-u08-plan.md)。触发原因是用户对第一版的评价「现在非常难用」与指令「原型怎么做你怎么做」：GPT 原型自本日起是直接规格，第一版 §3 的取舍作废。K0–K9 九片均先在该文件补验收点再改代码，每片后重建并跑定向用例。
+
+### 实施内容
+
+| 片 | 落地内容 |
+|---|---|
+| K0 token | `UiTheme` 按 §7.3 补齐分级常量与原型暗色取值；浅色 `Brand=#0C5FBF`、`Primary/Focus=#0F63C8`（`OnPrimary` 对 `Primary` 5.77:1，`Brand` 对侧栏底 ≥4.5）；`check_ui_tokens.py` → `0 hits` |
+| K1 顶栏与侧栏 | `QWidget#topbar` 固定 72px：`topbarTitle`/`topbarSubtitle` 随路由、`topbarStatus` 胶囊、`topbarTheme`、`topbarMore`；侧栏 4 项 43px。视图编号收敛为 `ViewIds.cpp` 一处（`Home=0`…`Settings=4`），旧编号只在 `fromLegacy()` 解释 |
+| K2 路由方式 | 行点击弹 `QMenu`（规则模式/全局模式/直连模式，当前项带勾），`modeControl` 行内分段删除 |
+| K3 节点详情 | `WindowParts::DetailsDrawer`：无边框 `Qt::Tool`，宽 410，贴主窗右侧等高；自动组无「切换到此节点」 |
+| K4 节点标题行 | 删除 `#nodeSubscriptionRow`；订阅下拉选中即 `activateProfile`；测速、排序拆成两个图标钮各带浮层菜单 |
+| K5 首页构图 | 删除 `homeDetailsDisclosure`/`homeMetrics`/`homeOnboarding`/曲线/出口摘要/探测间隔/代理总开关按钮；顺序固定为控制卡 → 节点标题 → 节点列表 → `homeInlineStat` → 提示 |
+| K6 数据页 | `QTabBar#dataTabs`（流量/连接/测试/日志）+ `QStackedWidget#dataPanels`；可见性按当前页签 OR 合成；旧编号 5/7 经 `fromLegacyPage()` 落到对应页签 |
+| K7 配置页 | `QListView#remoteProfileList`/`#localProfileList`，行高 76，`ProfileRowModel` 按 `sourceType` 分流；行尾 › / 双击打开 410px `profileDrawer` |
+| K8 设置页 | 删除分类页签，改为「通用 / 网络 / 内核与维护」三张 `settingsGroup` 卡片；`ensureSettingsGroupVisible()` 按真实几何定位 |
+| K9 测试改写 | 见下「测试改写」与「实施中修掉的缺陷」 |
+
+### 测试改写（不删断言，改写为断言新结构）
+
+| 原断言 | 改写为 |
+|---|---|
+| `homeDetailsDisclosure` 可见、首页曲线可读 | 三个已删控件 `findChild(...)` 为空；指标块在 `setPage(4)` 下 `!isHidden()`，回 `setPage(0)` 后 `currentRoute().view == Home` |
+| `homeProbeInterval` 下拉存在 | 该控件为空；`setHomeVisible(true)` 后 `homeProbe()->result()` 含 `delay` |
+| 首页 `homeOutboundSummary` | 同名控件在流量页签内；经 `setPage(4)` 打开诊断，断言摘要高度 > 0 |
+| 侧栏 `setCurrentRow(3)` 生效 | 逐行对照 `currentRoute().view == item(n)->data(Qt::UserRole)`；第 2 行 → `ViewIds::Data`，第 3 行 → `ViewIds::Settings` 且 `page()==6` |
+| 旧编号 2 = 首页节点 | `navigate(Route{2})` → `ViewIds::Rules` / `page()==3`；只有 `setPage(2)` 回到首页 + `HomeAnchor::Nodes` |
+| 启动页/托盘路由期望 2 | 改为 0（首页 Control）；节点深链单独断言 `HomeAnchor::Nodes` |
+| 无订阅时 `homeControlCard` 隐藏、整卡空态 | 卡片恒可见，三行分别显示「尚未连接 / 规则模式 / 尚未测试」；`overviewTitle` 文本为「尚未连接」 |
+| 首页空态「前往首页启动」（`homeNextStep`） | 该控件为空；导入入口改用配置页 `addSubscription` 打开 `ImportDialog` |
+| 路由方式行内分段按钮（`property("mode")`） | 该控件为空；`homeRouteRow` 整行点击，鼠标焦点帧 ≠ Tab 焦点帧 |
+| 指标块在首页、直接断言 `metrics->isVisible()` | 指标块在「数据 › 流量」：隐藏窗口下先 `navigate(Route{Data,…,(int)DataTab::Traffic})` 断言 `!isHidden()`，`show()` 后 `isVisible()`，回首页不可见。注意旧编号 `setPage(4)` 落在**连接**页签 |
+| `profilesTable` 行操作「策略」「分享二维码」 | 鼠标点击 `remoteProfileList` 行开抽屉 → `profileDetailsMore` → 菜单项 `profilePolicyButton` / `shareProfileQr`（`selectionModel()->select()` 不触发 `clicked`） |
+| 首页探测组由组卡片设置 | K5 删掉组卡片后 `homeProbeGroup_` 无来源；测试显式 `setHomeProbeGroup("Test")`，选路语义不变 |
+
+### 实施中修掉的缺陷
+
+| 缺陷 | 根因 | 证据 |
+|---|---|---|
+| 侧栏「数据」打开规则页、「设置」打开数据页 | 侧栏条目存视图 ID（0/1/3/4），点击处理交给 `setPage()` 当旧编号解释（旧 3=规则、旧 4=数据·连接） | `WebsiteTests` 逐行导航断言；修复前 `navigation->setCurrentRow(3)` 无反应、行停在 2 |
+| 规则视图被吞成首页 | `navigate()` 与 `PageRouter::go()` 各留一次 `view==2 → 首页` 的历史归一化 | `coherentActionsAndBilingualRuleTokens` 修复前落在首页 |
+| 设置深链不滚动 / 标题丢分类 | `ensureWidgetVisible()` 向下多滚半个视口且离屏几何未更新；`Route{Settings}` 的 `kNoCategory` 覆盖当前分类 | 修复前 `max=1538 val=0`；分类 `Actual -1 Expected 2` |
+| 本地订阅列表右键无反应 / 菜单挡住对话框 | 两张列表共用对象名，`QMenu::popup()` 以模态接管本轮 | 修复前同一 `findChild` 恒返回远端菜单 |
+| 浅色对比度不足 | `Brand on Sidebar` 4.47、`OnPrimary on Primary` < 4.5 | 对比度用例，改色后全部达标 |
+| 深色主按钮白字只有 3.55:1 | K0 把原型 `--blue #2488f5` 同时用作 `Primary`，原型本身的白字底就不足 4.5:1 | `semanticContrastAndArtwork` 深色分支失败；`Primary` 深色改 `#1968c2`（5.53:1），`Brand` 保留原型的链接蓝 |
+| 控制区第 2 行没有键盘焦点环 | 行样式按 `objectName=homeControlRow` 选中，K2 把该行改成按钮后换了名字，QSS 落空且失去行背景 | `websiteResponseCards…` 的鼠标/键盘焦点对比断言；改为按 `controlRow` 属性选中，并补一条行级焦点环 |
+| 样式表整段静默失效 | 在 `UiTheme` 的 QSS 里写了 `//` 注释；Qt 只认 `/* */`，之后的规则被丢弃且不报编译/运行错误（键盘焦点环因此一直不出现） | 改回 `/* */`；已复查 `UiTheme.cpp` 的样式串内无 `//` 注释残留 |
+| 非数据页路由带上数据页签 | `fromLegacyPage()` 把 `DataTab::Traffic` 塞进首页/规则/设置的 `Route.tab` | 同一条路由各字段不等；`toLegacyPage()` 往返变数据页编号。改为仅数据页写入 |
+
+### 自动测试与仓库检查
+
+完整 `ctest --preset windows-mingw`：调整限时前 **39 通过、2 失败、1 跳过（42 项，586.57s）**；把 `appearance_tests` 限时放宽到 100s 后重跑完整整轮，**40 通过、1 失败、1 跳过（588.53s）**：
+
+| 用例 | 调整前 | 调整后 | 处理 |
+|---|---|---|---|
+| `core_update_tests` | Timeout 60.09s（60s 限） | Timeout 60.09s | 既有；第一版基线即超时（73.5s），本机下载/校验慢，限时未改 |
+| `appearance_tests` | Timeout 45.09s（45s 限） | **Passed 64.55s** | 45s 从第一版起就低于实测耗时（基线 57.3s）。经用户同意放宽到 100s；单跑 64.39s、整轮 64.55s 均通过 |
+| `system_test_guard` | Skipped | Skipped | 设计如此（默认不改宿主系统代理） |
+| 其余 39 项 | Passed | Passed | 含本轮改写的 `ui_tests`（43）、`workflow_depth_tests`（16）、`website_tests`（10）、`home_metrics_tests`（5）；`appearance_prefs_tests` 整轮 40.6s 通过 |
+
+`ui_refinement_tests`（非 Windows 分组，跑同一份 `AppearanceTests.cpp` 的子集）限时仍为 45s，Windows 上不注册；若将来在 Linux/macOS 上运行需一并放宽，此处未改。
+
+定向复跑（`QT_QPA_PLATFORM=offscreen`，单进程）：`appearance_tests` 11 passed / 64.4s（放宽限时后经 ctest 复跑亦为 Passed / 64.39s）、`ui_tests` 43 passed / 86.0s、`workflow_depth_tests` 16 passed / 18.2s、`website_tests` 10 passed / 14.4s、`home_probe_tests` 5 passed、`outbound_tests` 6 passed、`home_metrics_tests` 5 passed（连跑 3 次一致）、`appearance_prefs_tests` 6 passed / 40.7s。K9 过程中曾被判为 SEGFAULT 的三处，根因都是测试引用已删控件（空指针解引用），不是产品崩溃。
+
+仓库检查：`check_ui_tokens.py` → `0 hits`；`check_docs.py` → 0 findings；`check_document_privacy.py` → 0 findings。
+
+### 未验
+
+真实 Windows 实机观感（鼠标悬停、键盘焦点顺序、Alt+Tab 与任务栏）、读屏播报、高对比与 125%/150% 文字缩放下的人工复核、原型在浏览器中的逐屏人工比对。`release_qualified` 仍为 `false`。
+
+路由模型的实质变更（视图收敛为 5 个、数据页四页签、设置三组平铺）另记于 [ADR 0049](adr/0049-view-ids-and-data-tabs.md)。
+
+## U08 第一版：首页对齐 GPT 原型（2026-10-31）
+
+计划、取舍与分片设计见 [U08 工作计划](ui-u08-plan.md)（H1–H4 均先在该文件记录设计再改代码）。参照物是 `prototypes/Mlash_Shadowrocket_Style_Interactive_Prototype_from_chatgpt.html`；原型不是验收依据，`ui-layered-design.md` 与 ADR 0048 的裁决优先。
+
+### 实施内容
+
+| 片 | 落地内容 |
+|---|---|
+| H1 三行控制区 | `QFrame#homeControlCard` 内三行：① 当前代理（状态点 + 成员名 + 「订阅 · 选择方式」 + 状态句，行尾 `ProxySwitch#systemProxy`）；② 路由方式（标题 + 说明 + 行尾当前模式与 ›，点开才显示原 `modeControl` 分段）；③ 连通性测试（标题 + 上次结果 / 测试目标 + 「开始测试」 + 进入网站测试的 ›）。首页 TUN 开关与「TUN 设置…」按 `ui-layered-design.md:169` 删除 |
+| H2 删除六卡 | 六张 `dashboardCard`、`HomeSummaryDialog.{h,cpp}`、`Settings::homeSummaryMask`、`AppController::updateHomeSummary`、`home_summary_mask` 持久化字段全部移除；`ProfileStore`/`Storage` 读入旧状态时忽略该键 |
+| H3 节点行列表 | `NodeRowModel`（组头/成员两类行，`RowKind`/`IsAutoGroup`/`RegionCode`/`LatencyText`/`Subtitle` 等角色）与 `NodeRowDelegate`（组头 34px、成员行 46px，区域徽标 / 名称 / 协议副标题 / ✓ / 延迟 / ⓘ）；`QListView#nodeList` 与 `nodeCards_` 组成 `QStackedWidget#nodeViews`，四列表格页删除；标题行收纳订阅下拉、搜索、测速与「更多」溢出菜单 |
+| H4 指标收敛 | 首屏只有 `homeInlineStat` 一行（内核 · 模式 · ↓/↑速率 · 连接数 + 「数据详情 ›」）；「更多运行信息」抽屉补齐运行版本、内核状态与版本、接管明细、会话速率与峰值、最近启动、内核单独启停与代理总开关；无订阅时抽屉仍可见 |
+
+### 实施中修掉的 6 个缺陷
+
+| 缺陷 | 根因 | 证据 |
+|---|---|---|
+| 首页段错误 | `coreLabel_` 构造在 H1 被删，`updateState()` 仍写 `coreLabel_->setText()` | gdb 栈落在 `QLabel::setText` |
+| 首页段错误 | `cancelTestAction_` 漏建且无 `= nullptr`，实际值 `0xbaadf00d` | gdb 显示 `QAction::setEnabled` 的 `rcx = 0xbaadf00dbaadf00d` |
+| 构造期段错误 | `updateActions()` 由 `updateState()` 在页面构造途中触发，页面指针尚为空 | `saveRules_`/`rulesEditor_`/`nodeList_`/`connectionsTable_` 前置守卫 + 逐条空指针保护 |
+| 自动组成员可被回车固化 | `chooseSelectedNode()` 不校验组类型 | 与单击共用 `commitMemberSelection()`，仅 `Selector` 提交 |
+| 行列表渲染 O(n²) | `NodeRowModel::data()` 每次按名字线性查源行 | `members_` 与源行同序，直接用 `row.member` 作源行号 |
+| 标题行控件越界（x=-142） | `WrapLayout` 没有 spacer/拉伸语义，只增长第一个 `Expanding` 项 | 删 `addStretch`，改由搜索框承担拉伸 |
+
+其中「行列表渲染 O(n²)」与「`WrapLayout` 越界」都是本轮**自己引入又修掉**的，未进入最终代码。
+
+### 自动测试
+
+完整 `ctest --test-dir build/windows-mingw -j4`：**42 项中 38 通过、0 失败、1 跳过（`system_test_guard`）、3 超时**，总耗时 164.48s。三个超时用例逐条复核如下。
+
+串行复跑（`ctest -R "appearance_prefs_tests|core_update_tests|appearance_tests"`，无并发）：
+
+| 用例 | 限时 | 串行结果 | 判定 |
+|---|---|---|---|
+| `appearance_prefs_tests` | 45s | **32.79s 通过** | `-j4` 并行下的资源争用，非回归；单独运行时 35s 也通过 |
+| `core_update_tests` | 60s | 60.10s 超时 | 既有问题 |
+| `appearance_tests` | 45s | 45.14s 超时 | 既有问题 |
+
+后两者经基线复跑确认为本机环境问题，与本轮无关：
+
+| 用例 | 限时 | 基线（改动全部暂存后重建） | 本轮改动后 |
+|---|---|---|---|
+| `appearance_tests` | 45s | 57.3s 超时 | 49.4s 超时 |
+| `core_update_tests` | 60s | 73.5s 超时 | 73.5s 超时 |
+
+两者在本轮之前就已超限；本轮改动使 `appearance_tests` 略快。本轮不调限时——改限时属于降低证据强度，且本机性能不能代表干净机器。串行复跑下除这两个用例外全部通过，因此记为「2 项本机超时 + 1 项并行争用」。
+
+仓库检查：`check_ui_tokens.py` → `0 hits`；`check_docs.py` → 98 份 Markdown 0 findings；`check_document_privacy.py` → 105 份 0 findings。
+
+### 规范化入口与打包
+
+| 入口 | 结果 |
+|---|---|
+| `scripts/build.ps1` | `ninja: no work to do`（树已是最新） |
+| `scripts/test.ps1`（串行） | **38 通过、2 超时、1 跳过**（`system_test_guard`），总耗时 558.57s；`appearance_prefs_tests` 在串行下通过，进一步印证 `-j4` 那次超时是并行争用 |
+| `scripts/package.ps1` | 产出 `dist/Mlash-1.17.1-windows-x64-portable/` 与同名 ZIP；脚本自校验 34 个文件通过，ZIP SHA256 `7C440D82…95568FEB` |
+| 打包产物冒烟 | `dist/Mlash-1.17.1-windows-x64-portable/Mlash.exe --version` → `Mlash 1.17.1`；`--smoke-test` 退出码 0，产出 8 张 1410×930 截图（`build/u08pkg/`），空态首页与开发构建一致 |
+
+打包时发现一个**环境问题**（不是本轮代码问题）：`scripts/package.ps1` 调用了 `Get-FileHash`，Windows PowerShell 5.1 在本机报 `CommandNotFoundException` 直接中止。改用本机已安装的 PowerShell 7（`pwsh`）后同一脚本完整通过。若后续要求在 5.1 上跑打包，需要脚本侧加兼容实现或在 `build.md` 里写明最低版本；本轮未改脚本。
+
+### 截图复核
+
+`Mlash.exe --smoke-test --data-dir build/u08shots/data --screenshots-dir build/u08shots`（退出码 0）产出 8 张 1410×930 截图；另以 `MLASH_UI_SCREENSHOTS` 从 `mlash_ui_tests currentGroupSelectionAndNativePreview` 取得填充态首页 940×620，并按**原生比例**切成独立条带逐块查看（不缩放，避免重演 2026-10-30 那次「把缩小图误读成塌缩」的错误）。
+
+已核对：控制区三行与卡片圆角连续、无非常驻控件溢出；节点区标题行四项工具同排且互不重叠；组头与成员行高度可分；inline-stat 只在有活跃订阅且内核就绪时出现。
+
+### 未验
+
+真实 Windows 实机的观感（含鼠标悬停、键盘焦点顺序、Alt+Tab 与任务栏）、读屏播报、高对比与 125%/150% 文字缩放下的人工复核、原型在浏览器中的逐屏人工比对。`release_qualified` 仍为 `false`。
+
+## R2 标题槽（2026-10-29）
+
+实施前设计与实施后结果见 [R2 施工记录](ui-r2-title-slot.md)。要点：页面自绘标题全部删除，`replaceWidget` 与 `sectionTitle_` 移除；页签宿主固定为内容区第一行；窗口标题由 `routeTitle()` 随路由更新；`navigationIcon` 收敛为 4 个 `NavKind`。新增 `titleSlotIsSingleAndWindowTitleFollowsRoute` 覆盖「无 pageTitle / 首页无页签 / 标题随 8 视图与 3 分类变化 / 五视图页签几何一致 / 数据分区 3 页签」。完整 `ctest`：33 通过、0 失败、1 跳过。截图复核见施工记录第 5 节。未验：真实 Windows 实机的 Alt+Tab 与任务栏标题、人工读屏。
+
+## R2.5 侧栏状态条（2026-10-29）
+
+实施前设计与实施后结果见 [R2.5 施工记录](ui-r2-5-sidebar-status.md)。要点：新增 `statusSentence()` 纯函数产出四段文案（内核 / 接管 / TUN / 当前订阅）与状态点角色；侧栏底部常驻状态条单击回首页控制区；托盘 tooltip 前两行与侧栏逐字相同，第三行保留内核模式。`statusTooltip` 扩为 `(state, settings, profileName)`，两处旧测试补实参。新增 `sidebarStatusIsPermanentAndSharesTrayWording` 覆盖六状态文案、八视图可见性、侧栏/托盘一致性、点击回首页与 840×560 截图。完整 `ctest`：33 通过、0 失败、1 跳过。未验：真实托盘 tooltip 显示、人工读屏、120% 文字换行。
+
+## R5 / R6 / R9 实施（2026-10-30）
+
+- **R5 十态**（[记录](ui-r5-states.md)）：内核实际规则区分未就绪/读取中/失败（带重试）/无匹配/已就绪但为零，失败不再清空表格；日志页新增空态说明，区分未就绪/无匹配/已暂停/没有日志；连接刷新失败保留上一份快照并标注「刷新失败 · 显示上次快照」，`connectionsCurrent()` 收紧为「最近一次刷新成功」。新增 `ConnectionViewTests::logAndRuleRegionsDistinguishStates`。
+- **R6 工具窗口**（[记录](ui-r6-tool-windows.md)）：`DialogDraftGuard` 只拦 Esc 与取消按钮，窗口关闭静默丢弃草稿；长流程关窗不中止任务由 `BackupTests::closingTheWindowDoesNotAbortTheTask` 固定；修正 `协议关联` 标题。
+- **R9 Token**（[记录](ui-r9-tokens.md)）：新增 `scripts/check_ui_tokens.py`，改动前跑出 6 处命中，迁移后 `0 hits`；行为不变。
+
+完整 `ctest`：34 项中 33 通过、0 失败、`system_test_guard` 跳过。未验：真实内核下的连接/规则刷新、读屏播报、高对比与缩放观感、21 个对话框的人工视觉复核。
+
+## R9 收尾：高对比第四套取值与图标绘制器合并（2026-10-30）
+
+设计与复算表见 [R9 施工记录](ui-r9-tokens.md#13-高对比第四套取值)。要点：
+
+- 高对比从「只改边框」改为**独立的第四套并行取值**（浅/深 × 普通/高对比），同时改写表面分级、选中底、开关轨道与焦点环。9 对按 WCAG 2.x 相对亮度脚本实算全部达标：HC 浅主文字/表面 21.00、焦点环/底色 5.69、开关轨道/表面 8.86；HC 深主文字/表面 19.03、焦点环/底色 14.88。
+- `semanticContrastAndArtwork` 由「4 套外观 × 7 前景 × 3 背景」扩展为同时断言焦点环、悬停底，并在 HC 下额外断言边框、轨道与选中底。
+- `navigationIcon(NavKind)` 改调 `UiIcons::icon()`，`UiIcons` 新增 `Home`/`Chart`/`List` 字形，两套绘制器收敛为一套。
+- 完整 `ctest`：34 项中 33 通过、0 失败、`system_test_guard` 跳过；`python scripts/check_ui_tokens.py` → `0 hits`。
+
+未验：HC 与 125%/150% 文字缩放下的人工视觉复核、读屏播报、真实 Windows 实机观感。
+
+## R10 反馈路由（2026-10-30）
+
+设计与实施中修正的六处细节见 [R10 施工记录](ui-r10-feedback-routing.md)。要点：
+
+- `OperationId` 以默认参数注入 `operationStarted`/`operationFinished`，99 处既有 emit 保持可编译；`OperationScope` 把标识带进事务与拒绝路径，`finish()` 随结果发出。
+- `feedbackTarget()` 是纯函数归属表：订阅→1、首页→0、连接→4、设置→6、规则→3，其余（内核、备份、恢复、批量之外的跨页任务）走状态栏「最近操作」段。
+- 状态栏拆「最近操作 / 当前告警」两段：`state.lastError` 不再覆盖刚发生的操作结果（N10）。
+- 托盘失败气泡只承载没有页面可用的失败；`refreshRules` 的重复 emit 已删除（同一事实只留页面空态）。
+
+新增 `UiTests::operationResultsGoToTheirOwnPage` 与 `feedbackTargetsStayExplicit`（ctest 名 `feedback_routing_tests`）。实施中被测试抓到三处真实缺陷：重复关闭代理被当成失败、`settingsFeedback_` 成功文案压住「有 n 项需要重启的修改」、首页控制区提示随 `overview` 面板一起隐藏。
+
+完整 `ctest`：**35 项中 34 通过、0 失败、`system_test_guard` 跳过**，448 秒；`check_ui_tokens.py` `0 hits`；文档链接与隐私检查 0 findings。未验：真实 Windows 托盘气泡观感、读屏两段播报顺序、21 个对话框内部 hint 的去重。
+
+## U07 原型补全与视觉结构对齐（2026-10-30）
+
+计划与分片见 [U07 工作计划](ui-u07-plan.md)。九片全部实施，每片一次完整 ctest：
+
+| 片 | 要点 | 新增测试 |
+|---|---|---|
+| P1/P2 原型 | 新增 08–11 四屏；补齐原型引用却从未定义的基础类；用量条与菜单标题 | —（原型不是验收依据） |
+| S1 生命周期 | `PageRouter`/`PageLifecycle`；`navigate()` 只剩顺序 | `page_lifecycle_tests` |
+| S2 窗口注册表 | `ToolWindowRegistry`；同键 raise；订阅删除关闭对应窗口 | `tool_window_tests` |
+| V1 形状编码 | `StatusShape` 五态五形状 + `SkeletonBlock` | `status_shape_tests` |
+| V2 用量条 | `UsageDelegate`；无额度整列隐藏；状态列后移 | `profile_usage_tests` |
+| V3 行内当前值 | `settingRow` 可选 `currentValue` | `settings_value_tests` |
+| V4 菜单标题 | `menuSection()`；五组标题不可触发 | `menu_section_tests` |
+| V5 控制区 | 卡片协议标签、组选路说明、控制区失败原因 | `home_control_tests` |
+
+**实施中修掉的两个真实缺陷**：
+
+1. **越界写（R10 引入）**：`routeOperationFeedback` 的 `ProxyToggle` 分支直接写 `pageFeedback_[0]`，
+   而列表此时可能为空。`QList::operator[]` 越界是未定义行为，实际表现为段错误。
+   旧测试恰好先走订阅页路径把列表撑开，因此一直没暴露；V5 的测试是第一条先进首页路径的用例。
+2. **设置行提示压住重启提示**：V3 之前 `settingFeedback_` 在成功时写成「设置已应用」，
+   会一直盖住「有 n 项需要重启内核的修改」。改为成功后清空。
+
+**另有一处真实缺陷在 S2 之前就存在**：原型 01/03/06b 三屏引用的 `control-*`、`node-*`、
+`home-drawer` 等类在 CSS 里从未定义，浏览器中首页整块退化为纯文本堆叠。P1 已补齐。
+
+### 事后核实（2026-10-30）
+
+按「声称已实施」逐条回查代码，发现两处**声明与实现不符**，已在本轮补上：
+
+| 项 | 核实前的真实状态 | 处理 |
+|---|---|---|
+| `SkeletonBlock` | 类已建、有单测，但**没有任何界面实例化它**——文档写「已完成」属过度声明 | 接到「内核实际规则」的读取中状态，新增 `rulesTableHasSkeletonWired` 断言它挂在表格视口内且未就绪时收起 |
+| V3 行内当前值 | 更新循环里列了「启动页面 / 托盘单击」，但这两行从未创建 `settingValue` 标签，是死代码 | 从循环移除；下拉本身已显示值，再挂标签就是同一事实两处 |
+
+以下经核实与声明一致：`navigate()` 已无页面副作用分支（仅剩视图 2 归一化与设置分类两处路由逻辑）；13 个工具窗口全部走 `ToolWindowRegistry`，无残留 `findChild` 复用；R4/R6/R8/R9/R10 的验收点在代码中可查。
+
+最终完整 `ctest`：**42 项中 41 通过、0 失败、`system_test_guard` 跳过**，442 秒；
+`check_ui_tokens.py` `0 hits`；文档 98 个文件 0 findings。
+未验：真实 Windows 实机观感、读屏播报、HC 与 125%/150% 缩放下的人工复核、原型在浏览器中的逐屏人工比对。
+
+### 冒烟截图复查与一次误判的更正（2026-10-30）
+
+按用户要求在默认窗口尺寸下逐屏看冒烟截图（`Mlash.exe --smoke-test --screenshots-dir`，940×620）。
+**本轮曾误判「规则页与连接页的工具栏被压成竖排、导航缺失」，并据此改动 `src/main.cpp` 的抓图逻辑
+（`grab()` → `render()`、手动泵 `LayoutRequest`）与新增调试断言。复查后确认该判断错误**：
+所谓「塌缩」是把 1410×930 的原生截图缩进窄视口查看时的视觉错觉，逐行像素扫描显示各内容带连续填充、
+几何正常，`pageToolbarsStayHorizontal` 也从未失败。那批改动的理由不成立，已整体回退到原 `grab()` 实现，
+只保留一条说明切页间隔的注释。
+
+复查结论（实测）：
+
+- `src/main.cpp` 的 `render()` 改写会让冒烟截图只剩侧栏（同机实测 `build/smoke10/` 为空白内容），
+  回退后 `build/smoke11/` 八页均正常，尺寸 940×620。
+- 逐页看图：首页（控制区 + 引导卡）、订阅、规则、连接、日志、设置、网站测试均无结构性缺陷；
+  首页在当前空态下没有此前提到的「大段空白带」。
+- `tests/UiTests.cpp` 的 `pageToolbarsStayHorizontal` 去掉 `qInfo` 打印与临时 `resize(1128,744)` 脚手架，
+  改为对连接页与日志页工具条的宽度、高度（未换行）与搜索框宽度的实际断言，单独运行通过。
+
+因此本轮**没有发现需要修改的 UI 缺陷**，不新增 UI 切片；`check_ui_tokens.py` 仍为 `0 hits`。
+
+本轮最终完整 `ctest`（`scripts/test.ps1`）：**42 项中 41 通过、0 失败、`system_test_guard` 跳过**，437.28 秒；
+`check_ui_tokens.py` `0 hits`；`check_docs.py` 98 个 Markdown 链接/导航 0 findings；文档隐私检查 105 份 0 findings。
+未验：真实 Windows 实机观感、读屏播报、HC 与 125%/150% 缩放下的人工复核。
+
+## U06 产物打包（2026-10-30，非发行资格）
+
+在 `feature/r3-proxy-switch` 分支上按仓库入口实际执行：
+
+1. `scripts/build.ps1` → `ninja: no work to do`（工作树与已构建产物一致）。
+2. `scripts/test.ps1` → **34 项中 33 通过、0 失败、`system_test_guard` 跳过**，总耗时 403 秒。
+3. `scripts/package.ps1 -OutputName Mlash-1.17.1-windows-x64-u06` → portable 目录 + ZIP + 清单 + SHA256。
+
+实际产物：
+
+| 项 | 值 |
+|---|---|
+| 包名 | `Mlash-1.17.1-windows-x64-u06` |
+| ZIP | `dist/Mlash-1.17.1-windows-x64-u06.zip`，41,240,954 字节 |
+| ZIP SHA256 | `5f8d51435f6d415a9e3d6c11e84710ec935a42c1d46de2240e6b2949af375957` |
+| `Mlash.exe --version` | `Mlash 1.17.1`，退出码 0 |
+| PE 版本 | `Mlash.exe` 与 `MlashTunService.exe` 均与 CLI 版本一致（脚本内断言） |
+| 载荷 | 33 个文件入清单，加 `package-manifest.json` 共 34；白名单与完整性复核通过 |
+| `release_qualified` | `false` — 未走 `-Release` 证据门禁 |
+
+打包过程中发现并绕开的两点，均与环境而非代码有关：
+
+- PowerShell 5.1 在该 PATH 下无法自动加载 `Microsoft.PowerShell.Utility`，`Get-FileHash` 报「无法识别」，改用 `pwsh` 7 执行同一脚本即可。
+- 默认包名 `Mlash-1.17.1-windows-x64-portable` 下有一个 11:47 启动的实例仍在运行（用户自用），脚本按设计拒绝覆盖，故改用新 `OutputName`。
+
+**这是未取得发行资格的候选包**：未做 Windows 10 实机、干净机器部署、72 小时稳定性或性能预算验证，也未运行 `-Release` 的证据门禁；`dist/` 不入库。
+
+### R10 之后的重新打包（2026-10-30）
+
+R10 提交后重新执行 `scripts/package.ps1`。原包名目录下有一个 13:38 启动的实例在运行（用户自用），脚本按设计拒绝覆盖，故用新包名：
+
+| 项 | 值 |
+|---|---|
+| 包名 | `Mlash-1.17.1-windows-x64-u06-r10` |
+| ZIP | 41,248,406 字节 |
+| SHA256 | `19bc5e4a9e5495cbeb3407c67ea387363303acde77605f33b0116574efe4a480` |
+| `Mlash.exe --version` | `Mlash 1.17.1` |
+| 载荷 | 34 个文件，白名单与完整性复核通过 |
+| `release_qualified` | `false` |
+
+同为未取得发行资格的候选包，边界同上。
+
+## R8 托盘六组重排（2026-10-29）
+
+设计与结果见 [R8 施工记录](ui-r8-tray.md)。托盘顶层按跨对象六组重排，删除「更多页面」与独立「节点」入口；单击切换与菜单总开关统一走 `setProxyEnabled()` 并复用首页的外部代理确认。
+
+修正：重写时丢失「重测本组延迟」的强制重测参数（`testTrayGroup(name,true)`），导致该用例由绿转红，已恢复；并给使用系统剪贴板的三个套件加 `RESOURCE_LOCK system_clipboard`，解决 `ctest -j4` 并行互相覆盖。完整 `ctest`：33 通过、0 失败、1 跳过。未验：真实托盘系统集成与缩放下的观感。
+
+## R7 空态组件（2026-10-29）
+
+设计与一次失败尝试的记录见 [R7 施工记录](ui-r7-empty-state.md)。`emptyState()` 保留原签名，在说明标签下追加可聚焦动作按钮；订阅、节点、连接、规则四处按当前原因给出下一步动作（添加订阅 / 清除搜索或筛选 / 查看日志 / 启动内核 / 重试）。
+
+新增 `emptyStatesOfferFocusableNextStep` 覆盖订阅页与连接页的文案、`StrongFocus` 与点击结果。完整 `ctest`：33 通过、0 失败、1 跳过。未验：读屏焦点顺序与空态图标视觉。
+
+## R3b 首页连通性行（2026-10-29）
+
+设计与结果见 [R3b 施工记录](ui-r3b-connectivity.md)。新增 `ConnectivityProbe`：不受测速页可见性约束的单次只读延迟请求，结果带状态、延迟、节点、地址与时间戳，超 10 分钟标记过期。首页控制区第三行显示「连通性 · 结果 · 测试 · 详情」。
+
+测试 `mlash_home_probe_tests connectivityProbeRunsWithoutWebsitePageAndReportsFreshness` 覆盖未就绪拒绝且零请求、首页未显示仍可测、成功/失败/取消、节点选择不被改写。完整 `ctest`：33 通过、0 失败、1 跳过。未验：真实内核下的实测与人工读屏。
+
+## R4 订阅菜单与首页单击即生效（2026-10-29）
+
+实施前设计与实际结果见 [R4 施工记录](ui-r4-subscription-nodes.md)。订阅管理菜单按 5.6b 重排为只读头 + 常用动作 / 编辑配置 ▸ / 对象维护 / 文件与目录 / 危险动作；首页删除「切换节点」提交条，`selectNodeInHome()` 仅在手动策略组写入。
+
+实现中发现并修复：用 `QMenu::clear()` 重排会 delete 成员持有的 action（只读头、回滚、删除等），造成三个套件同时段错误；改为逐个 `removeAction` 后按序 `addAction`。`ui_interactions` 的节点交互测试按新语义改写。完整 `ctest`：33 通过、0 失败、1 跳过，112 秒。未验：真实鼠标/键盘下的菜单观感与读屏顺序。
+
+## R3 首页合并与代理总开关（2026-10-29）
+
+实施前设计、实现与偏差见 [R3 施工记录](ui-r3-home-merge.md)。要点：新增 `AppController::setProxyEnabled(bool)`（ADR 0048 的唯一 Controller 例外）；`proxyPage()` 改为节点区并入首页滚动视图，页面栈由 8 页降为 7 页并引入 `MainWindow::stackIndex(int)` 做视图 ID → 栈索引映射；首页主控件为代理总开关。
+
+自动测试：`proxyMasterSwitchRollsBackAndKeepsCoreRunning`（接管/释放/幂等/注入失败回滚，全程注入平台替身，`autoWrites==0`）、`homeOwnsNodeSectionInOneScrollView`（7 页栈、首页含节点区、ID 映射、入口 2 回首页）；五处几何前提按合并后的结构改写。完整 `ctest`：33 通过、0 失败、1 跳过，107 秒。未验：真实 TUN/系统代理切换、人工读屏、性能与稳定性预算。
+
+## 本轮：R1 路由切片（2026-10-29）
+
+按 [分层设计实施切片](ui-layered-design.md#实施切片) 的 R1 落地路由模型：新增 `Route{view, category, anchor}`、`fromLegacyPage` / `toLegacyPage` / `isRoutableView`；`MainWindow::navigate(Route)` 成为唯一切换入口，`setPage(int)` 保留为历史重载并统一经 `fromLegacyPage`；`GuiHost` 保存 `Route` 而非整数页号，轻量重建后首页锚点一并恢复；托盘新增 `showRoute`，设置搜索新增 `routeRequested`，两者都不再以整数 2 表达「首页 › 节点」。设计与 ADR 0048 同步修正了 R1/R3 的边界：**索引 2 的节点控件删除并入 R3**，R1 只做路由归一化，避免两片之间「换节点」不可用。
+
+构建：Windows 本机 Qt 6.10.2 + MinGW 13.1.0，`windows-mingw` 预设全目标链接成功，无错误。
+
+自动测试（实际执行）：
+- 新增 `mlash_ui_tests routesCarryHomeAnchorAndSettingsCategory`：入口 ID ↔ 路由双向转换（0↔0、2↔2、6→常规分类）；`isRoutableView` 拒绝 `view=2/8/-1` 等非法组合；侧栏「首页」回显 0、显式节点入口回显 2 且 `currentRoute()` 为权威；设置分类可深链 `(6,2)`，未指定分类时沿用当前分类；`GuiHost.show(Route{0,-1,Nodes})` 重建后锚点仍在。
+- 更新陈旧断言两处：`mlash_ui_tests desktopPreferencesAndEnvironmentCopy` 的托盘单击改为断言 `showRoute`（Node 锚点）而非整数 2；`mlash_appearance_tests taskEntryPointsAndSettingsStayCoherent` 的首页分区页签改为断言回显 0 且页面栈落在索引 0。
+- 完整 `ctest --test-dir build/windows-mingw -j4`：34 项中 33 通过、0 失败、`system_test_guard` 按设计跳过，用时 114 秒。
+
+顺带修正的实现缺陷：`showEvent` 原先用 `page()==0` 判断首页可见性，在节点入口下漏置；`applyHomeAnchor` 原先查找的 `nodeContent` 在 `homePage()` 执行时尚未由 `proxyPage()` 创建，恒为空指针——现已改为在节点视图内定位当前成员行，并注释说明 R3 合并后改为滚动首页。
+
+未验：真实 Windows 实机交互、人工读屏、性能与发行资格。R2 起的分区页签收敛、R3 首页合并与代理总开关均未实施。
+
 ## 本轮：设置即时生效、内核历史与标题统一（2026-10-29）
 
 按 [ADR 0044](adr/0044-immediate-settings-core-history.md) 与本轮工程审视先记录方案，再修改。设置页分类页签与搜索并入统一标题行，不再保留独立“设置”标题；偏好类设置在控件变化时立即提交，需要内核安全重启的项只保留显式动作；设置分组内 `CompactComboBox` 与新增 `CompactSpinBox` 在未聚焦且未展开时忽略滚轮；内核历史以 `core_history` 持久化（上限 8、按 sha256 去重、旧版在前），清理时保留在册副本并移除已删除记录。

@@ -1,6 +1,7 @@
 #pragma once
 #include "Types.h"
 #include "HomeMetrics.h"
+#include "ConnectivityProbe.h"
 #include "HomeNodeProbe.h"
 #include "OutboundDiagnostics.h"
 #include "platform/GlobalHotkeys.h"
@@ -48,6 +49,10 @@ public:
     void inspectNetworkInterfaces(Completion done);
     QJsonObject tunObservation() const { return core_.tunObservation(); }
     void setSystemProxy(bool enabled, bool allowExternal = false);
+    // 代理总开关（ADR 0048）：让「设置允许的接管方式」生效/失效，内核在关闭时继续运行。
+    // 与 startCore/stopCore/setSystemProxy/setTunEnabled 的区别是它自己负责组合与失败回滚，
+    // 因此 UI 只需一次调用，不必在 busy 互斥下编排多步命令。
+    void setProxyEnabled(bool enabled, bool allowExternal = false);
     void setMode(const QString& mode);
     void selectMember(const QString& group, const QString& member);
     void clearAutomaticSelection(const QString& group);
@@ -75,7 +80,6 @@ public:
     void setHomeVisible(bool visible);
     void setHomeProbeGroup(const QString& group);
     void updateHomeProbe(int seconds);
-    void updateHomeSummary(int mask,const QJsonValue& expected=QJsonValue(QJsonValue::Undefined));
     void updateProxyBypass(const QString& text,const std::optional<QString>& expected=std::nullopt);
     void inspectUrlProtocol(Completion done);
     void setUrlProtocol(bool enabled);
@@ -95,6 +99,13 @@ public:
     void cancelRemoteBackup();
     const QJsonObject& remoteBackupStatus() const { return remoteBackupStatus_; }
     const HomeNodeProbe* homeProbe() const { return &homeProbe_; }
+    // 首页「连通性」行（R3b）：不受测速页可见性约束的只读探测。
+    const ConnectivityProbe* connectivity() const { return &connectivity_; }
+    void runConnectivityProbe();
+    void cancelConnectivityProbe();
+    // 仅供测试注入被测 API 端点：连通性探测走与该 API 相同的只读延迟请求，
+    // 生产路径由 CoreManager 在启动内核时配置同一端点。
+    void configureApiForTests(int port, const QString& secret) { api_.configure(port, secret); }
     const HomeMetrics* homeMetrics() const { return &homeMetrics_; }
     const OutboundDiagnostics* outboundDiagnostics() const { return &outboundDiagnostics_; }
     void startIpProbe(bool coreRoute=true);
@@ -135,7 +146,8 @@ public:
     void setConnectionsPaused(bool paused);
     bool connectionsPaused() const { return connectionsPaused_; }
     QString connectionSampleTime() const { return connectionSession_.observedAt(); }
-    bool connectionsCurrent() const { const auto& totals=connectionSession_.totals(); return connectionsVisible_&&!connectionsPaused_&&totals.contains("_observed_at")&&!totals.value("_paused").toBool(); }
+    // 「当前」指可见、未暂停且最近一次刷新成功；失败后保留的快照不算当前（见 connectionsStale）。
+    bool connectionsCurrent() const { const auto& totals=connectionSession_.totals(); return connectionsVisible_&&!connectionsPaused_&&!connectionStale_&&totals.contains("_observed_at")&&!totals.value("_paused").toBool(); }
     const QJsonArray& connections() const { return connections_; }
     const QJsonArray& closedConnections() const { return connectionSession_.closed(); }
     const QJsonObject& connectionTotals() const { return connectionSession_.totals(); }
@@ -144,6 +156,12 @@ public:
     void refreshRules();
     void setRulesVisible(bool visible);
     const QJsonArray& activeRules() const { return activeRules_; }
+    // 最近一次连接刷新是否失败；失败时列表保留上一份快照，界面必须标注过期。
+    bool connectionsStale() const { return connectionStale_; }
+    // 最近一次读取内核实际规则的结果：失败时保留原因，页面据此显示「读取失败」而不是
+    // 把空表说成「没有匹配」。
+    const QString& rulesError() const { return rulesError_; }
+    bool rulesLoaded() const { return rulesLoaded_; }
     void refresh();
     void testNodes(const QStringList& names,const QString& group={});
     bool testingNodes() const { return state_.busy && (delayInFlight_ > 0 || !delayQueue_.isEmpty()); }
@@ -180,16 +198,33 @@ signals:
     void proxiesChanged();
     void connectionsChanged();
     void rulesChanged();
-    void operationFinished(bool ok, const QString& message);
-    void operationStarted(const QString& message);
+    // id 标明结果归属（P4.1 反馈路由）：页面级结果进页面提示，跨页结果进状态栏「最近操作」。
+    // 默认参数保证未标注的旧调用点继续编译。
+    void operationFinished(bool ok, const QString& message, OperationId id = OperationId::Unspecified);
+    void operationStarted(const QString& message, OperationId id = OperationId::Unspecified);
     void nodeDelay(const QString& name, int delay, const QString& error);
     void delayProgress(int done, int total);
     void trayDelaysChanged();
     void exitReady();
 private:
+
     void dispatchHotkey(const QString& action);
     bool begin(const QString& operation, bool background = false, bool allowReadOnly = false);
     void finish(Result result);
+    // 事务级操作标识（P4.1）。命令在函数开头用 OperationScope 声明归属，begin() 把它
+    // 捕获进事务，finish() 随结果发出；被拒绝的调用也带上同一个标识。作用域结束时复位，
+    // 因此一次命令不会把标识泄漏给下一次。
+    struct OperationScope {
+        AppController* owner; OperationId previous;
+        OperationScope(AppController* owner, OperationId id) : owner(owner), previous(std::exchange(owner->operationId_, id)) {}
+        ~OperationScope() { owner->operationId_ = previous; }
+        OperationScope(const OperationScope&) = delete;
+        OperationScope& operator=(const OperationScope&) = delete;
+    };
+    // 拒绝时的结果也标明归属，UI 才能把它落到对应页面而不是全局状态栏。
+    void refuseOperation(const QString& message) { reportOperation(false, message); }
+    // 无写入的成功（例如重复关闭已是关闭态）同样要标明归属，不能因为「没做事」就变成失败。
+    void reportOperation(bool ok, const QString& message) { emit operationFinished(ok, message, operationId_); }
     void publish();
     int profileIndex(const QString& id) const;
     int chooseApiPort() const;
@@ -298,6 +333,7 @@ private:
     MihomoClient api_;
     HomeMetrics homeMetrics_{&api_,this};
     HomeNodeProbe homeProbe_{&api_,this};
+    ConnectivityProbe connectivity_{&api_,this};
     QString homeProbeGroup_;
     OutboundDiagnostics outboundDiagnostics_{this};
     WebsiteTests websiteTests_;
@@ -339,6 +375,11 @@ private:
     bool connectionsVisible_ = false, connectionsPending_ = false, connectionsPaused_ = false;
     quint64 connectionsGeneration_ = 0;
     QPointer<QNetworkReply> connectionRead_;
+    bool connectionStale_ = false;
+    QString rulesError_;
+    bool rulesLoaded_ = false;
+    OperationId operationId_ = OperationId::Unspecified;      // 当前调用的声明归属
+    OperationId transactionOperation_ = OperationId::Unspecified; // begin 捕获、finish 发出
     QJsonArray activeRules_;
     bool rulesVisible_ = false;
     quint64 rulesGeneration_ = 0;

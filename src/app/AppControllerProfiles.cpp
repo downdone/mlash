@@ -50,6 +50,7 @@ void AppController::stageSource(Profile profile, QByteArray source) {
 }
 
 void AppController::importUrl(const QString& name, const QUrl& url, const DownloadPolicy& policy) {
+    const OperationScope operation(this, OperationId::ProfileImport);
     if (!policy.valid()) { emit operationFinished(false, "下载策略无效：超时须为 5–120 秒，UA 须为单行 ASCII"); return; }
     if (!begin("正在下载订阅")) return;
     Profile profile; profile.id = newId(); profile.name = name.trimmed().isEmpty() ? url.host() : name.trimmed().left(120);
@@ -59,6 +60,7 @@ void AppController::importUrl(const QString& name, const QUrl& url, const Downlo
 }
 
 void AppController::importFile(const QString& name, const QString& path, const QString& replaceId) {
+    const OperationScope operation(this, OperationId::ProfileImport);
     if (!begin("正在导入本地 YAML")) return;
     if (!QStringList{"yaml","yml"}.contains(QFileInfo(path).suffix().toLower())) { finish(Result::fail("请选择 .yaml/.yml 文件")); return; }
     Profile profile; const int i = profileIndex(replaceId);
@@ -81,6 +83,7 @@ void AppController::previewNodeLinks(const QString& text,const QStringList& rese
 }
 
 void AppController::importNodeLinks(const QString& name,const QString& text) {
+    const OperationScope operation(this, OperationId::ProfileImport);
     if (text.size()>64*1024) { emit operationFinished(false,"节点链接超过64KiB"); return; }
     if (!begin("正在校验节点链接")) return;
     Profile profile; profile.id=newId(); profile.name=name.trimmed().isEmpty()?QString("节点链接"):name.trimmed().left(120); profile.sourceType="file";
@@ -101,10 +104,14 @@ void AppController::downloadProfileSource(const Profile& profile, const QUrl& ur
 }
 
 void AppController::updateProfile(const QString& id) {
+    const OperationScope operation(this, OperationId::ProfileUpdate);
     refreshSource(id, false);
 }
 
 void AppController::updateProfilesBatch(const QStringList& ids) {
+    const OperationScope operation(this, OperationId::ProfileBatch);
+    // 批量本身是跨页操作（结果进状态栏），逐项结果另外汇总进订阅页的聚合提示。
+    profileBatch_ = {{"total", 0}, {"results", QJsonArray{}}};
     QStringList unique;
     for (const auto& id:ids) { if (profileIndex(id)<0 || unique.size()>=256) { emit operationFinished(false,"批量更新包含无效订阅或超过 256 项"); return; } if (!unique.contains(id)) unique.append(id); }
     if (unique.isEmpty() || !begin("正在批量更新订阅候选")) return;
@@ -123,7 +130,7 @@ void AppController::runProfileBatch() {
     if (profileBatchCancelled_ || exitPending_ || profileBatchQueue_.isEmpty()) {
         profileBatch_["active"]=false; profileBatch_["skipped"]=profileBatchQueue_.size(); profileBatch_["cancelled"]=profileBatchCancelled_||exitPending_; profileBatchQueue_.clear(); profileBatchActive_=false;
         const auto rows=profileBatch_.value("results").toArray(); int failed=0; for (const auto& row:rows) if (!row.toObject().value("ok").toBool()) ++failed;
-        backgroundOperation_=false; emit profileBatchChanged(); finish({true,{},{{"notice",QString("订阅更新结束：已检查 %1 项，失败 %2 项，跳过 %3 项").arg(rows.size()).arg(failed).arg(profileBatch_.value("skipped").toInt())}}}); return;
+        backgroundOperation_=false; emit profileBatchChanged(); transactionOperation_=OperationId::ProfileBatch; finish({true,{},{{"notice",QString("订阅更新结束：已检查 %1 项，失败 %2 项，跳过 %3 项").arg(rows.size()).arg(failed).arg(profileBatch_.value("skipped").toInt())}}}); return;
     }
     profileBatchCurrent_=profileBatchQueue_.takeFirst(); profileBatch_["current"]=profileBatchCurrent_; emit profileBatchChanged();
     profileBatchDispatch_=true; refreshSource(profileBatchCurrent_,true); profileBatchDispatch_=false;
@@ -159,6 +166,7 @@ void AppController::moveProfile(const QString& id,int direction) {
 }
 
 void AppController::refreshSource(const QString& id, bool background) {
+    const OperationScope operation(this, OperationId::ProfileUpdate);
     const int i = profileIndex(id);
     if (i < 0) { emit operationFinished(false, "订阅不存在"); return; }
     if (!begin("正在更新候选订阅，运行版本保持不变", background)) return;

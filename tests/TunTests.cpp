@@ -27,11 +27,14 @@
 using namespace mlash;
 class TunPlatform final:public PlatformServices {
 public:
-    bool installed=true; int writes=0,installs=0; bool failState=false,verifyPeer=true,advanced=true;
-    Result readProxy() override { return {true,{},{{"flags",1},{"server",""},{"bypass",""},{"pac",""}}}; }
-    Result writeProxy(const QJsonObject&) override { ++writes; return Result::fail("prohibited"); }
-    QJsonObject proxyTarget(int) const override { return {}; } bool proxyEnabled(const QJsonObject&) const override { return false; }
-    Result autoStart(bool,const QString&) override { ++writes; return Result::fail("prohibited"); }
+    bool installed=true; int writes=0,installs=0,autoWrites=0; bool failState=false,verifyPeer=true,advanced=true;
+    // 真实快照语义的可注入替身：写入按请求生效，便于驱动代理总开关的接管/释放路径。
+    QJsonObject current{{"flags",1},{"server",""},{"bypass",""},{"pac",""}};
+    int failNextWrites=0;
+    Result readProxy() override { return {true,{},current}; }
+    Result writeProxy(const QJsonObject& value) override { ++writes; if (failNextWrites>0) { --failNextWrites; return Result::fail("injected write failure"); } current=value; return {}; }
+    QJsonObject proxyTarget(int port) const override { return {{"flags",3},{"server",QString("127.0.0.1:%1").arg(port)},{"bypass",""},{"pac",""}}; } bool proxyEnabled(const QJsonObject& snapshot) const override { return snapshot.value("flags").toInt()!=1; }
+    Result autoStart(bool,const QString&) override { ++autoWrites; return Result::fail("prohibited"); }
     Result readAutoStart(const QString&) override { return {true,{},{{"enabled",false}}}; }
     Result seal(const QByteArray& in,QByteArray& out) override { if (failState) return Result::fail("injected save failure"); out=in; return {}; }
     Result open(const QByteArray& in,QByteArray& out) override { out=in; return {}; }
@@ -83,6 +86,33 @@ private slots:
         c.updateTunSettings(options,expected); QTRY_COMPARE(finished.size(),3); QVERIFY(finished.last()[0].toBool()); QCOMPARE(c.coreProcessId(),pid); c.updateTunSettings(options,expected); QCOMPARE(finished.size(),4); QVERIFY(!finished.last()[0].toBool()); QCOMPARE(c.coreProcessId(),pid);
         platform->advanced=false; c.setTunEnabled(true); QTRY_COMPARE(finished.size(),5); QVERIFY(!finished.last()[0].toBool()); QCOMPARE(c.coreProcessId(),pid); QVERIFY(!c.settings().tunEnabled); platform->advanced=true; c.setTunEnabled(true); QTRY_COMPARE_WITH_TIMEOUT(finished.size(),6,16000); QVERIFY2(finished.last()[0].toBool(),qUtf8Printable(finished.last()[1].toString())); QVERIFY(c.state().tunObserved); QCOMPARE(c.settings().tunMtu,1400); c.setTunEnabled(false); QTRY_COMPARE_WITH_TIMEOUT(finished.size(),7,16000); QVERIFY(finished.last()[0].toBool()); QVERIFY(!c.state().tunObserved); QCOMPARE(c.settings().tunExcludeRoutes,QStringList{"192.168.0.0/16"});
         QSignalSpy exit(&c,&AppController::exitReady); c.requestExit(); QTRY_COMPARE_WITH_TIMEOUT(exit.size(),1,10000); QCOMPARE(platform->writes,0); QCOMPARE(platform->installs,0);
+    }
+    void proxyMasterSwitchRollsBackAndKeepsCoreRunning() {
+        QTemporaryDir data; auto platform=std::make_shared<TunPlatform>(); ProfileStore store(data.path(),platform); QVERIFY(store.load().result.ok);
+        Settings s; s.corePath=core; s.startCore=false; s.mixedPort=freePort(); QVERIFY(store.save(s,{}).ok); const auto file=data.path()+"/source.yaml"; QVERIFY(writeAtomic(file,source).ok);
+        auto session=std::make_unique<FakeTun>(platform);
+        AppController c(data.path(),true,nullptr,platform,WebsiteTests::defaults(),{}, {},std::move(session));
+        QSignalSpy init(&c,&AppController::initialized),finished(&c,&AppController::operationFinished); c.initialize(); QTRY_COMPARE(init.size(),1);
+        // 未选订阅：开关不可用，且不产生任何系统写入。
+        c.setProxyEnabled(true); QTRY_COMPARE(finished.size(),1); QVERIFY(!finished.last()[0].toBool()); QCOMPARE(platform->writes,0);
+        c.importFile("Switch",file); QTRY_COMPARE_WITH_TIMEOUT(finished.size(),2,12000); QVERIFY(finished.last()[0].toBool());
+        c.activateProfile(c.profiles()[0].id); QTRY_COMPARE_WITH_TIMEOUT(finished.size(),3,12000); QVERIFY(finished.last()[0].toBool());
+        const auto pid=c.coreProcessId(); const auto original=platform->current;
+        // 开启：内核已运行 → 只接管系统代理，内核进程不变。
+        c.setProxyEnabled(true); QTRY_COMPARE_WITH_TIMEOUT(finished.size(),4,12000); QVERIFY2(finished.last()[0].toBool(),qUtf8Printable(finished.last()[1].toString()));
+        QCOMPARE(c.state().proxy,ProxyState::Owned); QVERIFY(c.settings().desiredProxy); QCOMPARE(c.coreProcessId(),pid); QCOMPARE(platform->current.value("flags").toInt(),3);
+        // 关闭：只撤销接管，内核继续运行（ADR 0048）。
+        c.setProxyEnabled(false); QTRY_COMPARE_WITH_TIMEOUT(finished.size(),5,12000); QVERIFY(finished.last()[0].toBool());
+        QCOMPARE(platform->current,original); QCOMPARE(c.coreProcessId(),pid); QVERIFY(!c.settings().desiredProxy); QCOMPARE(c.state().core,CoreState::Running);
+        // 重复关闭是幂等成功，不再写系统。
+        const auto writesAfterOff=platform->writes; c.setProxyEnabled(false); QTRY_COMPARE(finished.size(),6); QVERIFY(finished.last()[0].toBool()); QCOMPARE(platform->writes,writesAfterOff);
+        // 写入失败：开关不能虚报成功，接管意图回到点击前。
+        platform->failNextWrites=1; const auto intentBefore=c.settings().desiredProxy; const auto beforeWrites=platform->writes;
+        c.setProxyEnabled(true); QTRY_COMPARE_WITH_TIMEOUT(finished.size(),7,12000); QVERIFY(!finished.last()[0].toBool());
+        QCOMPARE(c.settings().desiredProxy,intentBefore); QCOMPARE(c.state().core,CoreState::Running); QCOMPARE(c.coreProcessId(),pid); QVERIFY(platform->writes>beforeWrites); QCOMPARE(platform->current,original);
+        // 恢复能力保留：失败后仍可正常开启。
+        c.setProxyEnabled(true); QTRY_COMPARE_WITH_TIMEOUT(finished.size(),8,12000); QVERIFY2(finished.last()[0].toBool(),qUtf8Printable(finished.last()[1].toString())); QCOMPARE(c.state().proxy,ProxyState::Owned);
+        QSignalSpy exit(&c,&AppController::exitReady); c.requestExit(); QTRY_COMPARE_WITH_TIMEOUT(exit.size(),1,10000); QCOMPARE(platform->current,original); QCOMPARE(platform->autoWrites,0);
     }
     void policyAndPinnedCore() {
         Settings s; QVERIFY(!s.tunEnabled); QVERIFY(!Settings::fromJson({}).tunEnabled); s.tunEnabled=true; s.tunStack="gvisor"; s.tunStrictRoute=true; QCOMPARE(Settings::fromJson(s.toJson()).toJson(),s.toJson());
@@ -141,7 +171,12 @@ private slots:
         platform->installed=false; c.setTunEnabled(true); QTRY_COMPARE_WITH_TIMEOUT(finished.size(),4,6000); QVERIFY(!finished.last()[0].toBool()); QCOMPARE(c.coreProcessId(),originalPid); QVERIFY(!c.settings().tunEnabled);
         platform->installed=true; fake->bad=true; c.setTunEnabled(true); QTRY_COMPARE_WITH_TIMEOUT(finished.size(),5,16000); QVERIFY2(!finished.last()[0].toBool(),qUtf8Printable(finished.last()[1].toString())); QVERIFY2(c.state().ready,qUtf8Printable(finished.last()[1].toString())); QVERIFY(!c.settings().tunEnabled); QVERIFY(!c.state().tunObserved); QCOMPARE(c.profiles()[0].candidate,candidate);
         fake->bad=false; c.setTunEnabled(true); QTRY_COMPARE_WITH_TIMEOUT(finished.size(),6,16000); QVERIFY2(finished.last()[0].toBool(),qUtf8Printable(finished.last()[1].toString())); QVERIFY(c.state().tunObserved); QVERIFY(c.settings().tunEnabled); QCOMPARE(c.profiles()[0].candidate,candidate);
-        MainWindow* window=new MainWindow(&c); window->setTrayAvailable(true); window->resize(840,560); window->show(); QTest::qWait(50); auto* toggle=window->findChild<QCheckBox*>("homeTunSwitch"); QVERIFY(toggle->isChecked()); QVERIFY(window->rect().contains(toggle->mapTo(window,toggle->rect().bottomRight()))); const auto shots=qEnvironmentVariable("MLASH_UI_SCREENSHOTS"); if (!shots.isEmpty()) { QDir().mkpath(shots); window->grab().save(shots+"/tun-home-minimum.png"); } delete window; QVERIFY(fake->active());
+        MainWindow* window=new MainWindow(&c); window->setTrayAvailable(true); window->resize(840,560); window->show(); QTest::qWait(50);
+        // TUN 开关不在首页（ui-layered-design.md:169「TUN 开关不放首页」）：首页只报告观测结果，
+        // 启用入口在「设置 › 网络与内核」。这里断言它确实不在首页，且状态句里报告了接管。
+        QVERIFY(!window->findChild<QCheckBox*>("homeTunSwitch"));
+        QVERIFY(!window->findChild<QPushButton*>("homeTunSettings"));
+        auto* stateLine=window->findChild<QLabel*>("homeStateLine"); QVERIFY(stateLine); QVERIFY2(stateLine->text().contains("TUN 已接管"),qUtf8Printable(stateLine->text())); const auto shots=qEnvironmentVariable("MLASH_UI_SCREENSHOTS"); if (!shots.isEmpty()) { QDir().mkpath(shots); window->grab().save(shots+"/tun-home-minimum.png"); } delete window; QVERIFY(fake->active());
         c.setTunEnabled(false); QTRY_COMPARE_WITH_TIMEOUT(finished.size(),7,16000); QVERIFY2(finished.last()[0].toBool(),qUtf8Printable(finished.last()[1].toString())); QVERIFY(c.state().ready); QVERIFY(!c.settings().tunEnabled); QVERIFY(!c.state().tunObserved); QCOMPARE(c.profiles()[0].candidate,candidate);
         const auto ordinaryPid=c.coreProcessId(); c.updateTunOptions(false,"mixed",true); QTRY_COMPARE(finished.size(),8); QVERIFY(finished.last()[0].toBool()); QCOMPARE(c.coreProcessId(),ordinaryPid); QVERIFY(c.settings().tunStrictRoute);
         c.setTunEnabled(true); QTRY_COMPARE_WITH_TIMEOUT(finished.size(),9,16000); QVERIFY(finished.last()[0].toBool()); fake->failStop=true;
@@ -153,7 +188,7 @@ private slots:
         QPointer<TunDialog> dialog=new TunDialog(&c); dialog->show(); QTRY_VERIFY(dialog->findChild<QLabel*>("tunServiceStatus")->text().contains("未安装")); QVERIFY(!dialog->findChild<QPushButton*>("applyTunOptions")->isEnabled()); dialog->findChild<QPushButton*>("installTunService")->click(); QCOMPARE(platform->installs,0); QVERIFY(!dialog->findChild<QLabel*>("tunServiceStatus")->text().isEmpty());
         c.repairTunService(); c.retryTunCleanup(); QCOMPARE(platform->installs,0); QSignalSpy saves(&c,&AppController::operationFinished); dialog->findChild<QPushButton*>("tunAdvancedToggle")->click(); auto* mtu=dialog->findChild<QSpinBox*>("tunMtu"); auto* routes=dialog->findChild<QPlainTextEdit*>("tunExcludeRoutes"); mtu->setValue(1400); routes->setPlainText("0.0.0.0/0"); QVERIFY(!dialog->findChild<QPushButton*>("applyTunOptions")->isEnabled()); QVERIFY(!dialog->findChild<QLabel*>("tunValidationError")->text().isEmpty()); routes->setPlainText("192.168.1.25/24"); platform->failState=true; dialog->findChild<QPushButton*>("applyTunOptions")->click(); QTRY_COMPARE(saves.size(),1); QVERIFY(!saves.last()[0].toBool()); QCOMPARE(mtu->value(),1400); QVERIFY(dialog->isVisible()); QCOMPARE(c.settings().tunMtu,1500); platform->failState=false; QTRY_VERIFY(dialog->findChild<QPushButton*>("applyTunOptions")->isEnabled()); dialog->findChild<QPushButton*>("applyTunOptions")->click(); QTRY_COMPARE(saves.size(),2); QVERIFY(saves.last()[0].toBool()); QCOMPARE(c.settings().tunMtu,1400); QCOMPARE(c.settings().tunExcludeRoutes,QStringList{"192.168.1.0/24"});
         QTRY_VERIFY(dialog->findChild<QPushButton*>("refreshTunService")->isEnabled()); const auto dir=qEnvironmentVariable("MLASH_UI_SCREENSHOTS"); if (!dir.isEmpty()) { QDir().mkpath(dir); dialog->grab().save(dir+"/tun-dialog.png"); }
-        dialog->close(); QTRY_VERIFY(dialog.isNull()); AppState state; state.core=CoreState::Running; state.ready=true; state.proxy=ProxyState::Disabled; state.tunObserved=true; QCOMPARE(TrayController::appearance(state),QString("rule")); QVERIFY(TrayController::statusTooltip(state).contains("TUN"));
+        dialog->close(); QTRY_VERIFY(dialog.isNull()); AppState state; state.core=CoreState::Running; state.ready=true; state.proxy=ProxyState::Disabled; state.tunObserved=true; QCOMPARE(TrayController::appearance(state),QString("rule")); QVERIFY(TrayController::statusTooltip(state,Settings()).contains("TUN"));
         QSignalSpy exit(&c,&AppController::exitReady); c.requestExit(); QTRY_COMPARE(exit.size(),1); QCOMPARE(platform->writes,0);
     }
 };

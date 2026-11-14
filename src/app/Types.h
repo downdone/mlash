@@ -15,6 +15,15 @@ struct Result {
 };
 enum class CoreState { Stopped, Starting, Running, Stopping, Failed };
 enum class ProxyState { Disabled, Owned, External, Unknown };
+// 操作标识（界面分层设计 P4.1 / ADR 0046）：让 UI 知道一次结果属于哪个页面或对象。
+// 只标注需要落到页面或对象上的操作；对话框内部自带 hint 的动作保持 Unspecified。
+enum class OperationId : quint8 {
+    Unspecified = 0,
+    ProfileUpdate, ProfileActivate, ProfileBatch, ProfileImport,
+    ConnectionClose, ConnectionCloseAll,
+    ProxyToggle, TunToggle, ModeSwitch, MemberSelect,
+    CoreStart, CoreStop, CoreUpdate, Backup, Restore, SettingsApply, RulesSave
+};
 struct DownloadPolicy {
     QString route = "direct", userAgent;
     int timeoutSeconds = 30;
@@ -65,7 +74,6 @@ struct Settings {
     QString appearance="system";
     int textScale=100;
     int homeProbeSeconds=0;
-    int homeSummaryMask=15;
     QString proxyBypass="localhost;127.*;[::1];<local>";
     QJsonObject remoteBackup;
     QJsonObject localBackup;
@@ -105,3 +113,5 @@ struct AppState {
 QString coreStateText(CoreState state);
 QString proxyStateText(ProxyState state);
 }
+// 信号签名进入 moc 元对象，QSignalSpy 与跨 TU 取用都要求它是已注册类型。
+Q_DECLARE_METATYPE(mlash::OperationId)

@@ -3,11 +3,11 @@
 #include "ui/UiTheme.h"
 #include "ui/UiIcons.h"
 #include "ui/WidgetStyle.h"
+#include "ui/ViewIds.h"
 #include "ui/ImportDialog.h"
 #include "ui/GuiHost.h"
 #include "ui/HotkeysDialog.h"
 #include "ui/WebsiteTargetsDialog.h"
-#include "ui/HomeSummaryDialog.h"
 #include "ui/TunDialog.h"
 #include "ui/CoreUpdateDialog.h"
 #include "ui/GeoDataDialog.h"
@@ -21,6 +21,7 @@
 #include "storage/Storage.h"
 #include "MockHttp.h"
 #include <QtTest>
+#include <QListView>
 #include <QComboBox>
 #include <QFrame>
 #include <QLabel>
@@ -83,7 +84,16 @@ private slots:
         for (const auto scheme:{Qt::ColorScheme::Light,Qt::ColorScheme::Dark}) for (bool high:{false,true}) {
             UiTheme::applyAppearance(scheme,high);
             for (const auto foreground:{UiTheme::Ink,UiTheme::Secondary,UiTheme::Muted,UiTheme::Brand,UiTheme::Success,UiTheme::Warning,UiTheme::Error}) for (const auto background:{UiTheme::Surface,UiTheme::Window,UiTheme::Sidebar}) QVERIFY2(contrast(foreground,background)>=4.5,qUtf8Printable(QString("%1 on %2: %3").arg(foreground,background).arg(contrast(foreground,background))));
-            QVERIFY(contrast(UiTheme::OnPrimary,UiTheme::Primary)>=4.5); QVERIFY(contrast(UiTheme::Ink,UiTheme::Selection)>=4.5); if (high) QVERIFY(contrast(UiTheme::Border,UiTheme::Surface)>=3.0);
+            QVERIFY(contrast(UiTheme::OnPrimary,UiTheme::Primary)>=4.5); QVERIFY(contrast(UiTheme::Ink,UiTheme::Selection)>=4.5);
+            // 高对比是第四套并行取值：表面分级、焦点环、选中底与开关轨道都必须单独达标，
+            // 不能只靠加深边框（分层设计 6.3 规则 3）。
+            QVERIFY2(contrast(UiTheme::Focus,UiTheme::Window)>=3.0,qUtf8Printable(QString("focus/canvas %1 (%2)").arg(contrast(UiTheme::Focus,UiTheme::Window)).arg(high?"high":"normal")));
+            QVERIFY2(contrast(UiTheme::Ink,UiTheme::Hover)>=4.5,qUtf8Printable(QString("ink/hover %1").arg(contrast(UiTheme::Ink,UiTheme::Hover))));
+            if (high) {
+                QVERIFY(contrast(UiTheme::Border,UiTheme::Surface)>=3.0);
+                QVERIFY(contrast(UiTheme::Track,UiTheme::Surface)>=3.0);
+                QVERIFY(contrast(UiTheme::Ink,UiTheme::Selection)>=4.5);
+            }
             QCOMPARE(QApplication::palette().color(QPalette::Window),QColor(UiTheme::Window)); QVERIFY(!UiTheme::styleSheet().contains('@'));
         }
         QFile manifest(QStringLiteral(MLASH_SOURCE_DIR "/resources/services/manifest.json")); QVERIFY(manifest.open(QIODevice::ReadOnly)); const auto files=QJsonDocument::fromJson(manifest.readAll()).object().value("files").toArray(); QCOMPARE(files.size(),12);
@@ -96,7 +106,7 @@ private slots:
         QTemporaryDir dir; AppController controller(dir.path(),true,nullptr,std::make_shared<ReviewPlatform>()); QSignalSpy init(&controller,&AppController::initialized); controller.initialize(); QTRY_COMPARE(init.size(),1); MainWindow window(&controller); window.show(); window.setPage(6); auto* port=window.findChild<QSpinBox*>("mixedPort"); const int draft=port->value()+1; port->setValue(draft);
         TrayController tray(&controller); auto* menu=tray.findChild<QSystemTrayIcon*>()->contextMenu();
         for (const auto scheme:{Qt::ColorScheme::Light,Qt::ColorScheme::Dark}) {
-            UiTheme::applyAppearance(scheme); QCoreApplication::processEvents(); QCOMPARE(port->value(),draft); QCOMPARE(controller.settings().mixedPort,draft-1); QCOMPARE(window.page(),6); QCOMPARE(window.findChild<QLabel*>("settingsDraftHint")->text(),QString("有 1 项需要重启内核的修改"));
+            UiTheme::applyAppearance(scheme); QCoreApplication::processEvents(); QCOMPARE(port->value(),draft); QCOMPARE(controller.settings().mixedPort,draft-1); QCOMPARE(window.page(),6); QCOMPARE(window.findChild<QLabel*>("settingsDraftHint")->text(),QString("有 1 项未保存的网络设置"));
             menu->popup(QPoint(180,100)); QTRY_VERIFY(menu->isVisible()); const auto before=menu->geometry();
             for (int wait:{0,16,160}) { if (wait) QTest::qWait(wait); const auto frame=menu->grab().toImage(); QCOMPARE(frame.pixelColor(0,0).alpha(),0); QCOMPARE(menu->geometry(),before); } save(menu,scheme==Qt::ColorScheme::Dark?"tray-dark":"tray-light"); menu->hide();
             auto* combo=window.findChild<QComboBox*>("startupPage"); combo->showPopup(); QTRY_VERIFY(combo->view()->isVisible()); QCOMPARE(combo->view()->window()->grab().toImage().pixelColor(0,0).alpha(),0); save(combo->view()->window(),scheme==Qt::ColorScheme::Dark?"combo-dark":"combo-light"); QTest::keyClick(combo->view(),Qt::Key_Escape); QTRY_VERIFY(!combo->view()->isVisible()); QCOMPARE(port->value(),draft);
@@ -124,7 +134,9 @@ private slots:
             UiTheme::applyAppearance(scheme); window.resize(size);
             for (int page=0;page<8;++page) { window.setPage(page); QCoreApplication::processEvents(); save(&window,QString("%1-%2x%3-page-%4").arg(scheme==Qt::ColorScheme::Dark?"dark":"light").arg(size.width()).arg(size.height()).arg(page)); }
             for (auto* scroll:window.findChildren<QScrollArea*>()) QCOMPARE(scroll->horizontalScrollBar()->maximum(),0);
-            window.setPage(0); QVERIFY(window.findChild<QWidget*>("homeOnboarding")->isVisible()); for (auto* card:window.findChildren<QWidget*>("dashboardCard")) { if (!card->isVisible()) continue; QVERIFY(window.rect().contains(card->mapTo(&window,card->rect().bottomRight()))); for (auto* label:card->findChildren<QLabel*>()) if (label->isVisible()) QVERIFY2(card->rect().contains(label->geometry()),qUtf8Printable(label->objectName())); }
+            window.setPage(0); QVERIFY(!window.findChild<QWidget*>("homeOnboarding")); QVERIFY(window.findChild<QWidget*>("homeControlCard")->isVisible());
+            // 首页六卡已删除（U08 H2）：控制区与节点列表都不应越出窗口。
+            for (auto* widget:QList<QWidget*>{window.findChild<QWidget*>("homeControlCard"),window.findChild<QWidget*>("homeInlineStat")}) if (widget && widget->isVisible()) QVERIFY(window.rect().contains(widget->mapTo(&window,widget->rect().bottomRight())));
         }
         ImportDialog dialog(&window); dialog.show(); for (const auto scheme:{Qt::ColorScheme::Light,Qt::ColorScheme::Dark}) { UiTheme::applyAppearance(scheme); QCoreApplication::processEvents(); QCOMPARE(dialog.findChild<QLineEdit*>("subscriptionUrl")->font().pointSize(),UiTheme::BodyPoints); save(&dialog,scheme==Qt::ColorScheme::Dark?"import-dark":"import-light"); }
         UiTheme::applyAppearance(Qt::ColorScheme::Light,true); window.setPage(6); save(&window,"contrast-light"); UiTheme::applyAppearance(Qt::ColorScheme::Dark,true); save(&window,"contrast-dark");
@@ -150,7 +162,7 @@ private slots:
         };
         controller.findChild<MihomoClient*>()->configure(api.serverPort(),"UI fixture");
         MainWindow window(&controller); window.show();
-        auto* port=window.findChild<QSpinBox*>("mixedPort"); const int original=port->value(); port->setValue(original+1);
+        auto* port=window.findChild<QSpinBox*>("mixedPort"); const int original=port->value();
         auto& settings=const_cast<Settings&>(controller.settings());
         for (int scale:{100,120}) for (const auto scheme:{Qt::ColorScheme::Light,Qt::ColorScheme::Dark}) {
             settings.appearance=scheme==Qt::ColorScheme::Dark?"dark":"light"; settings.textScale=scale;
@@ -162,8 +174,9 @@ private slots:
                     QCOMPARE(window.size(),size);
                     save(&window,QString("filled-%1-%2-%3x%4-page-%5").arg(settings.appearance).arg(scale).arg(size.width()).arg(size.height()).arg(page));
                     if (page==2) {
-                        auto* view=window.findChild<QComboBox*>("nodeViewMode"); view->setCurrentIndex(1); QCoreApplication::processEvents();
-                        save(&window,QString("cards-%1-%2-%3").arg(settings.appearance).arg(scale).arg(size.width())); view->setCurrentIndex(0);
+                        // H3：显示方式收进「更多 › 显示方式」；这里直接用公开入口切换。
+                        window.setMemberView(1); QCoreApplication::processEvents();
+                        save(&window,QString("cards-%1-%2-%3").arg(settings.appearance).arg(scale).arg(size.width())); window.setMemberView(0);
                     }
                     for (auto* scroll:window.findChildren<QScrollArea*>()) QCOMPARE(scroll->horizontalScrollBar()->maximum(),0);
                     // Each visible button must fit its layout parent; controls may scroll vertically.
@@ -173,33 +186,42 @@ private slots:
                     }
                 }
                 window.setPage(6); auto* scroll=window.findChild<QScrollArea*>("settingsScroll");
-                auto* categories=window.findChild<QTabBar*>("settingsCategories");
-                const QList<QFrame*> sections{window.findChild<QFrame*>("settingsApplication"),window.findChild<QFrame*>("settingsCore"),window.findChild<QFrame*>("settingsTools")};
-                for (int category=0;category<sections.size();++category) {
-                    categories->setCurrentIndex(category); QCoreApplication::processEvents();
-                    for (int i=0;i<sections.size();++i) QCOMPARE(sections[i]->isVisible(),i==category);
-                    QVERIFY(window.findChild<QWidget*>("settingsSurface")->width()<=760);
+                // K8：分类页签已删除，三组卡片在同一滚动面内平铺；深链只滚动视野，不再切换面板。
+                // K8：分类页签已删除，三组卡片在同一滚动面内平铺；深链只滚动视野，不再切换面板。
+                QVERIFY(scroll);
+                QVERIFY(!window.findChild<QTabBar*>("settingsCategories"));
+                // U10：设置单列随内容视口展开，不产生横向滚动。
+                QVERIFY(window.findChild<QWidget*>("settingsDirectory")->width()<=window.findChild<QScrollArea*>("settingsDirectoryScroll")->viewport()->width());
+                // 三组按顺序取自属性 settingsGroup = general/network/core（K8 的卡片命名）。
+                QList<QFrame*> groups; for (const auto& name:{"general","network","core"}) for (auto* card:window.findChildren<QFrame*>("settingsGroup")) if (card->property("settingsGroup").toString()==name) { groups.append(card); break; }
+                QVERIFY2(groups.size()==3,qUtf8Printable(QString("groups %1").arg(groups.size())));
+                for (int index=0;index<3;++index) {
+                    window.navigate(Route{ViewIds::Settings,index}); QCoreApplication::processEvents();
+                    auto* card=groups.value(index); QVERIFY2(card,qUtf8Printable(QString("settings group %1").arg(index)));
+                    QVERIFY(!card->isHidden());
                     QCOMPARE(scroll->horizontalScrollBar()->maximum(),0);
                     scroll->verticalScrollBar()->setValue(scroll->verticalScrollBar()->maximum()); QCoreApplication::processEvents();
-                    QVERIFY(window.findChild<QPushButton*>("applySettings")->isVisible());                    save(&window,QString("settings-category-%1-%2-%3-%4").arg(category).arg(settings.appearance).arg(scale).arg(size.width()));
+                    if (index==1) { port->setValue(original+1); QCoreApplication::processEvents(); QVERIFY(window.findChild<QPushButton*>("applySettings")->isVisible()); window.findChild<QPushButton*>("discardNetworkSettings")->click(); } save(&window,QString("settings-category-%1-%2-%3-%4").arg(index).arg(settings.appearance).arg(scale).arg(size.width()));
                 }
-                categories->setCurrentIndex(0); scroll->verticalScrollBar()->setValue(0); QCOMPARE(port->value(),original+1);
+                scroll->verticalScrollBar()->setValue(0); QCOMPARE(port->value(),original);
             }
         }
         // Search in the scrolling catalog must reveal its row without applying the draft.
-        window.setPage(6); auto* search=window.findChild<QLineEdit*>("settingsSearch"); search->setText("全局快捷键"); QTest::keyClick(search,Qt::Key_Return); QCoreApplication::processEvents();
-        auto* control=window.findChild<QPushButton*>("configureHotkeys"); auto* scroll=window.findChild<QScrollArea*>("settingsScroll");
+        window.setPage(6); window.findChild<QPushButton*>("openSettingsSearch")->click(); auto* search=window.findChild<QLineEdit*>("settingsSearch"); search->setText("全局快捷键"); QTest::keyClick(search,Qt::Key_Return); QCoreApplication::processEvents();
+        auto* control=window.findChild<QPushButton*>("settingsHotkeysRow"); auto* scroll=window.findChild<QScrollArea*>("settingsDirectoryScroll");
         QVERIFY(scroll->viewport()->rect().intersects(QRect(control->mapTo(scroll->viewport(),QPoint()),control->size())));
-        QCOMPARE(port->value(),original+1); QCOMPARE(platform->writes,0);
+        QCOMPARE(port->value(),original); QCOMPARE(platform->writes,0);
         window.activateWindow(); QApplication::setActiveWindow(&window); window.setPage(2);
-        auto* sort=window.findChild<QComboBox*>("memberSort"); sort->setFocus(Qt::TabFocusReason); QCoreApplication::processEvents(); QVERIFY(sort->property("keyboardFocus").toBool());
+        // H3：排序收进「更多」菜单；键盘焦点样式改用标题行的订阅下拉验证（同一条 QSS 规则）。
+        auto* sort=window.findChild<QToolButton*>("browseGroup"); QVERIFY(sort); sort->setFocus(Qt::TabFocusReason); QCoreApplication::processEvents(); QVERIFY(sort->property("keyboardFocus").toBool());
         sort->clearFocus(); sort->setFocus(Qt::MouseFocusReason); QCoreApplication::processEvents(); QVERIFY(!sort->property("keyboardFocus").toBool());
-        auto* submit=window.findChild<QPushButton*>("applySettings"); window.setPage(6); submit->setEnabled(true); const auto released=submit->grab().toImage();
+        auto* submit=window.findChild<QPushButton*>("applySettings"); window.setPage(6); window.findChild<QPushButton*>("settingsNetworkRow")->click(); submit->setEnabled(true); const auto released=submit->grab().toImage();
         QTest::mousePress(submit,Qt::LeftButton); QVERIFY(submit->grab().toImage()!=released); QTest::mouseRelease(submit,Qt::LeftButton,Qt::NoModifier,QPoint(-2,-2));
         const auto area=window.centralWidget()->geometry(); controller.operationFinished(false,"验证错误："+QString(2048,QChar(0x6d4b))); QCoreApplication::processEvents(); QCOMPARE(window.centralWidget()->geometry(),area);
         window.hide(); QVERIFY(!controller.connectionsVisible()); QVERIFY(controller.connections().isEmpty());
         state.core=CoreState::Stopped; state.ready=false;
-        { GuiHost host(&controller,true); host.show(2); QTRY_VERIFY(host.window()); QPointer<MainWindow> old=host.window(); old->close(); QTRY_VERIFY(old.isNull()); host.show(2); QTRY_VERIFY(host.window()); QCOMPARE(host.window()->page(),2); host.dispose(); }
+        { GuiHost host(&controller,true); // K1：旧入口 2 是「首页节点区」，回显编号 0、锚点在 currentRoute 上。
+        host.show(2); QTRY_VERIFY(host.window()); QPointer<MainWindow> old=host.window(); old->close(); QTRY_VERIFY(old.isNull()); host.show(2); QTRY_VERIFY(host.window()); QCOMPARE(host.window()->page(),0); QCOMPARE(host.window()->currentRoute().anchor,HomeAnchor::Nodes); host.dispose(); }
         QCOMPARE(platform->writes,0); settings.appearance="system"; settings.textScale=100; UiTheme::setPreferences("system",100);
     }
     void toolWindowsKeepActionsAndDraftsAccessible() {
@@ -207,7 +229,7 @@ private slots:
         AppController controller(dir.path(),true,nullptr,platform); QSignalSpy init(&controller,&AppController::initialized); controller.initialize(); QTRY_COMPARE(init.size(),1);
         for (int scale:{100,120}) for (const auto& appearance:QStringList{"light","dark"}) {
             UiTheme::setPreferences(appearance,scale);
-            QList<QDialog*> dialogs{new ImportDialog,new HotkeysDialog(&controller),new WebsiteTargetsDialog(&controller),new HomeSummaryDialog(&controller),new TunDialog(&controller),new CoreUpdateDialog(&controller),new GeoDataDialog(&controller),new BackupDialog(&controller,false),new BackupDialog(&controller,true),new LocalBackupDialog(&controller),new RemoteBackupDialog(&controller),new ProxyBypassDialog(&controller),new ProtocolSettingsDialog(&controller)};
+            QList<QDialog*> dialogs{new ImportDialog,new HotkeysDialog(&controller),new WebsiteTargetsDialog(&controller),new TunDialog(&controller),new CoreUpdateDialog(&controller),new GeoDataDialog(&controller),new BackupDialog(&controller,false),new BackupDialog(&controller,true),new LocalBackupDialog(&controller),new RemoteBackupDialog(&controller),new ProxyBypassDialog(&controller),new ProtocolSettingsDialog(&controller)};
             for (auto* dialog:dialogs) {
                 dialog->setAttribute(Qt::WA_DeleteOnClose,false); dialog->show(); QCoreApplication::processEvents(); QTest::qWait(20);
                 if (auto* import=qobject_cast<ImportDialog*>(dialog)) {
@@ -231,16 +253,19 @@ private slots:
         AppController controller(dir.path(),true,nullptr,platform); QSignalSpy initialized(&controller,&AppController::initialized),operations(&controller,&AppController::operationFinished);
         controller.initialize(); QTRY_COMPARE(initialized.size(),1); MainWindow window(&controller); window.show(); QCoreApplication::processEvents();
         auto* message=window.findChild<QLabel*>("operationMessage"); auto* details=window.findChild<QToolButton*>("statusDetails");
-        QVERIFY(message->text().isEmpty()); QVERIFY(!details->isVisible()); QVERIFY(!window.findChild<QFrame*>("overview")->isVisible());
+        // K5：控制卡不再随订阅出现/消失——没有订阅时三行显示「尚未连接 / 规则模式 / 尚未测试」，
+        // 空态由这三行自己承担，不再整卡替换。
+        QVERIFY(message->text().isEmpty()); QVERIFY(!details->isVisible()); QVERIFY(window.findChild<QFrame*>("homeControlCard")->isVisible());
+        QCOMPARE(window.findChild<QLabel*>("overviewTitle")->text(),QString("未连接"));
         window.setPage(6); auto* draft=window.findChild<QLabel*>("settingsDraftHint"); auto* port=window.findChild<QSpinBox*>("mixedPort"); QVERIFY(draft->text().isEmpty());
-        port->setValue(port->value()+1); QVERIFY(draft->text().contains("需要重启内核的修改"));
+        port->setValue(port->value()+1); QVERIFY(draft->text().contains("未保存的网络设置"));
         const auto geometry=window.centralWidget()->geometry();
         controller.operationStarted("正在导入…"); QVERIFY(details->isVisible());
         const QString error="配置校验失败 · "+QString(1024,QChar(0x6d4b)); controller.operationFinished(false,error);
         QCOMPARE(message->toolTip(),error); QVERIFY(message->text().contains("校验失败")); QVERIFY(details->isVisible());
         window.setPage(5); QCoreApplication::processEvents(); QVERIFY(message->text().contains("校验失败"));
         controller.operationFinished(true,"已完成"); QTRY_VERIFY_WITH_TIMEOUT(message->text().isEmpty(),4500); QVERIFY(!details->isVisible()); QCOMPARE(window.centralWidget()->geometry(),geometry);
-        window.setPage(6); QVERIFY(draft->text().contains("需要重启内核的修改"));
+        window.setPage(6); QVERIFY(draft->text().contains("未保存的网络设置"));
         auto* dialog=new ProtocolSettingsDialog(&controller,&window); dialog->show(); QCoreApplication::processEvents();
         auto* help=dialog->findChild<QToolButton*>("contextHelp"); QVERIFY(help); const int before=operations.size();
         help->setFocus(Qt::TabFocusReason); QTest::keyClick(help,Qt::Key_Space);
@@ -251,24 +276,40 @@ private slots:
         QTemporaryDir dir; auto platform=std::make_shared<ReviewPlatform>(); AppController controller(dir.path(),true,nullptr,platform);
         QSignalSpy initialized(&controller,&AppController::initialized),operations(&controller,&AppController::operationFinished); controller.initialize(); QTRY_COMPARE(initialized.size(),1);
         MainWindow window(&controller); window.show();
-        auto* navigation=window.findChild<QListWidget*>("navigation"); auto* section=window.findChild<QTabBar*>("sectionNavigation"); QCOMPARE(navigation->count(),4);
+        auto* navigation=window.findChild<QListWidget*>("navigation"); QCOMPARE(navigation->count(),4);
         for (int row=0;row<4;++row) QCOMPARE(navigation->item(row)->text(),QStringList({"首页","配置","数据","设置"})[row]);
-        section->setCurrentIndex(1); QCOMPARE(window.page(),2); QCOMPARE(navigation->currentRow(),0);
-        navigation->setCurrentRow(1); QCOMPARE(window.page(),1); section->setCurrentIndex(1); QCOMPARE(window.page(),3); QCOMPARE(navigation->currentRow(),1);
-        navigation->setCurrentRow(2); QCOMPARE(window.page(),4); section->setCurrentIndex(1); QCOMPARE(window.page(),5);
-        navigation->setCurrentRow(3); QCOMPARE(window.page(),6); QVERIFY(!section->isVisible()); navigation->setCurrentRow(0); QCOMPARE(window.page(),2); window.setPage(0);
-        auto* next=window.findChild<QPushButton*>("homeNextStep"); QVERIFY(next->isVisible()); QVERIFY(!window.findChild<QToolButton*>("homeCoreControl")->isVisible());
-        QTest::mouseClick(next,Qt::LeftButton); QTRY_VERIFY(window.findChild<ImportDialog*>()); auto* import=window.findChild<ImportDialog*>(); import->reject(); QCoreApplication::sendPostedEvents(nullptr,QEvent::DeferredDelete); QCOMPARE(operations.size(),0); QVERIFY(!window.findChild<QPushButton*>("nodePreferences")->isEnabled()); QVERIFY(!window.findChild<QPushButton*>("ruleProviders")->isEnabled());
+        // K1：侧栏条目存的是视图 ID，点击按视图导航；分区页签宿主已随顶栏删除。
+        QVERIFY(!window.findChild<QTabBar*>("sectionNavigation"));
+        const int homePage=0, profilesPage=1, rulesPage=3, dataPage=4, logsPage=5, settingsPage=6;
+        navigation->setCurrentRow(0); QCOMPARE(window.currentRoute().view,int(ViewIds::Home)); QCOMPARE(window.page(),homePage);
+        navigation->setCurrentRow(1); QCOMPARE(window.currentRoute().view,int(ViewIds::Profiles)); QCOMPARE(window.page(),profilesPage);
+        window.setPage(rulesPage); QCOMPARE(window.currentRoute().view,int(ViewIds::Rules));
+        navigation->setCurrentRow(2); QCOMPARE(window.currentRoute().view,int(ViewIds::Data)); QCOMPARE(window.page(),dataPage);
+        window.setPage(logsPage); QCOMPARE(window.currentRoute().view,int(ViewIds::Data)); QCOMPARE(window.currentRoute().tab,int(ViewIds::DataTab::Logs));
+        navigation->setCurrentRow(3); QCOMPARE(window.currentRoute().view,int(ViewIds::Settings)); QCOMPARE(window.page(),settingsPage); navigation->setCurrentRow(0); QCOMPARE(window.page(),homePage); window.setPage(0);
+        // K5：首页空态由控制区三行承担，「前往首页启动」入口只在连接页与网站测试页。
+        QVERIFY(!window.findChild<QPushButton*>("homeNextStep")); QCOMPARE(window.findChild<QLabel*>("overviewTitle")->text(),QString("未连接"));
+        // K5：抽屉与代理总开关按钮都已删除，首屏的代理入口就是控制区第一行的行尾开关。
+        QVERIFY(!window.findChild<QPushButton*>("homeProxySwitch")); QVERIFY(window.findChild<QWidget*>("systemProxy")->isVisible());
+        window.findChild<QToolButton*>("toolbarAdd")->click(); QTRY_VERIFY(window.findChild<ImportDialog*>()); auto* import=window.findChild<ImportDialog*>(); import->reject(); QCoreApplication::sendPostedEvents(nullptr,QEvent::DeferredDelete); QCOMPARE(operations.size(),0); QVERIFY(!window.findChild<QAction*>("nodePreferences")->isEnabled()); QVERIFY(!window.findChild<QPushButton*>("ruleProviders")->isEnabled());
         auto& state=const_cast<AppState&>(controller.state()); state.busy=true; controller.stateChanged(); QVERIFY(!window.findChild<QAction*>("exportDiagnostics")->isEnabled()); state.busy=false; controller.stateChanged(); QVERIFY(window.findChild<QAction*>("exportDiagnostics")->isEnabled());
-        for (const auto& route:QList<QPair<int,QString>>{{2,"nodeNextStep"},{4,"connectionNextStep"},{7,"websiteNextStep"}}) { window.setPage(route.first); auto* action=window.findChild<QPushButton*>(route.second); QVERIFY(action->isVisible()); QTest::mouseClick(action,Qt::LeftButton); QCOMPARE(window.page(),route.first==2?1:0); }
-        window.setPage(6); auto* categories=window.findChild<QTabBar*>("settingsCategories"); auto* port=window.findChild<QSpinBox*>("mixedPort"); const int original=port->value(); categories->setCurrentIndex(1); port->setValue(original+1); categories->setCurrentIndex(2); categories->setCurrentIndex(0);
-        auto* search=window.findChild<QLineEdit*>("settingsSearch"); search->setText("本地端口"); QTest::keyClick(search,Qt::Key_Return); QTRY_COMPARE(categories->currentIndex(),1); QCoreApplication::processEvents(); QVERIFY(port->isVisible()); QCOMPARE(port->value(),original+1);
-        search->setText("WebDAV"); QTest::keyClick(search,Qt::Key_Return); QTRY_COMPARE(categories->currentIndex(),2); QVERIFY(window.findChild<QPushButton*>("configureRemoteBackup")->isVisible()); QCOMPARE(port->value(),original+1);
+        // H3：节点区的「前往订阅」随底部状态条一起删除——首页空态已由 homeOnboarding 引导，
+        // 同一屏不保留两个相同作用的下一步按钮。连接页与网站测试页的空态按钮保持不变。
+        QVERIFY(!window.findChild<QPushButton*>("nodeNextStep"));
+        for (const auto& route:QList<QPair<int,QString>>{{4,"connectionNextStep"},{7,"websiteNextStep"}}) { window.setPage(route.first); auto* action=window.findChild<QPushButton*>(route.second); QVERIFY(action->isVisible()); QTest::mouseClick(action,Qt::LeftButton); QCOMPARE(window.page(),0); }
+        // K8：设置没有分类页签，三组同屏；这里改端口再「放弃修改」，验证动作条出现与回滚。
+        window.setPage(6); window.findChild<QPushButton*>("openSettingsSearch")->click(); auto* port=window.findChild<QSpinBox*>("mixedPort"); const int original=port->value();
+        auto* search=window.findChild<QLineEdit*>("settingsSearch"); search->setText("本地端口"); QTest::keyClick(search,Qt::Key_Return); QCoreApplication::processEvents(); QVERIFY(port->isVisible()); QCOMPARE(port->value(),original);
+        search->setText("WebDAV"); QTest::keyClick(search,Qt::Key_Return); QVERIFY(window.findChild<QPushButton*>("configureRemoteBackup")->isVisible()); QCOMPARE(port->value(),original);
         search->setText("DNS"); QTest::keyClick(search,Qt::Key_Return); QCOMPARE(window.page(),1);
         QVERIFY(!window.findChild<QPushButton*>("configureDns")); QVERIFY(!window.findChild<QPushButton*>("openOutboundFromSettings")); QVERIFY(!window.findChild<QPushButton*>("proxyManagement"));
-        Profile first; first.id=newId(); first.name="订阅甲"; first.candidate=newId(); Profile second=first; second.id=newId(); second.name="订阅乙"; const_cast<QVector<Profile>&>(controller.profiles())={first,second}; controller.profilesChanged();
-        auto* profiles=window.findChild<QTableWidget*>("profilesTable"); profiles->selectAll(); QVERIFY(!window.findChild<QPushButton*>("profileEdit")->isEnabled()); QVERIFY(!window.findChild<QPushButton*>("profileChanges")->isEnabled()); QVERIFY(!window.findChild<QPushButton*>("activateProfile")->isEnabled()); profiles->clearSelection(); profiles->selectRow(0); QVERIFY(window.findChild<QPushButton*>("profileEdit")->isEnabled());
-        window.findChild<QPushButton*>("addSubscription")->click(); QTRY_VERIFY(window.findChild<ImportDialog*>()); import=window.findChild<ImportDialog*>(); Profile added=first; added.id=newId(); added.name="新增订阅"; const_cast<QVector<Profile>&>(controller.profiles()).append(added); controller.profilesChanged(); import->done(QDialog::Accepted); QCOMPARE(window.page(),1); QCOMPARE(profiles->item(profiles->currentRow(),0)->data(Qt::UserRole).toString(),added.id);
+        // K7：配置页是两张 QListView（远程订阅 / 本地配置）；行点击打开详情抽屉，不在行内放动作条。
+        Profile first; first.id=newId(); first.name="订阅甲"; first.sourceType="url"; first.source="https://example.test/a"; first.candidate=newId(); Profile second=first; second.id=newId(); second.name="订阅乙"; const_cast<QVector<Profile>&>(controller.profiles())={first,second}; controller.profilesChanged();
+        auto* remote=window.findChild<QListView*>("remoteProfileList"); auto* local=window.findChild<QListView*>("localProfileList"); QVERIFY(remote); QVERIFY(local);
+        QTRY_COMPARE(remote->model()->rowCount(),2); QCOMPARE(local->model()->rowCount(),0);
+        QTest::mouseClick(remote->viewport(),Qt::LeftButton,{},remote->visualRect(remote->model()->index(0,0)).center()); QCoreApplication::processEvents();
+        QVERIFY(window.findChild<QWidget*>("profileDetailsPage")->isVisible()); QCOMPARE(window.findChild<QStackedWidget*>("profileTaskStack")->currentIndex(),1);
+        window.findChild<QToolButton*>("toolbarAdd")->click(); QTRY_VERIFY(window.findChild<ImportDialog*>()); import=window.findChild<ImportDialog*>(); Profile added=first; added.id=newId(); added.name="新增订阅"; const_cast<QVector<Profile>&>(controller.profiles()).append(added); controller.profilesChanged(); import->done(QDialog::Accepted); QCOMPARE(window.page(),1);
         QCOMPARE(operations.size(),0); QCOMPARE(platform->writes,0);
     }
     void ruleListAndHomeSelectionRequireExplicitApply() {
@@ -279,8 +320,17 @@ private slots:
         auto& state=const_cast<AppState&>(controller.state()); state.core=CoreState::Running; state.ready=true; state.activeProfile=profile.id; state.mode="rule";
         QJsonObject proxies{{"Test",QJsonObject{{"type","Selector"},{"all",QJsonArray{"Node A","Node B"}},{"now","Node A"}}},{"Node A",QJsonObject{{"type","Http"}}},{"Node B",QJsonObject{{"type","Http"}}}}; const_cast<QJsonObject&>(controller.proxies())=proxies;
         MockHttp api; QVERIFY(api.listen(QHostAddress::LocalHost)); int writes=0; api.handler=[&](const QByteArray& request) { if (request.startsWith("PUT /proxies/")) { ++writes; auto group=proxies["Test"].toObject(); group["now"]=QJsonDocument::fromJson(request.mid(request.indexOf("\r\n\r\n")+4)).object().value("name"); proxies["Test"]=group; } if (request.startsWith("GET /proxies/Test ")) return HttpResponse{200,QJsonDocument(proxies["Test"].toObject()).toJson()}; if (request.contains("/proxies")) return HttpResponse{200,QJsonDocument(QJsonObject{{"proxies",proxies}}).toJson()}; return HttpResponse{200,"{}"}; }; controller.findChild<MihomoClient*>()->configure(api.serverPort(),"UI fixture");
-        MainWindow window(&controller); window.show(); window.setPage(0); auto* member=window.findChild<QComboBox*>("homeQuickMember"); QTRY_COMPARE(member->count(),2); member->setCurrentIndex(member->findData("Node B")); member->activated(member->currentIndex());
-        QCOMPARE(writes,0); QCOMPARE(operations.size(),0); QCOMPARE(controller.proxies()["Test"].toObject()["now"].toString(),QString("Node A")); auto* change=window.findChild<QPushButton*>("homeSwitchNode"); QVERIFY(change->isEnabled()); QTest::mouseClick(change,Qt::LeftButton); QTRY_COMPARE(writes,1); QTRY_COMPARE(operations.size(),1); QVERIFY(operations.last()[0].toBool()); QCOMPARE(controller.proxies()["Test"].toObject()["now"].toString(),QString("Node B"));
+        // H3：首页节点区是行列表，单击成员即生效（ADR 0048），没有「切换节点」提交按钮。
+        MainWindow window(&controller); window.show(); window.setPage(0);
+        auto* rows=window.findChild<QListView*>("nodeList"); QVERIFY(rows); auto* model=rows->model();
+        QTRY_VERIFY(model->rowCount()>=3);   // 组头 + Node A + Node B
+        int target=-1; for (int row=0;row<model->rowCount();++row) if (model->data(model->index(row,0),Qt::DisplayRole).toString()=="Node B") target=row;
+        QVERIFY(target>0); QCOMPARE(writes,0); QCOMPARE(operations.size(),0);
+        QCOMPARE(controller.proxies()["Test"].toObject()["now"].toString(),QString("Node A"));
+        QTest::mouseClick(rows->viewport(),Qt::LeftButton,{},rows->visualRect(model->index(target,0)).center());
+        QTRY_COMPARE(writes,1); QTRY_COMPARE(operations.size(),1); QVERIFY(operations.last()[0].toBool());
+        QCOMPARE(controller.proxies()["Test"].toObject()["now"].toString(),QString("Node B"));
+        QVERIFY(!window.findChild<QPushButton*>("homeSwitchNode"));
         window.setPage(3); auto* text=window.findChild<QPlainTextEdit*>("customRulesEditor"); auto* list=window.findChild<QTableWidget*>("customRulesList"); QTRY_COMPARE(list->rowCount(),1); QVERIFY(list->isVisible()); QVERIFY(!text->isVisible());
         auto* match=window.findChild<QLineEdit*>("ruleMatch"); auto* type=window.findChild<QComboBox*>("ruleType"); type->setCurrentIndex(type->findData("DOMAIN-SUFFIX")); match->setText("new.example"); QTest::mouseClick(window.findChild<QPushButton*>("addCustomRule"),Qt::LeftButton); QCOMPARE(list->rowCount(),2); QVERIFY(text->toPlainText().contains("new.example"));
         list->selectRow(1); QTest::mouseClick(window.findChild<QPushButton*>("moveQuickRuleUp"),Qt::LeftButton); QVERIFY(text->toPlainText().startsWith("DOMAIN-SUFFIX,new.example")); QTest::mouseClick(window.findChild<QPushButton*>("removeQuickRule"),Qt::LeftButton); QCOMPARE(list->rowCount(),1); QVERIFY(!text->toPlainText().contains("new.example"));
@@ -290,7 +340,8 @@ private slots:
         QStringList tooMany; for (int i=0;i<257;++i) tooMany.append(QString("DOMAIN-SUFFIX,site%1.example,DIRECT").arg(i)); text->setPlainText(tooMany.join('\n')); QCOMPARE(list->rowCount(),256); QCOMPARE(text->toPlainText().split('\n').size(),257); QVERIFY(!window.findChild<QPushButton*>("saveCustomRules")->isEnabled());
         QTest::mouseClick(window.findChild<QPushButton*>("resetCustomRules"),Qt::LeftButton);
         auto automatic=controller.proxies()["Test"].toObject(); automatic["type"]="URLTest"; automatic["fixed"]=""; const_cast<QJsonObject&>(controller.proxies())["Test"]=automatic; controller.proxiesChanged(); window.setPage(2);
-        QCOMPARE(window.findChild<QPushButton*>("chooseMember")->text(),QString("固定节点")); auto* restore=window.findChild<QPushButton*>("automaticAction"); QVERIFY(!restore->isEnabled()); QCOMPARE(restore->text(),QString("自动选择中"));
+        // 提交条已取消（ADR 0048）：自动组行内没有「切换/固定」按钮，只由 automaticAction 表达固定状态。
+        QVERIFY(!window.findChild<QPushButton*>("chooseMember")); auto* restore=window.findChild<QAction*>("automaticAction"); QVERIFY(restore); QVERIFY(!restore->isEnabled()); QCOMPARE(restore->text(),QString("自动选择中"));
         automatic["fixed"]="Node B"; const_cast<QJsonObject&>(controller.proxies())["Test"]=automatic; controller.proxiesChanged(); QVERIFY(restore->isEnabled()); QCOMPARE(restore->text(),QString("恢复自动选择")); QCOMPARE(writes,1); QCOMPARE(platform->writes,0);
     }
     void websiteResponseCardsUseRealFixtureAndButtons() {
@@ -305,7 +356,9 @@ private slots:
         for (const auto scheme:{Qt::ColorScheme::Light,Qt::ColorScheme::Dark}) { UiTheme::applyAppearance(scheme); QCoreApplication::processEvents(); save(&window,scheme==Qt::ColorScheme::Dark?"website-results-dark":"website-results-light"); }
         QPushButton* single=nullptr; for (auto* button:window.findChildren<QPushButton*>("testWebsite")) if (button->property("targetId").toString()=="google") single=button; QVERIFY(single); const auto other=controller.websiteTests()->result("github").measured; QTest::mouseClick(single,Qt::LeftButton); QTRY_VERIFY(!controller.websiteTests()->running()); QCOMPARE(controller.websiteTests()->result("github").measured,other);
         QTest::mouseClick(window.findChild<QPushButton*>("clearWebsiteTests"),Qt::LeftButton); QVERIFY(controller.websiteTests()->node().isEmpty());
-        window.setPage(2); QPushButton* mode=nullptr; for (auto* button:window.findChildren<QPushButton*>()) if (button->property("mode").toString()=="global") mode=button; QVERIFY(mode && mode->isEnabled());
+        window.setPage(0);
+        // K2：路由方式改为整行点击弹出浮层菜单，行内不再有分段按钮；键盘焦点样式用行本身验证。
+        QPushButton* mode=window.findChild<QPushButton*>("homeRouteRow"); QVERIFY(mode && mode->isEnabled());
         mode->clearFocus(); mode->setFocus(Qt::MouseFocusReason); QCoreApplication::processEvents(); const auto mouse=mode->grab().toImage(); mode->clearFocus(); mode->setFocus(Qt::TabFocusReason); QCoreApplication::processEvents(); QVERIFY(mode->property("keyboardFocus").toBool()); QVERIFY(mode->grab().toImage()!=mouse);
         QSignalSpy exit(&controller,&AppController::exitReady); controller.requestExit(); QTRY_COMPARE(exit.size(),1);
     }

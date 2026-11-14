@@ -37,6 +37,7 @@ void AppController::runLocalMaintenance() {
     startLocalBackup(true);
 }
 void AppController::startLocalBackup(bool scheduled) {
+    const OperationScope operation(this, OperationId::Backup);
     if (settings_.localBackup.isEmpty()) { if (!scheduled) emit operationFinished(false,"请先保存本地备份设置"); return; }
     if (!beginPreferences("正在创建本地加密备份")) return;
     backgroundOperation_=scheduled;
@@ -83,6 +84,7 @@ void AppController::previewBackup(const QString& path, const QString& password, 
 }
 
 void AppController::restoreBackup(const QString& path, const QString& password, const QString& expectedHash, bool restoreSettings, const QJsonValue& selectedProfiles) {
+    const OperationScope operation(this, OperationId::Restore);
     if (state_.core != CoreState::Stopped || state_.proxy == ProxyState::Owned) { emit operationFinished(false, "请先停止内核并释放 Mlash 系统代理，再恢复备份"); return; }
     if (!begin("正在校验并恢复备份；现有订阅保持")) return;
     protectMajorChange([this,path,password,expectedHash,restoreSettings,selectedProfiles] {
@@ -113,6 +115,7 @@ void AppController::remoteRoute(const QJsonObject& config,std::function<void(Res
 }
 
 void AppController::startRemoteBackup(bool scheduled) {
+    const OperationScope operation(this, OperationId::Backup);
     const auto config=settings_.remoteBackup; const auto checked=validateRemoteBackup(config); if (!checked.ok||config.isEmpty()) { if (!scheduled) emit operationFinished(false,checked.ok?"请先配置WebDAV连接和备份密码":checked.error); return; } if (!beginPreferences("正在创建并上传加密备份")) { if (!scheduled) emit operationFinished(false,"当前操作尚未结束"); return; } backgroundOperation_=scheduled; remoteActive_=true; remoteCancelled_=remoteMetadata_=false; remoteBackupStatus_={{"busy",true},{"cancellable",true},{"message","正在创建本地加密备份…"}}; emit remoteBackupChanged(); const auto store=store_; const auto settings=settings_; const auto profiles=profiles_;
     runTask(this,[store,settings,profiles] { return createRemoteBackup(*store,settings,profiles); },[this,config](RemoteBackupPayload payload) { if (!payload.result.ok||remoteCancelled_||exitPending_) { completeRemoteUpload(payload.result.ok?Result{false,"远端备份已取消",{{"cancelled",true}}}:payload.result,payload.path); return; } remoteBackupStatus_["message"]="正在上传并核对远端版本…"; emit remoteBackupChanged(); remoteRoute(config,[this,config,payload](Result route,int port) { if (!route.ok||remoteCancelled_||exitPending_) { completeRemoteUpload(route.ok?Result{false,"远端备份已取消",{{"cancelled",true}}}:route,payload.path); return; } remoteClient_->upload(config,port,payload.name,payload.bytes,[this,path=payload.path](Result result,QByteArray) { completeRemoteUpload(result,path); }); }); });
 }
@@ -131,6 +134,7 @@ void AppController::inspectRemoteBackups(Completion done) {
 }
 
 void AppController::downloadRemoteBackup(const QString& file,const QString& destination) {
+    const OperationScope operation(this, OperationId::Restore);
     if (settings_.remoteBackup.isEmpty()||!remoteBackupFileName(file)) { emit operationFinished(false,"请选择有效远端备份"); return; } if (!beginPreferences("正在下载并校验加密备份")) { emit operationFinished(false,"当前操作尚未结束"); return; } remoteActive_=true; remoteCancelled_=remoteMetadata_=false; remoteBackupStatus_={{"busy",true},{"cancellable",true},{"message","正在处理远端请求…"}}; emit remoteBackupChanged(); const auto config=settings_.remoteBackup; const auto store=store_;
     remoteRoute(config,[this,config,store,file,destination](Result route,int port) { if (!route.ok) { finishRemoteOperation(route); return; } remoteClient_->download(config,port,file,[this,store,config,destination](Result result,QByteArray bytes) { if (!result.ok||remoteCancelled_||exitPending_) { finishRemoteOperation(result.ok?Result{false,"下载已取消",{{"cancelled",true}}}:result); return; } remoteMetadata_=true; remoteBackupStatus_["cancellable"]=false; emit remoteBackupChanged(); runTask(this,[store,config,destination,bytes=std::move(bytes)] { return saveRemoteBackupDownload(*store,bytes,config.value("backup_password").toString(),destination); },[this,destination](Result saved) { finishRemoteOperation(saved); if (saved.ok) emit remoteBackupDownloaded(destination); }); }); });
 }

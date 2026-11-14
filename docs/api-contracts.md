@@ -116,7 +116,7 @@ S08详情切片接口（实现前）：ActivityTableModel的UserRole+3仅为GUI�
 F08/S08诊断显示快照：MainWindow仅缓存GUI可见期的出口显示子集（ip/country/region/asn/route/mode/measured_utc，每字符串最多128字符），不保留原响应或Controller任务。Controller generation/就绪状态改变、GUI隐藏及下一诊断开始清除；关闭诊断仍取消并清空完整结果。服务详情冻结实际已有结果，不发请求，缺少HTTP状态明确未知。以上不增加持久化schema或后台调度。
 
 
-F08/S09首页显示偏好：Settings.homeSummaryMask持久化为home_summary_mask，整数0–15，bit0/1/2/3分别为规则/连接/日志/设置摘要，缺省15；订阅/当前节点/流量不在可隐藏范围。Controller.updateHomeSummary(mask,expected)仅偏好串行事务，expected若提供必须等于当前值；失败或过期不提交，核心generation不变。备份沿Settings保留该有限偏好，不增加页面/诊断记录。
+F08/S09首页显示偏好（U08 H2 删除）：首页六卡连同`Settings.homeSummaryMask`、`home_summary_mask`持久化字段与`Controller.updateHomeSummary`一并移除，首页改为「控制区三行 + 节点行列表」（U08 第二版 K5 又删除了「更多运行信息」抽屉，仅作历史记录），没有可配置的摘要卡片。旧状态文件里的`home_summary_mask`读入时忽略（不再校验、不再报错），保存时不写出；备份沿Settings同样不再携带该字段。
 
 
 F08/S09快捷键扩展契约（实施切片）：固定目录按顺序为show-window/show-proxy/show-connections/cycle-mode/toggle-system-proxy/toggle-tun/reload-active；持久化仍为action→canonical sequence对象，最多7项，新增默认缺省未绑定。Windows ID=10100+固定目录下标，旧10100/10101保持，未来只追加；键/修饰符核验及MOD_NOREPEAT保持。注册代次使改绑/注销前排队回调失效，注册失败返回实际映射并恢复旧映射。

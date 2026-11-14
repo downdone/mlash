@@ -77,17 +77,24 @@ AppController::AppController(QString root, bool smoke, QObject* parent, std::sha
 void AppController::publish() { if (hotkeyCaptureToken_&&(state_.busy||state_.exiting||state_.readOnly)) endHotkeyCapture(hotkeyCaptureToken_); if ((state_.busy&&!preferencesOnly_)||state_.exiting||(!state_.ready&&outboundDiagnostics_.result().value("route").toString()=="core")) outboundDiagnostics_.cancel(); homeMetrics_.setContext(state_.ready&&(!state_.busy||preferencesOnly_)&&!state_.exiting,core_.processId(),state_.generation); updateHomeProbeContext(); emit stateChanged(); }
 void AppController::setHomeVisible(bool visible) { homeMetrics_.setVisible(visible); homeProbe_.setVisible(visible); }
 void AppController::setHomeProbeGroup(const QString& group) { if (homeProbeGroup_==group) return; homeProbeGroup_=group; updateHomeProbeContext(); }
+void AppController::runConnectivityProbe() {
+    // R3b：首页连通性行。与 startWebsiteTests 不同，这里不受页面可见性限制——
+    // 它是首页自己的只读探测，也不写入任何节点选择（WebsiteTests 的跨页复用另立切片）。
+    const auto node=websiteNode(homeNode());
+    if (!state_.ready || state_.busy || state_.exiting || state_.readOnly || node.isEmpty()) {
+        emit operationFinished(false, node.isEmpty() ? QString("当前没有可探测的叶子节点，请先在首页选择节点") : QString("内核未就绪，暂时无法测试连通性"));
+        return;
+    }
+    connectivity_.setUrl(settings_.testUrl);
+    connectivity_.run(node);
+}
+void AppController::cancelConnectivityProbe() { connectivity_.cancel(); }
 QString AppController::homeNode() const {
     if (!state_.ready) return {}; QString node=state_.mode=="global"?QString("GLOBAL"):state_.mode=="direct"?QString("DIRECT"):homeProbeGroup_; QSet<QString> visited;
     for (int hop=0;hop<16&&!visited.contains(node);++hop) { visited.insert(node); const auto object=proxies_.value(node).toObject(); if (object.isEmpty()) return {}; if (!object.value("all").isArray()) return node; if (!QStringList{"Selector","URLTest","Fallback"}.contains(object.value("type").toString())) return {}; const auto next=object.value("now").toString(); if (next.isEmpty()||!object.value("all").toArray().contains(next)) return {}; node=next; }
     return {};
 }
 void AppController::updateHomeProbeContext() { homeProbe_.setContext(state_.ready&&(!state_.busy||preferencesOnly_)&&!state_.exiting&&!state_.readOnly,websiteNode(homeNode()),state_.generation,settings_.testUrl,settings_.homeProbeSeconds); }
-void AppController::updateHomeSummary(int mask,const QJsonValue& expected) {
-    if (mask<0||mask>15) { emit operationFinished(false,"首页摘要显示选项无效"); return; }
-    if (!expected.isUndefined()&&(!expected.isDouble()||expected.toDouble()!=settings_.homeSummaryMask)) { emit operationFinished(false,"首页显示已在其他窗口修改，当前草稿保留；请重新打开核对。"); return; }
-    if (!beginPreferences("正在保存首页显示偏好")) return; auto next=settings_; next.homeSummaryMask=mask; saveSnapshot(next,profiles_,[this](Result result) { finish(result); });
-}
 void AppController::updateHomeProbe(int seconds) { if (!QList<int>{0,60,300}.contains(seconds)) { emit operationFinished(false,"首页探测周期无效"); return; } if (settings_.homeProbeSeconds==seconds) return; if (!beginPreferences("正在保存首页探测偏好")) return; auto next=settings_; next.homeProbeSeconds=seconds; saveSnapshot(next,profiles_,[this](Result result) { finish(result); }); }
 void AppController::inspectUrlProtocol(Completion done) { if (protocolPreviewPending_||state_.exiting) { done(Result::fail("关联状态正在读取或即将退出")); return; } protocolPreviewPending_=true; const auto platform=platform_; const auto exe=QCoreApplication::applicationFilePath(); runTask(this,[platform,exe] { return platform->readUrlProtocol(exe); },[this,done=std::move(done)](Result result) mutable { protocolPreviewPending_=false; done(result); }); }
 void AppController::setUrlProtocol(bool enabled) { if (!begin("正在更新Mlash链接关联")) return; const auto platform=platform_; const auto exe=QCoreApplication::applicationFilePath(); runTask(this,[platform,exe,enabled] { const auto written=platform->setUrlProtocol(enabled,exe); if (!written.ok) return written; const auto observed=platform->readUrlProtocol(exe); if (!observed.ok||observed.data.value("enabled").toBool()!=enabled||observed.data.value("conflict").toBool()) return Result::fail("链接关联回读不一致"); return observed; },[this](Result result) { finish(result); }); }
@@ -145,7 +152,10 @@ bool AppController::begin(const QString& operation, bool background, bool allowR
     websiteTests_.clear();
     changeBackupDone_=false;
     backgroundOperation_ = background;
-    state_.busy = true; ++state_.generation; state_.lastError.clear(); publish(); if (!background) emit operationStarted(operation); return true;
+    // 事务把当前操作标识带进 finish()：调用点只需在 begin 之后表态，不必在每条异步
+    // 回调里重复传 id（P4.1 反馈路由）。
+    transactionOperation_ = operationId_;
+    state_.busy = true; ++state_.generation; state_.lastError.clear(); publish(); if (!background) emit operationStarted(operation, transactionOperation_); return true;
 }
 void AppController::finish(Result r) {
     if (!sourceUpdateId_.isEmpty()) {
@@ -166,7 +176,8 @@ void AppController::finish(Result r) {
     state_.busy = false; preferencesOnly_=false;
     state_.lastError = r.ok ? readOnlyError_ : diagnostics_.sanitize(r.error);
     if (!r.ok) diagnostics_.append("error", r.error);
-    publish(); if (!backgroundOperation_) emit operationFinished(r.ok, r.ok ? r.data.value("notice").toString(r.data.value("cancelled").toBool() ? "测速已取消" : "操作完成") : state_.lastError); backgroundOperation_ = false;
+    const auto operation = std::exchange(transactionOperation_, OperationId::Unspecified);
+    publish(); if (!backgroundOperation_) emit operationFinished(r.ok, r.ok ? r.data.value("notice").toString(r.data.value("cancelled").toBool() ? "测速已取消" : "操作完成") : state_.lastError, operation); backgroundOperation_ = false;
     if (exitPending_) { exitPending_ = false; QTimer::singleShot(0, this, &AppController::requestExit); }
     else if (crashPending_) { crashPending_ = false; const auto error = crashError_; QTimer::singleShot(0, this, [this, error] { handleCrash(error); }); }
     else if (pendingConnectionView_) QTimer::singleShot(0,this,&AppController::drainConnectionView);
@@ -231,6 +242,7 @@ void AppController::prepareActivation(Profile profile, const QString& version, S
         });
 }
 void AppController::activateProfile(const QString& id, bool lastGood) {
+    const OperationScope operation(this, OperationId::ProfileActivate);
     const int i = profileIndex(id);
     if (i < 0) { emit operationFinished(false, "订阅不存在"); return; }
     const auto version = lastGood ? profiles_[i].lastGood : profiles_[i].candidate;
@@ -240,6 +252,7 @@ void AppController::activateProfile(const QString& id, bool lastGood) {
     prepareActivation(profiles_[i], version, settings_);
 }
 void AppController::updateCustomRules(const QString& id, const QStringList& rules,const QJsonValue& expected) {
+    const OperationScope operation(this, OperationId::RulesSave);
     const int index = profileIndex(id); if (index < 0) { emit operationFinished(false,"订阅不存在"); return; }
     updateRuleOverlay(id, rules, profiles_[index].appendRules, profiles_[index].disabledRules,expected);
 }
@@ -390,14 +403,18 @@ void AppController::refreshRules() {
     const auto generation = state_.generation; const auto token = rulesGeneration_;
     api_.request("GET", "/rules", {}, [this, generation, token](Result r) {
         if (!rulesVisible_ || token != rulesGeneration_ || generation != state_.generation || !state_.ready) return;
-        activeRules_ = {}; if (r.ok) { const auto values = r.data.value("rules").toArray(); for (int i = 0; i < qMin(5000, int(values.size())); ++i) activeRules_.append(values[i]); }
-        emit rulesChanged(); if (!r.ok) emit operationFinished(false, r.error);
+        if (r.ok) { const auto values = r.data.value("rules").toArray(); QJsonArray next; for (int i = 0; i < qMin(5000, int(values.size())); ++i) next.append(values[i]); activeRules_ = next; rulesError_.clear(); rulesLoaded_ = true; }
+        else { rulesError_ = r.error.isEmpty() ? QString("读取内核规则失败") : r.error.left(256); }
+        // 读取失败已由页面空态承担（R5）；不再另发一次全局告警，同一事实只留一个承载位置。
+        emit rulesChanged();
     });
 }
 void AppController::setRulesVisible(bool visible) {
     if (rulesVisible_ == visible) return;
     rulesVisible_ = visible; ++rulesGeneration_;
-    activeRules_ = {}; emit rulesChanged();
+    // 只在真正需要重读时清空：读取失败后保留旧表并显示失败原因，不清成空白（状态之间可共存）。
+    if (!visible) { activeRules_ = {}; rulesLoaded_ = false; rulesError_.clear(); }
+    emit rulesChanged();
 }
 void AppController::cancelConnectionRead() {
     ++connectionsGeneration_; connectionsPending_=false; const auto pending=connectionRead_; connectionRead_=nullptr;
@@ -411,7 +428,12 @@ void AppController::refreshConnections() {
         connectionsPending_ = false; connectionRead_=nullptr;
         if (!connectionsVisible_ || connectionsPaused_ || generation != state_.generation || !state_.ready || state_.exiting) return;
         if (r.ok) acceptConnectionSnapshot(r.data);
-        else { connectionSession_.invalidate(); connections_={}; connectionError_=r.error; }
+        else {
+            // 状态之间可共存：刷新失败时保留上一份快照并标注过期，
+            // 而不是清空列表让用户以为「没有连接」（状态呈现规格「通用约束」）。
+            connectionError_=r.error;
+            connectionStale_=true;
+        }
         emit connectionsChanged();
     }, 1500);
 }
@@ -419,9 +441,11 @@ void AppController::acceptConnectionSnapshot(const QJsonObject& snapshot) {
     if (connectionsPaused_) return;
     const auto result=connectionSession_.update(snapshot,connectionClock_.isValid()?connectionClock_.elapsed():0);
     connectionError_=result.ok ? (connectionSession_.totals().value("truncated").toBool()?"仅显示前 5000 条连接，不推断遗漏条目的结束":"") : result.error;
+        if (result.ok) connectionStale_=false;
     if (!result.ok) connectionSession_.invalidate(); connections_=connectionSession_.active();
 }
 void AppController::startCore(bool allowProxyRestore) {
+    const OperationScope operation(this, OperationId::CoreStart);
     if (core_.state() == CoreState::Running) return;
     const int i = profileIndex(settings_.activeProfile);
     if (i < 0) { emit operationFinished(false, "先导入并激活一个订阅"); return; }
@@ -461,6 +485,7 @@ void AppController::verifyRuleOverlay(const QStringList& prepend, const QStringL
     });
 }
 void AppController::stopCore() {
+    const OperationScope operation(this, OperationId::CoreStop);
     if (!begin("正在安全停止内核")) return;
     const auto proxy = proxy_;
     runTask(this, [proxy] { return proxy->release(); }, [this](Result released) {
@@ -497,6 +522,7 @@ void AppController::manageTunService(bool install) {
     runTask(this,[platform,install,helper] { return platform->manageTunService(install,helper); },[this](Result r) { finish(r); });
 }
 void AppController::updateTunOptions(bool enabled,const QString& stack,bool strictRoute) {
+    const OperationScope operation(this, OperationId::TunToggle);
     auto next=settings_; next.tunEnabled=enabled; next.tunStack=stack; next.tunStrictRoute=strictRoute; updateTunSettings(next);
 }
 void AppController::updateTunSettings(const Settings& options,const QJsonValue& expected) {
@@ -538,6 +564,7 @@ void AppController::setSystemProxy(bool enabled, bool allowExternal) {
     });
 }
 void AppController::setMode(const QString& mode) {
+    const OperationScope operation(this, OperationId::ModeSwitch);
     if (!QStringList{"rule","global","direct"}.contains(mode) || !state_.ready) { emit operationFinished(false, "内核未就绪或模式不合法"); return; }
     if (!begin("正在切换模式")) return;
     api_.request("PATCH", "/configs", {{"mode", mode}}, [this, mode](Result written) {
@@ -548,6 +575,7 @@ void AppController::setMode(const QString& mode) {
     });
 }
 void AppController::selectMember(const QString& group, const QString& member) {
+    const OperationScope operation(this, OperationId::MemberSelect);
     if (!state_.ready) { emit operationFinished(false, "内核未就绪"); return; }
     const auto selected = proxies_.value(group).toObject();
     if (!QStringList{"Selector","URLTest","Fallback"}.contains(selected.value("type").toString())) { emit operationFinished(false, "此策略组不支持手动选择"); return; }
@@ -638,14 +666,15 @@ void AppController::refresh() {
     api_.proxies([this, generation](Result r) { if (generation == state_.generation && r.ok) { proxies_ = r.data.value("proxies").toObject(); emit proxiesChanged(); } });
 }
 void AppController::updateSettings(const Settings& desired) {
-    if (!validAppearance(desired.appearance,desired.textScale)) { emit operationFinished(false,"外观或文字比例无效"); return; }
+    const OperationScope operation(this, OperationId::SettingsApply);
+    if (!validAppearance(desired.appearance,desired.textScale)) { refuseOperation("外观或文字比例无效"); return; }
     auto withoutAppearance=desired; withoutAppearance.appearance=settings_.appearance; withoutAppearance.textScale=settings_.textScale;
     if (withoutAppearance.toJson()==settings_.toJson()&&(desired.appearance!=settings_.appearance||desired.textScale!=settings_.textScale)) { updateAppearance(desired.appearance,desired.textScale); return; }
     if (desired.startupPage<0 || desired.startupPage>7 || !QStringList{"show","proxy-page","toggle-proxy"}.contains(desired.trayClick) ||
-        !QStringList{"source","enabled","disabled"}.contains(desired.ipv6Mode) || !QStringList{"source","enabled","disabled"}.contains(desired.unifiedDelayMode)) { emit operationFinished(false,"设置选项不合法"); return; }
-    if (!validTestUrl(desired.testUrl)) { emit operationFinished(false, "连通测试地址须为不含用户凭据/片段的 HTTP/HTTPS URL"); return; }
+        !QStringList{"source","enabled","disabled"}.contains(desired.ipv6Mode) || !QStringList{"source","enabled","disabled"}.contains(desired.unifiedDelayMode)) { refuseOperation("设置选项不合法"); return; }
+    if (!validTestUrl(desired.testUrl)) { refuseOperation("连通测试地址须为不含用户凭据/片段的 HTTP/HTTPS URL"); return; }
     if (desired.mixedPort < 1024 || desired.mixedPort > 65535 || !QStringList{"debug","info","warning","error","silent"}.contains(desired.logLevel)) {
-        emit operationFinished(false, "端口或日志级别不合法"); return;
+        refuseOperation("端口或日志级别不合法"); return;
     }
     if (!begin("正在应用设置")) return;
     protectMajorChange([this,desired] {
@@ -726,6 +755,7 @@ void AppController::updateHotkeys(const QJsonObject& bindings,const QJsonValue& 
     });
 }
 void AppController::updateConnectionView(const QJsonObject& preferences) {
+    const OperationScope operation(this, OperationId::SettingsApply);
     const auto valid=validateConnectionView(preferences); if (!valid.ok) { emit operationFinished(false,valid.error); return; }
     if (state_.exiting||state_.readOnly) return;
     if (state_.busy) { pendingConnectionView_=preferences; return; }
@@ -735,6 +765,7 @@ void AppController::updateConnectionView(const QJsonObject& preferences) {
     auto next=settings_; next.connectionView=preferences; saveSnapshot(next,profiles_,[this](Result result) { finish(result); });
 }
 void AppController::updateProxyBypass(const QString& text,const std::optional<QString>& expected) {
+    const OperationScope operation(this, OperationId::SettingsApply);
     if (expected&&*expected!=settings_.proxyBypass) { emit operationFinished(false,"排除列表已在其他窗口修改，请重新打开；草稿保留"); return; }
     const auto checked=normalizeProxyBypass(text); if (!checked.ok) { emit operationFinished(false,checked.error); return; } const auto bypass=checked.data.value("bypass").toString(); if (bypass==settings_.proxyBypass) { emit operationFinished(true,"排除列表未变化"); return; } if (!begin("正在更新系统代理排除列表")) return;
     const auto proxy=proxy_; const auto previous=settings_.proxyBypass; const int port=settings_.mixedPort;
@@ -743,9 +774,10 @@ void AppController::updateProxyBypass(const QString& text,const std::optional<QS
         saveSnapshot(next,profiles_,[this,proxy,previous,port,applied](Result saved) { if (saved.ok||!applied.data.value("updated_os").toBool()) { finish(saved); return; } runTask(this,[proxy,previous,port] { return proxy->acquire(port,false,previous); },[this,saved](Result rollback) { applyProxyObservation(rollback); finish(Result::fail(saved.error+(rollback.ok?"；旧代理排除列表已恢复":"；恢复失败，保留日志："+rollback.error))); }); });
     });
 }
-void AppController::updateAppearance(const QString& appearance,int scale) { if (!validAppearance(appearance,scale)) { emit operationFinished(false,"外观或文字比例无效"); return; } if (!beginPreferences("正在保存外观设置")) return; auto next=settings_; next.appearance=appearance; next.textScale=scale; saveSnapshot(next,profiles_,[this](Result result) { finish(result); }); }
+void AppController::updateAppearance(const QString& appearance,int scale) {
+    const OperationScope operation(this, OperationId::SettingsApply); if (!validAppearance(appearance,scale)) { emit operationFinished(false,"外观或文字比例无效"); return; } if (!beginPreferences("正在保存外观设置")) return; auto next=settings_; next.appearance=appearance; next.textScale=scale; saveSnapshot(next,profiles_,[this](Result result) { finish(result); }); }
 void AppController::drainConnectionView() { if (state_.busy||state_.exiting||state_.readOnly||!pendingConnectionView_) return; const auto preferences=*pendingConnectionView_; pendingConnectionView_.reset(); updateConnectionView(preferences); if (!state_.busy) runMaintenance(); }
-bool AppController::beginPreferences(const QString& operation) { if (state_.busy||state_.exiting||state_.readOnly) return false; preferencesOnly_=true; backgroundOperation_=false; state_.busy=true; state_.lastError.clear(); publish(); emit operationStarted(operation); return true; }
+bool AppController::beginPreferences(const QString& operation) { if (state_.busy||state_.exiting||state_.readOnly) return false; preferencesOnly_=true; backgroundOperation_=false; transactionOperation_=operationId_; state_.busy=true; state_.lastError.clear(); publish(); emit operationStarted(operation, transactionOperation_); return true; }
 void AppController::startIpProbe(bool coreRoute) {
     startOutboundProbe(coreRoute,false,{});
 }
@@ -819,6 +851,7 @@ void AppController::exportDiagnostics(const QString& path) {
     runTask(this, [path, report = report, snapshot]() mutable { QStringList logs; for (const auto& line : snapshot.lines) logs.append(Diagnostics::sanitize(line, snapshot.secrets)); report["logs"] = QJsonArray::fromStringList(logs); return writeAtomic(path, QJsonDocument(report).toJson()); }, [this](Result r) { finish(r); });
 }
 void AppController::closeConnection(const QString& id) {
+    const OperationScope operation(this, OperationId::ConnectionClose);
     bool present = false; for (const auto& value : connections_) if (value.toObject().value("id").toString() == id) present = true;
     if (!connectionsCurrent() || !state_.ready || !isId(id) || !present) { emit operationFinished(false, connectionsPaused_?"连接已暂停，请恢复并等待新快照后再关闭":"连接已离开当前快照，请重新选择"); return; }
     if (!begin("正在关闭选中连接")) return;
@@ -835,6 +868,7 @@ void AppController::closeConnection(const QString& id) {
     });
 }
 void AppController::closeAllConnections() {
+    const OperationScope operation(this, OperationId::ConnectionCloseAll);
     if (!connectionsCurrent() || !state_.ready || connections_.isEmpty()) { emit operationFinished(false,connectionsPaused_?"连接已暂停，请恢复并等待新快照后再关闭":"当前没有可关闭的活动连接"); return; }
     if (!begin("正在关闭全部活动连接")) return;
     const auto token=connectionsGeneration_; QSet<QString> before; for (const auto& value:connections_) before.insert(value.toObject().value("id").toString());

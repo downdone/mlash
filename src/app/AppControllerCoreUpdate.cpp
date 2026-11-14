@@ -61,6 +61,7 @@ void AppController::cleanCoreCopies() {
 }
 
 void AppController::applyCoreUpdate(const QString& token) {
+    const OperationScope operation(this, OperationId::CoreUpdate);
     if (token.isEmpty()||corePreview_.value("token").toString()!=token) { emit operationFinished(false,"请先重新预检内核，确认版本与哈希"); return; } if (settings_.tunEnabled&&corePreview_.value("sha256").toString()!=QString::fromLatin1(TunCoreSha256)) { emit operationFinished(false,"TUN仅支持随包固定内核；请先关闭TUN，再应用其他内核。服务固定哈希不会自动改变。"); return; } if (!begin("正在校验并应用内核副本")) return; const auto record=corePreview_; corePreview_={}; const auto store=store_; const auto previous=settings_; const bool running=core_.state()==CoreState::Running;
     protectMajorChange([this,store,record,previous,running] {
     runTask(this,[store,record,previous,running] { auto result=CoreUpdate::verify(store->root(),record); if (!result.ok) return result; const auto old=CoreUpdate::stage(*store,previous.corePath); if (!old.ok&&running) return Result::fail("无法保留当前内核副本："+old.error); result.data=record; result.data["previous_path"]=old.ok&&old.data.value("path")!=record.value("path")?old.data.value("path"):QJsonValue(previous.previousCorePath); return result; },[this,store,running,previous](Result staged) {
