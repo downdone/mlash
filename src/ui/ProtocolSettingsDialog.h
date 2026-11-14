@@ -1,9 +1,9 @@
 #pragma once
 #include "app/AppController.h"
-#include <QDialog>
+#include "TaskDialog.h"
 class QLabel; class QPushButton;
 namespace mlash {
-class ProtocolSettingsDialog final:public QDialog {
+class ProtocolSettingsDialog final:public TaskDialog {
     Q_OBJECT
 public:
     ProtocolSettingsDialog(AppController* controller,QWidget* parent=nullptr);

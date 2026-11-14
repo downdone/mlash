@@ -1,10 +1,10 @@
 #pragma once
 #include "app/AppController.h"
-#include <QDialog>
+#include "TaskDialog.h"
 
 class QTableWidget; class QLabel; class QTabWidget; class QPushButton;
 namespace mlash {
-class RuleOverlayDialog final : public QDialog {
+class RuleOverlayDialog final : public TaskDialog {
     Q_OBJECT
 public:
     RuleOverlayDialog(AppController* controller, const QString& profileId, QWidget* parent = nullptr,const QJsonObject& draft={});

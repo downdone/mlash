@@ -1,3 +1,5 @@
+#include "TaskDialog.h"
+#include "TaskWorkspace.h"
 #include "MainWindowParts.h"
 #include "WrapLayout.h"
 #include <QWidgetAction>
@@ -8,22 +10,30 @@ using namespace WindowParts;
 // 由 homePage() 放进同一个滚动视图，不再占据 QStackedWidget 的独立索引。
 QWidget* MainWindow::nodeSection() {
     auto* page = new QWidget; page->setObjectName("nodeSection"); auto* layout = new QVBoxLayout(page);
-    layout->setContentsMargins(0, 0, 0, 0); layout->setSpacing(8);
+    layout->setContentsMargins(0, 0, 0, 0); layout->setSpacing(4);
     // 标题行（原型 01）：左「节点选择 + 计数」，右订阅选择 / 搜索 / 测速 / 更多。
-    auto* heading = new QWidget; heading->setObjectName("nodeHeading");
-    auto* headingLayout = new WrapLayout(heading); headingLayout->setContentsMargins(2, 0, 2, 0); headingLayout->setSpacing(8);
+    auto* heading = new QWidget; heading->setObjectName("nodeHeading"); heading->setSizePolicy(QSizePolicy::Preferred,QSizePolicy::Fixed);
+    auto* headingLayout = new QHBoxLayout(heading); headingLayout->setContentsMargins(2, 0, 2, 0); headingLayout->setSpacing(8);
     nodeHeadingTitle_ = new QLabel("节点选择"); nodeHeadingTitle_->setObjectName("nodeHeadingTitle"); nodeHeadingTitle_->setParent(heading); nodeHeadingTitle_->hide();
     nodeCount_ = new QLabel; nodeCount_->setObjectName("nodeHeadingCount"); nodeCount_->setProperty("secondary", true); nodeCount_->setParent(heading); nodeCount_->hide();
     profilesCombo_ = new CompactComboBox; profilesCombo_->setObjectName("nodeProfile"); profilesCombo_->setSizeAdjustPolicy(QComboBox::AdjustToMinimumContentsLengthWithIcon); profilesCombo_->setMinimumContentsLength(4); profilesCombo_->setMaximumWidth(150); profilesCombo_->setToolTip("节点来源订阅；切换只改变浏览的订阅"); profilesCombo_->setParent(heading); profilesCombo_->hide();
-    auto* groupPicker=new ChevronToolButton; groupPicker->setObjectName("browseGroup"); groupPicker->setProperty("prototypeIcon",true); groupPicker->setToolButtonStyle(Qt::ToolButtonTextBesideIcon); groupPicker->setIcon(UiIcons::icon(UiIcons::Glyph::Layers,UiTheme::Brand)); groupPicker->setText("浏览策略组"); headingLayout->addWidget(groupPicker);
-    connect(groupPicker,&QToolButton::clicked,this,[this] {
-        auto* dialog=new QDialog(this); dialog->setAttribute(Qt::WA_DeleteOnClose); dialog->setObjectName("groupPickerDialog"); dialog->setWindowTitle("浏览策略组"); dialog->resize(360,420); auto* box=new QVBoxLayout(dialog);
-        auto* query=new QLineEdit; query->setObjectName("groupSearch"); query->setPlaceholderText("搜索策略组"); box->addWidget(query); auto* list=new QListWidget; list->setObjectName("groupChoices"); box->addWidget(list);
+    auto* groupPicker=new QToolButton; groupPicker->setFixedSize(32,32); groupPicker->setObjectName("browseGroup"); groupPicker->setProperty("prototypeIcon",true); groupPicker->setToolButtonStyle(Qt::ToolButtonIconOnly); groupPicker->setToolTip("选择节点分组"); groupPicker->setIcon(UiIcons::icon(UiIcons::Glyph::Layers,UiTheme::Brand)); groupPicker->setText("浏览策略组"); headingLayout->addWidget(groupPicker);
+    connect(groupPicker,&QToolButton::clicked,this,[this,groupPicker] {
+        auto* popup=new QMenu(groupPicker); popup->setObjectName("groupPickerMenu"); popup->setAttribute(Qt::WA_DeleteOnClose);
+        auto* panel=new QWidget; auto* box=new QVBoxLayout(panel); box->setContentsMargins(8,8,8,8);
+        auto* query=new QLineEdit; query->setObjectName("groupSearch"); query->setPlaceholderText("搜索策略组"); box->addWidget(query);
+        auto* list=new QListWidget; list->setObjectName("groupChoices"); list->setMinimumSize(240,180); list->setMaximumHeight(320); box->addWidget(list);
         for (auto* action:groupMenu_->actions()) if (action->isEnabled()) { auto* item=new QListWidgetItem(action->text(),list); item->setData(Qt::UserRole,action->text()); if (action->isChecked()) { item->setIcon(UiIcons::icon(UiIcons::Glyph::Check,UiTheme::Brand)); list->setCurrentItem(item); } }
         connect(query,&QLineEdit::textChanged,list,[list](const QString& text) { for (int i=0;i<list->count();++i) list->item(i)->setHidden(!list->item(i)->text().contains(text,Qt::CaseInsensitive)); });
-        connect(list,&QListWidget::itemClicked,dialog,[this,dialog](QListWidgetItem* item) { const auto name=item->data(Qt::UserRole).toString(); groupHistory_.clear(); selectGroup(name); dialog->accept(); }); dialog->open(); query->setFocus();
+        const auto choose=[this,popup](QListWidgetItem* item) { if (!item) return; groupHistory_.clear(); selectGroup(item->data(Qt::UserRole).toString()); popup->close(); };
+        connect(list,&QListWidget::itemClicked,popup,choose); connect(list,&QListWidget::itemActivated,popup,choose);
+        connect(query,&QLineEdit::returnPressed,popup,[list,choose] { for (int i=0;i<list->count();++i) if (!list->item(i)->isHidden()) { choose(list->item(i)); break; } });
+        auto* action=new QWidgetAction(popup); action->setDefaultWidget(panel); popup->addAction(action);
+        connect(popup,&QMenu::aboutToHide,popup,&QObject::deleteLater); popup->popup(groupPicker->mapToGlobal(QPoint(0,groupPicker->height()))); query->setFocus();
     });
-    search_ = new QLineEdit; search_->setObjectName("nodeSearch"); search_->setPlaceholderText("搜索节点"); search_->setClearButtonEnabled(true); search_->setMinimumWidth(120); search_->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed); headingLayout->addWidget(search_);
+    search_ = new QLineEdit; search_->setObjectName("nodeSearch"); search_->setPlaceholderText("搜索节点"); search_->setClearButtonEnabled(true); search_->setMinimumWidth(120); search_->setMaximumWidth(280); search_->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed); headingLayout->addWidget(search_); search_->hide();
+    auto* searchToggle=new QToolButton; searchToggle->setObjectName("nodeSearchToggle"); searchToggle->setProperty("prototypeIcon",true); searchToggle->setIcon(UiIcons::icon(UiIcons::Glyph::Search,UiTheme::Brand)); searchToggle->setToolTip("搜索节点"); searchToggle->setCheckable(true);
+    connect(searchToggle,&QToolButton::toggled,search_,[this](bool shown) { search_->setVisible(shown); if (shown) search_->setFocus(); else search_->clear(); });
     testAction_ = new QAction("测速本组", this); testAction_->setObjectName("testGroup"); testSelectedAction_ = new QAction("测速所选", this);
     // 取消测速：仍挂在测速按钮的菜单里（原来在底部状态条，随 H3 一起删除）。
     cancelTestAction_ = new QAction("取消测速", this); cancelTestAction_->setObjectName("cancelNodeTests");
@@ -42,6 +52,8 @@ QWidget* MainWindow::nodeSection() {
     sort->setMenu(sortMenu); sort->setParent(heading); sort->hide();
     auto* tools = new QToolButton; tools->setObjectName("nodeToolsButton"); tools->setProperty("prototypeIcon",true); tools->setIcon(UiIcons::icon(UiIcons::Glyph::More)); tools->setPopupMode(QToolButton::InstantPopup); tools->setAutoRaise(true); tools->setToolTip("更多节点操作"); headingLayout->addWidget(tools);
     layout->addWidget(heading);
+    auto* restoreFilters=new QPushButton("已显示当前成员 · 恢复筛选"); restoreFilters->setObjectName("restoreNodeFilters"); restoreFilters->setProperty("backLink",true); restoreFilters->hide(); layout->addWidget(restoreFilters,0,Qt::AlignLeft);
+    connect(restoreFilters,&QPushButton::clicked,this,[this,restoreFilters] { const auto saved=revealedNodeFilters_; revealedNodeFilters_={}; restoreNodeBookmark(saved); restoreFilters->hide(); });
 
     auto* useProfile = new QPushButton("使用此配置"); useProfile->setObjectName("useBrowsedProfile");
     useProfile->setToolTip("显式使用所浏览配置并启动内核"); useProfile->setParent(heading); useProfile->hide();
@@ -117,12 +129,15 @@ QWidget* MainWindow::nodeSection() {
     locate->setIcon(UiIcons::icon(UiIcons::Glyph::Locate,UiTheme::Brand)); locate->setToolButtonStyle(Qt::ToolButtonIconOnly); locate->setAutoRaise(true);
     headingLayout->addWidget(locate);
     { QList<QLayoutItem*> cells; while (auto* item=headingLayout->takeAt(0)) cells.append(item);
-      for (auto* widget:QList<QWidget*>{groupPicker,search_,locate,test,tools}) headingLayout->addWidget(widget);
+      headingLayout->addStretch(1);
+      for (auto* widget:QList<QWidget*>{search_,searchToggle,groupPicker,locate,test,tools}) headingLayout->addWidget(widget);
       for (auto* cell:cells) delete cell;
     }
+    for (auto* control:QList<QToolButton*>{searchToggle,groupPicker,locate,test,tools}) { control->setFixedSize(32,32); control->setIconSize(QSize(20,20)); }
     tools->setMenu(more);
-    nodeGroupHint_ = new QLabel; nodeGroupHint_->setObjectName("nodeGroupHint"); nodeGroupHint_->setProperty("secondary", true); nodeGroupHint_->setTextFormat(Qt::PlainText);
+    nodeGroupHint_ = new QLabel; nodeGroupHint_->setObjectName("nodeGroupHint"); nodeGroupHint_->setProperty("secondary", true); nodeGroupHint_->setSizePolicy(QSizePolicy::Preferred,QSizePolicy::Maximum); nodeGroupHint_->setTextFormat(Qt::PlainText);
     layout->addWidget(nodeGroupHint_);
+    layout->addStretch(0); // Absorb surplus below short lists, never between the toolbar and group.
 
     connect(testAction_, &QAction::triggered, this, [this] { controller_->testNodes(model_.names(),selectedGroup_); });
     // 测选中：两个视图共用一条路径，名字由当前显示的视图决定。
@@ -159,7 +174,7 @@ QWidget* MainWindow::nodeSection() {
     auto* escape = new QShortcut(QKeySequence(Qt::Key_Escape), page); escape->setContext(Qt::WidgetWithChildrenShortcut);
     connect(escape, &QShortcut::activated, this, [this] { if (auto* popup = QApplication::activePopupWidget()) { popup->close(); return; } nodeList_->selectionModel()->clear(); updateActions(); });
     auto* searchShortcut = new QShortcut(QKeySequence::Find, page); searchShortcut->setContext(Qt::WidgetWithChildrenShortcut);
-    connect(searchShortcut, &QShortcut::activated, search_, [this] { search_->setFocus(Qt::ShortcutFocusReason); search_->selectAll(); });
+    connect(searchShortcut, &QShortcut::activated, search_, [this] { search_->show(); if (auto* button=findChild<QToolButton*>("nodeSearchToggle")) button->setChecked(true); search_->setFocus(Qt::ShortcutFocusReason); search_->selectAll(); });
     return page;
 }
 
@@ -174,6 +189,10 @@ void MainWindow::applyNodeFilters() {
 // 计数只在标题行显示（原型 01 的 section-count）：过滤后与全部不一致时给出两个数。
 void MainWindow::updateNodeCount() {
     if (!nodeCount_) return;
+    if (nodeViews_) {
+        const int rows=memberView()==1?(filter_.rowCount()+qMax(1,nodeCards_->viewport()->width()/220)-1)/qMax(1,nodeCards_->viewport()->width()/220):nodeRows_->rowCount();
+        nodeViews_->setMaximumHeight(rows>0?qMax(64,rows*(memberView()==1?54:UiTheme::twoLineRowHeight(nodeList_->font()))+4):QWIDGETSIZE_MAX);
+    }
     nodeCount_->setText(filter_.rowCount() == model_.rowCount() ? QString("%1 个").arg(model_.rowCount())
                                                                 : QString("%1 / %2 个").arg(filter_.rowCount()).arg(model_.rowCount()));
 }
@@ -202,8 +221,13 @@ void MainWindow::restoreNodeBookmark(const QJsonObject& value) {
 
 void MainWindow::editNodePreferences() {
     const auto id=profilesCombo_->currentData().toString(),group=selectedGroup_; if (id.isEmpty()||group.isEmpty()||controller_->state().busy) return;
+    if (groupEditor_) {
+        if (groupEditor_->property("profileId").toString()==id&&groupEditor_->property("groupName").toString()==group) { groupEditor_->show(); return; }
+        if (!DialogDraftGuard::allowLeave(groupEditor_)) return;
+        groupEditor_->done(QDialog::Rejected); groupEditor_=nullptr;
+    }
     const auto expected=controller_->nodePreferences(id),initial=expected.value("groups").toObject().value(group).toObject();
-    auto* dialog=new QDialog(this); dialog->setAttribute(Qt::WA_DeleteOnClose); dialog->setObjectName("nodePreferencesDialog"); dialog->setWindowTitle("节点选项"); dialog->resize(510,280); auto* box=new QVBoxLayout(dialog); auto* label=new QLabel(group); label->setTextFormat(Qt::PlainText); label->setObjectName("sectionTitle"); box->addWidget(label);
+    auto* dialog=new TaskDialog(this); groupEditor_=dialog; dialog->setProperty("profileId",id); dialog->setProperty("groupName",group); dialog->setAttribute(Qt::WA_DeleteOnClose); dialog->setObjectName("nodePreferencesDialog"); dialog->setWindowTitle("节点选项"); dialog->resize(510,280); auto* box=new QVBoxLayout(dialog); auto* label=new QLabel(group); label->setTextFormat(Qt::PlainText); label->setObjectName("sectionTitle"); box->addWidget(label);
     auto* form=new QFormLayout; auto* url=new QLineEdit(initial.value("test_url").toString()); url->setObjectName("groupTestUrl"); url->setMaxLength(2048); url->setPlaceholderText("留空沿用默认测试地址"); form->addRow("本组延迟测试地址",url);
     auto* view=new CompactComboBox; view->addItems({"行列表","卡片"}); view->setCurrentIndex(memberView()); form->addRow("默认视图",view); box->addLayout(form);
     auto* common=new QCheckBox("作为常用组，在列表和托盘中优先显示"); common->setChecked(expected.value("common_groups").toArray().contains(group)); box->addWidget(common);
@@ -213,7 +237,10 @@ void MainWindow::editNodePreferences() {
     const auto draft=[expected,group,url,view,common,disconnect] { auto value=expected; auto groups=value.value("groups").toObject(); groups[group]=QJsonObject{{"test_url",url->text().trimmed()},{"view",view->currentIndex()}}; value["groups"]=groups; value["last_group"]=group; value["disconnect_affected"]=disconnect->isChecked(); auto commons=value.value("common_groups").toArray(); for (int i=commons.size()-1;i>=0;--i) if (commons[i].toString()==group) commons.removeAt(i); if (common->isChecked()) commons.append(group); value["common_groups"]=commons; return value; };
     const auto baseline=draft(); auto pending=std::make_shared<bool>(false); DialogDraftGuard::protect(dialog,[draft,baseline] { return draft()!=baseline; },[pending] { return *pending; }); connect(buttons,&QDialogButtonBox::rejected,dialog,&QDialog::reject);
     connect(buttons,&QDialogButtonBox::accepted,dialog,[this,id,expected,draft,pending,buttons] { *pending=true; buttons->setEnabled(false); controller_->updateNodePreferences(id,draft(),expected); });
-    connect(controller_,&AppController::operationFinished,dialog,[this,dialog,pending,buttons,note,view](bool ok,const QString& message) { if (!*pending) return; *pending=false; buttons->setEnabled(true); if (ok) { setMemberView(view->currentIndex()); dialog->accept(); } else note->setText(message); }); dialog->show();
+    connect(controller_,&AppController::operationFinished,dialog,[this,dialog,pending,buttons,note,view](bool ok,const QString& message) { if (!*pending) return; *pending=false; buttons->setEnabled(true); if (ok) { setMemberView(view->currentIndex()); dialog->accept(); } else note->setText(message); });
+    dialog->setProperty("embeddedTask",true); dialog->setParent(nodeSection_,Qt::Widget); dialog->setMinimumSize(0,0); dialog->setSizePolicy(QSizePolicy::Preferred,QSizePolicy::Maximum);
+    static_cast<QVBoxLayout*>(nodeSection_->layout())->insertWidget(1,dialog);
+    connect(dialog,&QDialog::finished,dialog,&QObject::deleteLater); dialog->show();
 }
 
 void MainWindow::updateProxies() {
@@ -251,6 +278,7 @@ void MainWindow::updateProxies() {
 }
 
 void MainWindow::updateGroup() {
+    if (groupEditor_) groupEditor_->setVisible(groupEditor_->property("profileId").toString()==profilesCombo_->currentData().toString()&&groupEditor_->property("groupName").toString()==selectedGroup_);
     websitePage_->suggestGroup(selectedGroup_);
     const auto group = selectedGroup_; const bool sameProfile = profilesCombo_->currentData().toString() == controller_->state().activeProfile;
     const auto object = controller_->proxies().value(group).toObject();
@@ -281,6 +309,10 @@ void MainWindow::updateGroup() {
     }
     // 组类型决定整段归到「手动选择」还是「自动策略组」（原型 01 的两个分组）。
     nodeRows_->setGroupContext(group,object.value("now").toString());
+    for (const auto& source:controller_->profiles()) if (source.id==profilesCombo_->currentData().toString()) {
+        const auto when=QDateTime::fromString(source.updated,Qt::ISODate).toLocalTime();
+        nodeRows_->setSourceContext(source.name,(when.isValid()?when.toString("MM-dd HH:mm")+" · ":QString())+group); break;
+    }
     nodeRows_->setGroupAutomatic(automatic);
     nodeRows_->setCurrent(object.value("now").toString());
     applyNodeFilters();
@@ -299,7 +331,7 @@ void MainWindow::updateGroup() {
     updateActions(); updateHome();
 }
 
-void MainWindow::selectGroup(const QString& group, bool nested) {
+void MainWindow::selectGroup(QString group, bool nested) {
     if (!controller_->proxies().value(group).toObject().value("all").isArray()) return;
     if (nested) {
         if (group == selectedGroup_ || groupHistory_.contains(group) || groupHistory_.size() >= 16) {
@@ -381,7 +413,8 @@ void MainWindow::chooseSelectedNode() {
 void MainWindow::locateCurrentNode() {
     const auto now=controller_->proxies().value(selectedGroup_).toObject().value("now").toString(); if (now.isEmpty()) return;
     if (nodeRows_->rowOfMember(now)<0) {
-        if (QMessageBox::question(this,"当前成员被筛选隐藏","清除筛选并定位当前成员？不会切换节点。",QMessageBox::Yes|QMessageBox::No,QMessageBox::No)!=QMessageBox::Yes) return;
+        revealedNodeFilters_=nodeBookmark();
+        if (auto* restore=findChild<QPushButton*>("restoreNodeFilters")) restore->show();
         search_->clear(); for (auto* box:{nodeRegion_,nodeProtocol_,nodeHealth_,nodeMaximum_}) box->setCurrentIndex(0); nodeFavoritesOnly_->setChecked(false); applyNodeFilters();
     }
     if (memberView()==1) {
@@ -443,7 +476,7 @@ void MainWindow::showNodeDetails(const QString& name) {
 void MainWindow::setMemberView(int mode) {
     const int index = mode == 1 ? 1 : 0;
     if (!nodeViews_ || nodeViews_->currentIndex() == index) return;
-    nodeViews_->setCurrentIndex(index);
+    nodeViews_->setCurrentIndex(index); updateNodeCount();
     const auto name = nodeRows_->memberAt(nodeList_->currentIndex().row());
     if (!name.isEmpty()) {
         const auto row = model_.names().indexOf(name);

@@ -22,7 +22,7 @@ public:
     int heightForWidth(int) const override { return minimumSizeHint().height(); }
 };
 }
-DnsDialog::DnsDialog(AppController* controller, const QString& profileId, QWidget* parent) : QDialog(parent), controller_(controller), id_(profileId) {
+DnsDialog::DnsDialog(AppController* controller, const QString& profileId, QWidget* parent) : TaskDialog(parent), controller_(controller), id_(profileId) {
     Profile profile; for (const auto& item : controller_->profiles()) if (item.id==id_) profile=item; saved_=profile.dnsOverride; savedEnabled_=profile.dnsOverrideEnabled; expected_={{"yaml",profile.dnsOverride},{"enabled",profile.dnsOverrideEnabled},{"candidate",profile.candidate},{"active",profile.active}};
     setAttribute(Qt::WA_DeleteOnClose); setObjectName("dnsDialog"); setWindowTitle("DNS · "+profile.name); resize(640,460);
     auto* layout=new QVBoxLayout(this); setMinimumSize(560,400); layout->addWidget(contextNote("未填写的字段沿用订阅。","未填写字段沿用订阅；策略映射按键合并。仅配置内核 DNS，不修改系统 DNS 或新增监听。"));

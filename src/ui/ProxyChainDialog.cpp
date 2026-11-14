@@ -9,7 +9,7 @@
 #include <QPushButton>
 #include <QVBoxLayout>
 namespace mlash {
-ProxyChainDialog::ProxyChainDialog(AppController* controller,const QString& id,QWidget* parent):QDialog(parent),controller_(controller),id_(id) {
+ProxyChainDialog::ProxyChainDialog(AppController* controller,const QString& id,QWidget* parent):TaskDialog(parent),controller_(controller),id_(id) {
     QString name; for (const auto& p:controller->profiles()) if (p.id==id) { name=p.name; saved_=draft_=p.proxyEdits.value("dialers").toObject(); }
     setAttribute(Qt::WA_DeleteOnClose); setObjectName("proxyChainDialog"); setWindowTitle("上游代理链 · "+name); resize(600,430); auto* layout=new QVBoxLayout(this);
     layout->addWidget(contextNote("为节点选择连接上游。","为静态节点指定连接其服务器时使用的上游节点或策略组。流量先经过上游，再连接所选节点；保存前检查间接循环。动态Provider节点沿用来源配置。"));

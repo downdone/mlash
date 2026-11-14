@@ -32,7 +32,8 @@ QIcon icon(Glyph glyph,const QString& color) {
         case Glyph::Save: path.moveTo(4,3); path.lineTo(17,3); path.lineTo(21,7); path.lineTo(21,21); path.lineTo(4,21); path.closeSubpath(); p.drawRect(QRectF(8,3,8,6)); p.drawRect(QRectF(8,14,9,7)); break;
         // 分区图标（6.2c 合并后导航与页面共用同一绘制器）。
         case Glyph::Home: path.moveTo(3,11); path.lineTo(12,3); path.lineTo(21,11); path.moveTo(6,9); path.lineTo(6,21); path.lineTo(10,21); path.lineTo(10,15); path.lineTo(14,15); path.lineTo(14,21); path.lineTo(18,21); path.lineTo(18,9); break;
-        case Glyph::Chart: p.drawEllipse(QPointF(5,6),3,3); p.drawEllipse(QPointF(19,18),3,3); path.moveTo(8,6); path.lineTo(16,6); path.lineTo(16,18); path.lineTo(8,18); break;
+        case Glyph::Chart: path.moveTo(2,12); path.lineTo(6,12); path.lineTo(9,3); path.lineTo(13,21); path.lineTo(16,9); path.lineTo(18,12); path.lineTo(22,12); break;
+        case Glyph::Import: p.drawLine(12,3,12,15); path.moveTo(7,10); path.lineTo(12,15); path.lineTo(17,10); path.moveTo(4,16); path.lineTo(4,21); path.lineTo(20,21); path.lineTo(20,16); break;
         case Glyph::List: p.drawLine(4,6,20,6); p.drawLine(4,12,20,12); p.drawLine(4,18,14,18); break;
         // K 版：原型 ICON 词典里首页与标题行用到的形状（坐标直接取自原型的 24×24 视框）。
         case Glyph::Route: p.drawEllipse(QRectF(4,16,4,4)); p.drawEllipse(QRectF(16,4,4,4)); path.moveTo(6,16); path.lineTo(6,11); path.arcTo(QRectF(6,6,10,10),180,-90); path.lineTo(16,6); path.moveTo(11,15); path.lineTo(15,19); path.lineTo(19,15); break;

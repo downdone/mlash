@@ -1,3 +1,5 @@
+#include "TaskWorkspace.h"
+#include "TaskDialog.h"
 #include "WebsiteTestsPage.h"
 #include "NodePresentation.h"
 #include "WidgetStyle.h"
@@ -33,7 +35,7 @@
 namespace mlash {
 WebsiteTestsPage::WebsiteTestsPage(AppController* controller,QWidget* parent):QWidget(parent),controller_(controller) {
     auto* layout=new QVBoxLayout(this); layout->setContentsMargins(0,0,0,0); layout->setSpacing(10);
-    auto* heading=new QHBoxLayout; heading->addStretch(); auto* diagnostic=new QPushButton("出口诊断…"); diagnostic->setObjectName("websiteDiagnostics"); heading->addWidget(diagnostic); connect(diagnostic,&QPushButton::clicked,this,&WebsiteTestsPage::diagnosticsRequested); auto* edit=new QPushButton("编辑目标"); edit->setObjectName("editWebsiteTargets"); heading->addWidget(edit); layout->addLayout(heading); connect(edit,&QPushButton::clicked,this,[this] { (new WebsiteTargetsDialog(controller_,this))->show(); });
+    auto* heading=new QHBoxLayout; heading->addStretch(); auto* diagnostic=new QPushButton("出口诊断…"); diagnostic->setObjectName("websiteDiagnostics"); heading->addWidget(diagnostic); connect(diagnostic,&QPushButton::clicked,this,&WebsiteTestsPage::diagnosticsRequested); auto* edit=new QPushButton("编辑目标"); edit->setObjectName("editWebsiteTargets"); heading->addWidget(edit); layout->addLayout(heading); connect(edit,&QPushButton::clicked,this,[this] { presentTaskDialog(new WebsiteTargetsDialog(controller_,this)); });
     auto* controls=new QFrame; controls->setObjectName("panel"); auto* controlLayout=new QVBoxLayout(controls); controlLayout->setContentsMargins(12,10,12,10); controlLayout->setSpacing(8);
     auto* row=new QHBoxLayout; row->setSpacing(8); row->addWidget(new QLabel("测试节点")); nodes_=new CompactComboBox; nodes_->setPlaceholderText("选择节点"); nodes_->setObjectName("websiteNode"); nodes_->setAccessibleName("网站测试节点"); nodes_->setSizePolicy(QSizePolicy::Ignored,QSizePolicy::Fixed); row->addWidget(nodes_,1);
     start_=new QPushButton("开始测试"); start_->setObjectName("startWebsiteTests"); start_->setProperty("primary",true); row->addWidget(start_);
@@ -45,7 +47,8 @@ WebsiteTestsPage::WebsiteTestsPage(AppController* controller,QWidget* parent):QW
     scroll->viewport()->installEventFilter(this); rebuildCards();
     connect(controller_->websiteTests(),&WebsiteTests::targetsChanged,this,&WebsiteTestsPage::rebuildCards);
     auto* method=new QToolButton; method->setObjectName("websiteMethod"); method->setProperty("quiet",true); method->setText("?"); method->setFixedSize(26,26); method->setToolTip("测试说明"); method->setAccessibleName("查看测试说明"); heading->addWidget(method);
-    connect(method,&QToolButton::clicked,this,[this] { QMessageBox::information(this,"网站测试说明","通过受控内核的指定节点请求目标地址，记录本次 HTTP 响应延迟。\n已响应不代表解锁、登录可用或带宽；HTTP 状态未提供时显示未知。\n停止、离开页面或隐藏窗口会取消未完成项；已发出的内核请求可能持续到5秒超时。\n测试不主动修改策略组；每卡详情包含指定节点、目标、时间与错误依据。"); });
+    auto* explanation=new QLabel("通过受控内核的指定节点测试 HTTP 响应。已响应不代表解锁、登录可用或带宽；离页停止采样，已发请求可能持续至超时。"); explanation->setObjectName("websiteExplanation"); explanation->setWordWrap(true); explanation->setProperty("secondary",true); explanation->hide(); layout->insertWidget(1,explanation);
+    method->setCheckable(true); connect(method,&QToolButton::toggled,explanation,&QWidget::setVisible);
     connect(start_,&QPushButton::clicked,this,[this] { if (controller_->websiteTests()->running()) controller_->cancelWebsiteTests(); else controller_->startWebsiteTests(nodes_->currentData().toString()); });
     connect(clear_,&QPushButton::clicked,controller_,&AppController::clearWebsiteTests);
     connect(nodes_,&QComboBox::activated,this,[this] { userPicked_=true; controller_->clearWebsiteTests(); updateResults(); });
@@ -76,7 +79,11 @@ void WebsiteTestsPage::showResult(const QString& id) {
     if (resultDetails_) resultDetails_->close(); const auto result=controller_->websiteTests()->result(id); const auto node=controller_->websiteTests()->node();
     QString state; switch (result.status) { case WebsiteResult::Queued: state="等待中"; break; case WebsiteResult::Testing: state="测试中"; break; case WebsiteResult::Responded: state="已响应"; break; case WebsiteResult::Failed: state="未响应"; break; case WebsiteResult::Cancelled: state="已取消"; break; default: state="未测试"; }
     const QString text=QStringList{"目标名称："+target.name,"目标地址："+target.url,"指定节点："+(node.isEmpty()?QString("未知 · 尚未开始测试"):node),"结果："+state,"响应延迟："+(result.delay>=0?QString::number(result.delay)+" ms":QString("未知")),"测试时间："+(result.measured.isValid()?result.measured.toLocalTime().toString("yyyy-MM-dd HH:mm:ss t"):QString("未知")),"HTTP 状态：未知（核心 delay 接口未提供）","错误："+(result.error.isEmpty()?QString("无已报告错误"):result.error),"", "方法：经受控内核的指定节点请求以上目标；不主动修改策略组。", "已响应只表示本次 HTTP 响应延迟，不证明解锁、账号可用或带宽。"}.join('\n');
-    auto* dialog=new QDialog(this); resultDetails_=dialog; dialog->setAttribute(Qt::WA_DeleteOnClose); dialog->setObjectName("websiteResultSnapshot"); dialog->setProperty("evidenceNode",node); dialog->setWindowTitle("测试详情 · 打开时快照"); dialog->resize(540,370); auto* layout=new QVBoxLayout(dialog); auto* note=new QLabel("打开时的结果快照；后续重测不会改变此处内容。"); note->setWordWrap(true); layout->addWidget(note); auto* details=new QPlainTextEdit(text); details->setObjectName("websiteResultEvidence"); details->setReadOnly(true); details->setWordWrapMode(QTextOption::WrapAnywhere); details->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff); layout->addWidget(details,1); auto* actions=new QDialogButtonBox(QDialogButtonBox::Close); actions->button(QDialogButtonBox::Close)->setText("完成"); auto* copy=actions->addButton("复制详情",QDialogButtonBox::ActionRole); copy->setObjectName("copyWebsiteResult"); layout->addWidget(actions); connect(actions,&QDialogButtonBox::rejected,dialog,&QDialog::reject); connect(copy,&QPushButton::clicked,dialog,[text] { QApplication::clipboard()->setText(text); }); dialog->show();
+    auto* dialog=new TaskDialog(this); resultDetails_=dialog; dialog->setAttribute(Qt::WA_DeleteOnClose); dialog->setObjectName("websiteResultSnapshot"); dialog->setProperty("evidenceNode",node); dialog->setWindowTitle("测试详情 · 打开时快照"); dialog->resize(540,370); auto* layout=new QVBoxLayout(dialog); auto* note=new QLabel("打开时的结果快照；后续重测不会改变此处内容。"); note->setWordWrap(true); layout->addWidget(note); auto* details=new QPlainTextEdit(text); details->setObjectName("websiteResultEvidence"); details->setReadOnly(true); details->setWordWrapMode(QTextOption::WrapAnywhere); details->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff); layout->addWidget(details,1); auto* actions=new QDialogButtonBox(QDialogButtonBox::Close); actions->button(QDialogButtonBox::Close)->setText("完成"); auto* copy=actions->addButton("复制详情",QDialogButtonBox::ActionRole); copy->setObjectName("copyWebsiteResult"); layout->addWidget(actions); connect(actions,&QDialogButtonBox::rejected,dialog,&QDialog::reject); connect(copy,&QPushButton::clicked,dialog,[text] { QApplication::clipboard()->setText(text); }); // Read-only evidence stays with its card; opening it must not deactivate tests.
+    for (const auto& card:cardWidgets_) if (card.id==id) {
+        dialog->setParent(card.box,Qt::Widget); dialog->setMinimumSize(0,0);
+        details->setFixedHeight(180); card.box->layout()->addWidget(dialog); dialog->show(); break;
+    }
 }
 void WebsiteTestsPage::setActive(bool active,const QString& suggestedGroup) {
     if (active && !active_) userPicked_=false;

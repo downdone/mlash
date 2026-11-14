@@ -1,9 +1,9 @@
 #pragma once
 #include "app/AppController.h"
-#include <QDialog>
+#include "TaskDialog.h"
 class QTableWidget; class QLabel; class QPushButton; class QComboBox;
 namespace mlash {
-class GeoDataDialog final : public QDialog {
+class GeoDataDialog final : public TaskDialog {
     Q_OBJECT
 public:
     explicit GeoDataDialog(AppController* controller,QWidget* parent=nullptr);

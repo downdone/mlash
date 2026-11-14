@@ -220,23 +220,24 @@ inline void settingRow(QVBoxLayout* section, const QString& name, const QString&
 // 行的动作不在这里：点击行或 › 都打开详情抽屉，行本身没有第二套按钮。
 class ProfileRowDelegate final : public QStyledItemDelegate {
 public:
-    enum Role { IsCurrent = Qt::UserRole + 2, Kind, Detail, UsageRatio, UsageText };   // 与 ProfileRowModel 的角色编号对齐
+    enum Role { IsCurrent = ProfileRowModel::IsCurrent, Kind = ProfileRowModel::Kind,
+        Detail = ProfileRowModel::Detail, UsageRatio = ProfileRowModel::UsageRatio, UsageText = ProfileRowModel::UsageText };
     using QStyledItemDelegate::QStyledItemDelegate;
-    QSize sizeHint(const QStyleOptionViewItem& option, const QModelIndex&) const override { return {320,qMax(UiTheme::ProfileRowHeight,QFontMetrics(option.font).height()*2+16)}; }
+    QSize sizeHint(const QStyleOptionViewItem& option, const QModelIndex&) const override { return {320,UiTheme::twoLineRowHeight(option.font,UiTheme::ProfileRowHeight)}; }
     static QRect chevronRect(const QRect& row) { return {row.right()-38,row.center().y()-14,28,28}; }
     void paint(QPainter* p,const QStyleOptionViewItem& option,const QModelIndex& index) const override {
         p->save(); p->setRenderHint(QPainter::Antialiasing); const auto rect=option.rect;
         if (option.state.testFlag(QStyle::State_MouseOver)) p->fillRect(rect,QColor(UiTheme::Hover));
-        p->setPen(QColor(UiTheme::Separator)); p->drawLine(rect.left()+54,rect.bottom(),rect.right(),rect.bottom());
+        p->setPen(QColor(UiTheme::Separator)); p->drawLine(rect.left()+46,rect.bottom(),rect.right(),rect.bottom());
         const bool current=index.data(IsCurrent).toBool();
-        UiIcons::icon(index.data(Kind).toString()=="remote"?UiIcons::Glyph::Globe:UiIcons::Glyph::Folder,UiTheme::Brand).paint(p,QRect(rect.left()+16,rect.center().y()-11,22,22));
-        const int left=rect.left()+54,width=qMax(0,rect.width()-125),line=QFontMetrics(option.font).height(),top=rect.center().y()-line-2;
+        UiIcons::icon(index.data(Kind).toString()=="remote"?UiIcons::Glyph::Globe:UiIcons::Glyph::Folder,UiTheme::Brand).paint(p,QRect(rect.left()+12,rect.center().y()-10,20,20));
+        const auto caption=UiTheme::rowCaptionFont(option.font); const int left=rect.left()+46,width=qMax(0,rect.width()-(current?188:100)),line=QFontMetrics(option.font).height(),top=rect.center().y()-(line+QFontMetrics(caption).height()+1)/2;
         auto title=option.font; title.setBold(current); p->setFont(title); p->setPen(QColor(UiTheme::Ink));
-        p->drawText(QRect(left,top,width,line+2),Qt::AlignVCenter,QFontMetrics(title).elidedText(index.data().toString(),Qt::ElideRight,width));
-        auto small=option.font; small.setPointSizeF(small.pointSizeF()*0.88); p->setFont(small); p->setPen(QColor(UiTheme::Secondary));
+        p->drawText(QRect(left,top,width,line),Qt::AlignVCenter,QFontMetrics(title).elidedText(index.data().toString(),Qt::ElideRight,width));
+        auto small=UiTheme::rowCaptionFont(option.font); p->setFont(small); p->setPen(QColor(UiTheme::Secondary));
         const auto detail=index.data(Detail).toString();
-        p->drawText(QRect(left,top+line+4,width,line),Qt::AlignVCenter,QFontMetrics(small).elidedText(detail,Qt::ElideRight,width));
-        if (current) UiIcons::icon(UiIcons::Glyph::Check,UiTheme::Brand).paint(p,QRect(rect.right()-151,rect.center().y()-8,16,16));
+        p->drawText(QRect(left,top+line+1,width,QFontMetrics(small).height()),Qt::AlignVCenter,QFontMetrics(small).elidedText(detail,Qt::ElideRight,width));
+        if (current) UiIcons::icon(UiIcons::Glyph::Check,UiTheme::Brand).paint(p,QRect(rect.right()-133,rect.center().y()-8,16,16));
         UiIcons::icon(UiIcons::Glyph::ChevronRight,UiTheme::Secondary).paint(p,chevronRect(rect).adjusted(4,4,-4,-4));
         p->restore();
     }
@@ -399,14 +400,14 @@ protected:
     }
     void keyPressEvent(QKeyEvent* event) override { if (event->key() == Qt::Key_Escape) { closeDrawer(); return; } QFrame::keyPressEvent(event); }
 private:
-    void restorePage() { if (pageHost_) { pageHost_->setContentsMargins(UiTheme::ContentInset,18,UiTheme::ContentInset,18); pageHost_->show(); } }
+    void restorePage() { if (pageHost_) { pageHost_->setContentsMargins(UiTheme::ContentInset,UiTheme::ContentTop,UiTheme::ContentInset,UiTheme::ContentTop); pageHost_->show(); } }
     void hideEvent(QHideEvent* event) override { restorePage(); QFrame::hideEvent(event); }
     void syncGeometry() {
         const int top=UiTheme::TopbarHeight+UiTheme::ContentInset;
         const bool wide=host_->width()-2*UiTheme::ContentInset>=860;
         const int width=wide?UiTheme::DrawerWidth:host_->width()-2*UiTheme::ContentInset;
         setProperty("inspectorMode",wide?"side":"page");
-        if (pageHost_) { pageHost_->setContentsMargins(UiTheme::ContentInset,18,wide?UiTheme::DrawerWidth+2*UiTheme::ContentInset:UiTheme::ContentInset,18); pageHost_->setVisible(wide); }
+        if (pageHost_) { pageHost_->setContentsMargins(UiTheme::ContentInset,UiTheme::ContentTop,wide?UiTheme::DrawerWidth+2*UiTheme::ContentInset:UiTheme::ContentInset,UiTheme::ContentTop); pageHost_->setVisible(wide); }
         setGeometry(host_->width()-UiTheme::ContentInset-width,top,width,qMax(1,host_->height()-top-UiTheme::ContentInset-30));
     }
     QWidget* host_;
@@ -428,7 +429,7 @@ public:
     // data() 的自定义角色：委托据此区分行类型并取副标题。
     enum Role {
         RowKind = Qt::UserRole + 20,   // 0 组头 / 1 成员
-        IsAutoGroup, IsCurrent, RegionCode, LatencyText, Subtitle, GroupNote, GroupCollapsed
+        IsAutoGroup, IsCurrent, RegionCode, LatencyText, Subtitle, GroupNote, GroupCollapsed, SourceName, SourceStamp
     };
     explicit NodeRowModel(QObject* parent = nullptr) : QAbstractTableModel(parent) {}
     // source 为 NodeFilter（任何以 UserRole 0 列给出成员名的模型都可以）。
@@ -446,6 +447,7 @@ public:
     // 组类型决定整段归入「手动选择」还是「自动策略组」（Selector 手动，URLTest/Fallback 自动）。
     void setGroupAutomatic(bool automatic) { if (groupAutomatic_ == automatic) return; groupAutomatic_ = automatic; rebuild(); }
     void setGroupContext(const QString& name,const QString& current) { if (groupName_==name&&groupCurrent_==current) return; groupName_=name; groupCurrent_=current; if (!rows_.isEmpty()) emit dataChanged(index(0,0),index(0,0)); }
+    void setSourceContext(const QString& name,const QString& stamp) { sourceName_=name; sourceStamp_=stamp; if (!rows_.isEmpty()) emit dataChanged(index(0,0),index(0,0)); }
     bool groupAutomatic() const { return groupAutomatic_; }
     void setCollapsed(bool automaticGroup, bool collapsed) {
         auto& value = automaticGroup ? autoCollapsed_ : manualCollapsed_;
@@ -482,7 +484,9 @@ public:
             switch (role) {
             case RowKind: return 0;
             case Qt::DisplayRole: return groupName_.isEmpty()?(automatic?QString("自动策略组"):QString("手动选择")):groupName_;
-            case GroupNote: return QString("%1 个成员").arg(members_.size());
+            case SourceName: return sourceName_;
+            case SourceStamp: return sourceStamp_;
+            case GroupNote: return QString("%1 个").arg(members_.size());
             case GroupCollapsed: return collapsed(automatic);
             case Subtitle: return groupCurrent_.isEmpty()?QString("尚未选定成员"):QString("当前 → ")+groupCurrent_;
             case IsAutoGroup: return automatic;
@@ -515,31 +519,30 @@ private:
     QAbstractItemModel* source_ = nullptr;
     QStringList members_;
     QVector<Row> rows_;
-    QString current_,groupName_,groupCurrent_;
+    QString current_,groupName_,groupCurrent_,sourceName_,sourceStamp_;
     bool groupAutomatic_ = false, manualCollapsed_ = false, autoCollapsed_ = false;
 };
 
-// 委托：组头 34px、成员行 56px 两种高度，视图需 setUniformItemSizes(false)。
-// 行高与原型 `.node-row`（56px）一致：大行距是「一眼扫过就能点」的关键，46px 太挤。
+// Compact two-line rows expand from actual title/caption metrics (ADR 0053).
 class NodeRowDelegate final : public QStyledItemDelegate {
 public:
     using QStyledItemDelegate::QStyledItemDelegate;
-    QSize sizeHint(const QStyleOptionViewItem& option, const QModelIndex& index) const override {
-        return {10, index.data(NodeRowModel::RowKind).toInt() == 0 ? qMax(52,QFontMetrics(option.font).height()*2+12) : qMax(UiTheme::NodeRowHeight, QFontMetrics(option.font).height()*2+12)};
+    QSize sizeHint(const QStyleOptionViewItem& option, const QModelIndex&) const override {
+        return {10, UiTheme::twoLineRowHeight(option.font)};
     }
     static QRect infoRect(const QRect& row) { return {row.right()-38,row.center().y()-14,28,28}; }
-    static QRect delayRect(const QRect& row) { return {row.right()-124,row.top()+4,78,row.height()-8}; }
+    static QRect delayRect(const QRect& row) { return {row.right()-108,row.top()+3,62,row.height()-6}; }
     void paint(QPainter* p, const QStyleOptionViewItem& option, const QModelIndex& index) const override {
         p->save(); p->setRenderHint(QPainter::Antialiasing);
         const QRect rect=option.rect;
         if (index.data(NodeRowModel::RowKind).toInt()==0) { paintHeader(p,option,index); p->restore(); return; }
         const bool current=index.data(NodeRowModel::IsCurrent).toBool();
         if (option.state.testFlag(QStyle::State_MouseOver)) p->fillRect(rect,QColor(UiTheme::Hover));
-        p->setPen(QColor(UiTheme::Separator)); p->drawLine(rect.left()+54,rect.bottom(),rect.right(),rect.bottom());
-        const QRect badge(rect.left()+15,rect.center().y()-13,26,26);
+        p->setPen(QColor(UiTheme::Separator)); p->drawLine(rect.left()+46,rect.bottom(),rect.right(),rect.bottom());
+        const QRect badge(rect.left()+12,rect.center().y()-11,22,22);
         const auto name=index.data(Qt::DisplayRole).toString();
         NodePresentation::icon(name,index.data(NodeRowModel::Subtitle).toString().contains("策略组")).paint(p,badge);
-        auto small=option.font; small.setPointSizeF(small.pointSizeF()*0.88);
+        auto small=UiTheme::rowCaptionFont(option.font);
         const auto latency=index.data(NodeRowModel::LatencyText).toString();
         auto color=QColor(UiTheme::Secondary);
         bool numeric=false; const int ms=latency.section(' ',0,0).toInt(&numeric);
@@ -550,26 +553,26 @@ public:
         }
         p->setFont(small); p->setPen(color);
         p->drawText(delayRect(rect).adjusted(3,0,-3,0),Qt::AlignRight|Qt::AlignVCenter,latency.isEmpty()?QStringLiteral("—"):latency);
-        if (current) UiIcons::icon(UiIcons::Glyph::Check,UiTheme::Brand).paint(p,QRect(rect.right()-151,rect.center().y()-8,16,16));
+        if (current) UiIcons::icon(UiIcons::Glyph::Check,UiTheme::Brand).paint(p,QRect(rect.right()-133,rect.center().y()-8,16,16));
         UiIcons::icon(UiIcons::Glyph::Info,UiTheme::Brand).paint(p,infoRect(rect).adjusted(4,4,-4,-4));
-        const int left=badge.right()+14, width=qMax(0,delayRect(rect).left()-left-8);
+        const int left=rect.left()+46, width=qMax(0,delayRect(rect).left()-left-(current?30:8));
         auto title=option.font; title.setBold(current); p->setFont(title); p->setPen(QColor(UiTheme::Ink));
-        const int line=QFontMetrics(option.font).height(); const int top=rect.center().y()-line-1;
-        p->drawText(QRect(left,top,width,line+2),Qt::AlignLeft|Qt::AlignVCenter,QFontMetrics(title).elidedText(name,Qt::ElideRight,width));
+        const int line=QFontMetrics(title).height(),caption=QFontMetrics(small).height(); const int top=rect.center().y()-(line+caption+1)/2;
+        p->drawText(QRect(left,top,width,line),Qt::AlignLeft|Qt::AlignVCenter,QFontMetrics(title).elidedText(name,Qt::ElideRight,width));
         p->setFont(small); p->setPen(QColor(UiTheme::Secondary));
         const auto sub=index.data(NodeRowModel::IsAutoGroup).toBool()?QString("自动选路 · 不可手动切换"):index.data(NodeRowModel::Subtitle).toString();
-        p->drawText(QRect(left,top+line+2,width,line),Qt::AlignLeft|Qt::AlignVCenter,QFontMetrics(small).elidedText(sub,Qt::ElideRight,width));
+        p->drawText(QRect(left,top+line+1,width,QFontMetrics(small).height()),Qt::AlignLeft|Qt::AlignVCenter,QFontMetrics(small).elidedText(sub,Qt::ElideRight,width));
         if (option.state.testFlag(QStyle::State_HasFocus)&&option.widget&&option.widget->property("keyboardFocus").toBool()) { p->setPen(QPen(QColor(UiTheme::Focus),1)); p->setBrush(Qt::NoBrush); p->drawRoundedRect(rect.adjusted(1,1,-2,-2),5,5); }
         p->restore();
     }
 private:
     static void paintHeader(QPainter* p,const QStyleOptionViewItem& option,const QModelIndex& index) {
-        const auto rect=option.rect; p->fillRect(rect,QColor(UiTheme::Surface)); p->setPen(QColor(UiTheme::Separator)); p->drawLine(rect.left()+52,rect.bottom(),rect.right(),rect.bottom());
-        UiIcons::icon(UiIcons::Glyph::Layers,UiTheme::Brand).paint(p,QRect(rect.left()+16,rect.center().y()-11,22,22));
-        auto title=option.font; title.setBold(true); const int line=QFontMetrics(title).height(),left=rect.left()+52,width=qMax(0,rect.width()-205),top=rect.center().y()-line;
-        p->setFont(title); p->setPen(QColor(UiTheme::Ink)); p->drawText(QRect(left,top,width,line),Qt::AlignVCenter,QFontMetrics(title).elidedText(index.data().toString(),Qt::ElideRight,width));
-        auto small=option.font; small.setPointSizeF(small.pointSizeF()*0.82); p->setFont(small); p->setPen(QColor(UiTheme::Secondary));
-        p->drawText(QRect(left,top+line+2,width,line),Qt::AlignVCenter,QFontMetrics(small).elidedText(index.data(NodeRowModel::Subtitle).toString(),Qt::ElideRight,width));
+        const auto rect=option.rect; p->fillRect(rect,QColor(UiTheme::Surface)); p->setPen(QColor(UiTheme::Separator)); p->drawLine(rect.left()+46,rect.bottom(),rect.right(),rect.bottom());
+        UiIcons::icon(index.data(NodeRowModel::GroupCollapsed).toBool()?UiIcons::Glyph::ChevronRight:UiIcons::Glyph::ChevronDown,UiTheme::Brand).paint(p,QRect(rect.left()+12,rect.center().y()-10,20,20));
+        auto title=option.font; title.setBold(true); auto small=UiTheme::rowCaptionFont(option.font); const int line=QFontMetrics(title).height(),left=rect.left()+46,width=qMax(0,rect.width()-175),top=rect.center().y()-(line+QFontMetrics(small).height()+1)/2;
+        p->setFont(title); p->setPen(QColor(UiTheme::Ink)); p->drawText(QRect(left,top,width,line),Qt::AlignVCenter,QFontMetrics(title).elidedText(index.data(NodeRowModel::SourceName).toString().isEmpty()?index.data().toString():index.data(NodeRowModel::SourceName).toString(),Qt::ElideRight,width));
+        p->setFont(small); p->setPen(QColor(UiTheme::Secondary));
+        p->drawText(QRect(left,top+line+1,width,QFontMetrics(small).height()),Qt::AlignVCenter,QFontMetrics(small).elidedText(index.data(NodeRowModel::SourceStamp).toString().isEmpty()?index.data().toString():index.data(NodeRowModel::SourceStamp).toString(),Qt::ElideRight,width));
         p->drawText(rect.adjusted(0,0,-46,0),Qt::AlignRight|Qt::AlignVCenter,index.data(NodeRowModel::GroupNote).toString());
         UiIcons::icon(UiIcons::Glyph::Settings,UiTheme::Brand).paint(p,infoRect(rect).adjusted(4,4,-4,-4));
     }
@@ -581,6 +584,11 @@ public:
     std::function<void(const QModelIndex&)> delayClicked,infoClicked;
     void setTestEnabled(bool enabled) { setProperty("nodeTestEnabled",enabled); viewport()->update(); }
 protected:
+    void resizeEvent(QResizeEvent* event) override {
+        QListView::resizeEvent(event);
+        QPainterPath clip; clip.addRoundedRect(QRectF(viewport()->rect()),10,10);
+        viewport()->setMask(QRegion(clip.toFillPolygon().toPolygon()));
+    }
     void mouseMoveEvent(QMouseEvent* event) override {
         const auto index=delayAt(event->position().toPoint());
         setProperty("nodeDelayHover",index.isValid()?index.data().toString():QString());

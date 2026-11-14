@@ -1,3 +1,5 @@
+#include "TaskWorkspace.h"
+#include "TaskDialog.h"
 #include "TunDialog.h"
 #include "ContextNote.h"
 #include "CompactComboBox.h"
@@ -16,7 +18,7 @@
 #include <QFormLayout>
 #include <QPointer>
 namespace mlash {
-TunDialog::TunDialog(AppController* c,QWidget* parent):QDialog(parent),controller_(c),initial_(c->settings()) {
+TunDialog::TunDialog(AppController* c,QWidget* parent):TaskDialog(parent),controller_(c),initial_(c->settings()) {
     setAttribute(Qt::WA_DeleteOnClose); setObjectName("tunDialog"); setWindowTitle("TUN 与权限服务"); resize(640,500);
     auto* outer=new QVBoxLayout(this); auto* scroll=new QScrollArea; scroll->setWidgetResizable(true); scroll->setFrameShape(QFrame::NoFrame); auto* body=new QWidget; auto* layout=new QVBoxLayout(body); layout->setContentsMargins(4,4,4,4); layout->setSpacing(10);
     layout->addWidget(contextNote("Windows 服务管理需要管理员授权。","通过虚拟网卡接管流量，界面保持普通权限。安装、修复和移除服务需要 Windows 管理员授权。"));
@@ -56,7 +58,7 @@ void TunDialog::updateActions() {
     apply_->setEnabled(idle&&!stale&&checked.ok&&changed&&(!options.tunEnabled||(known_&&installed_&&service_.value("client_core_matches").toBool()))); enabled_->setEnabled(idle&&(installed_||initial_.tunEnabled)); for (auto* widget:QList<QWidget*>{stack_,strict_,mtu_,dnsHijack_,routes_}) widget->setEnabled(idle);
 }
 void TunDialog::showInterfaces() {
-    auto* dialog=new QDialog(this); dialog->setAttribute(Qt::WA_DeleteOnClose); dialog->setObjectName("networkInterfacesDialog"); dialog->setWindowTitle("网络接口（只读）"); dialog->resize(660,410); auto* layout=new QVBoxLayout(dialog); auto* info=new QLabel("正在读取本机接口…"); info->setWordWrap(true); info->setTextFormat(Qt::PlainText); layout->addWidget(info); auto* table=new QTableWidget(0,3); table->setHorizontalHeaderLabels({"接口","状态","本机地址"}); table->setEditTriggers(QAbstractItemView::NoEditTriggers); table->setShowGrid(false); table->verticalHeader()->hide(); table->horizontalHeader()->setSectionResizeMode(2,QHeaderView::Stretch); layout->addWidget(table,1); auto* buttons=new QDialogButtonBox(QDialogButtonBox::Close); buttons->button(QDialogButtonBox::Close)->setText("关闭"); layout->addWidget(buttons); connect(buttons,&QDialogButtonBox::rejected,dialog,&QDialog::reject); dialog->show(); const QPointer<QDialog> guard(dialog);
+    auto* dialog=new TaskDialog(this); dialog->setAttribute(Qt::WA_DeleteOnClose); dialog->setObjectName("networkInterfacesDialog"); dialog->setWindowTitle("网络接口（只读）"); dialog->resize(660,410); auto* layout=new QVBoxLayout(dialog); auto* info=new QLabel("正在读取本机接口…"); info->setWordWrap(true); info->setTextFormat(Qt::PlainText); layout->addWidget(info); auto* table=new QTableWidget(0,3); table->setHorizontalHeaderLabels({"接口","状态","本机地址"}); table->setEditTriggers(QAbstractItemView::NoEditTriggers); table->setShowGrid(false); table->verticalHeader()->hide(); table->horizontalHeader()->setSectionResizeMode(2,QHeaderView::Stretch); layout->addWidget(table,1); auto* buttons=new QDialogButtonBox(QDialogButtonBox::Close); buttons->button(QDialogButtonBox::Close)->setText("关闭"); layout->addWidget(buttons); connect(buttons,&QDialogButtonBox::rejected,dialog,&QDialog::reject); presentTaskDialog(dialog); const QPointer<QDialog> guard(dialog);
     controller_->inspectNetworkInterfaces([guard,info,table](Result result) { if (!guard) return; if (!result.ok) { info->setText(result.error); return; } info->setText("系统IPv4路由出口（目标 "+result.data.value("route_target").toString()+"）："+result.data.value("route_interface").toString("未知")+"。仅查询路由，不发送请求；TUN开启时这里可能为虚拟网卡，不等同物理出口。"); const auto rows=result.data.value("interfaces").toArray(); table->setRowCount(rows.size()); for (int i=0;i<rows.size();++i) { const auto item=rows[i].toObject(); QStringList addresses; for (const auto& address:item.value("addresses").toArray()) addresses.append(address.toString()); const QStringList cells{item.value("label").toString(),item.value("up").toBool()?QString("已启用"):QString("未启用"),addresses.join("\n")}; for (int col=0;col<cells.size();++col) { auto* cell=new QTableWidgetItem(cells[col]); cell->setToolTip(cells[col]); table->setItem(i,col,cell); } } table->resizeRowsToContents(); });
 }
 }

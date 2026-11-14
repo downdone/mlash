@@ -1,9 +1,9 @@
 #pragma once
 #include "app/AppController.h"
-#include <QDialog>
+#include "TaskDialog.h"
 class QListWidget; class QTabWidget; class QLabel; class QPushButton;
 namespace mlash {
-class ProxyEditorDialog final : public QDialog {
+class ProxyEditorDialog final : public TaskDialog {
     Q_OBJECT
 public:
     ProxyEditorDialog(AppController* controller,const QString& id,QWidget* parent=nullptr);

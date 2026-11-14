@@ -1,9 +1,9 @@
 #pragma once
 #include "app/AppController.h"
-#include <QDialog>
+#include "TaskDialog.h"
 class QPlainTextEdit; class QPushButton; class QLabel;
 namespace mlash {
-class ProxyBypassDialog final:public QDialog {
+class ProxyBypassDialog final:public TaskDialog {
     Q_OBJECT
 public:
     ProxyBypassDialog(AppController* controller,QWidget* parent=nullptr);

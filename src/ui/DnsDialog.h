@@ -1,11 +1,11 @@
 #pragma once
 #include "app/AppController.h"
-#include <QDialog>
+#include "TaskDialog.h"
 
 class QCheckBox; class QPlainTextEdit; class QLineEdit; class QComboBox; class QPushButton; class QLabel;
 namespace mlash {
 class YamlFormEditor;
-class DnsDialog final : public QDialog {
+class DnsDialog final : public TaskDialog {
     Q_OBJECT
 public:
     DnsDialog(AppController* controller, const QString& profileId, QWidget* parent = nullptr);

@@ -1,9 +1,9 @@
 #pragma once
 #include "app/AppController.h"
-#include <QDialog>
+#include "TaskDialog.h"
 class QLabel; class QTableWidget; class QPlainTextEdit; class QPushButton;
 namespace mlash {
-class ProfileChangesDialog final : public QDialog {
+class ProfileChangesDialog final : public TaskDialog {
     Q_OBJECT
 public:
     ProfileChangesDialog(AppController* controller,const QString& id,QWidget* parent=nullptr);

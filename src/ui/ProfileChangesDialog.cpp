@@ -9,7 +9,7 @@
 #include <QDialogButtonBox>
 #include <QPushButton>
 namespace mlash {
-ProfileChangesDialog::ProfileChangesDialog(AppController* controller,const QString& id,QWidget* parent):QDialog(parent),controller_(controller),id_(id) {
+ProfileChangesDialog::ProfileChangesDialog(AppController* controller,const QString& id,QWidget* parent):TaskDialog(parent),controller_(controller),id_(id) {
     setAttribute(Qt::WA_DeleteOnClose); setObjectName("profileChangesDialog"); setWindowTitle("候选版本变化"); resize(720,510); auto* layout=new QVBoxLayout(this);
     hint_=new QLabel("正在比较已使用与候选快照…"); hint_->setObjectName("versionChangesHint"); hint_->setWordWrap(true); hint_->setTextFormat(Qt::PlainText); layout->addWidget(hint_);
     table_=new QTableWidget(0,6); table_->setObjectName("versionChangesTable"); table_->setHorizontalHeaderLabels({"类别","已使用","候选","新增","移除","修改"}); table_->setEditTriggers(QAbstractItemView::NoEditTriggers); table_->setSelectionBehavior(QAbstractItemView::SelectRows); table_->setSelectionMode(QAbstractItemView::SingleSelection); table_->verticalHeader()->hide(); table_->setShowGrid(false); table_->verticalHeader()->setDefaultSectionSize(UiTheme::TableRow); table_->setMinimumHeight(UiTheme::TableRow*6+8); table_->horizontalHeader()->setSectionResizeMode(QHeaderView::Stretch); layout->addWidget(table_,1);

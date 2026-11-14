@@ -1,5 +1,5 @@
 #pragma once
-#include <QDialog>
+#include "TaskDialog.h"
 #include "app/Types.h"
 
 class QTabWidget; class QLineEdit; class QLabel; class QPushButton;
@@ -7,7 +7,7 @@ namespace mlash {
 class DownloadPolicyEditor;
 class NodeLinksEditor;
 class AppController;
-class ImportDialog final : public QDialog {
+class ImportDialog final : public TaskDialog {
     Q_OBJECT
 public:
     explicit ImportDialog(QWidget* parent = nullptr);
@@ -25,6 +25,9 @@ public:
     void accept() override;
 private:
     void validateInput();
+    QStringList initialInputs_;
+    QStringList inputs() const;
+    void rememberInputs() { initialInputs_=inputs(); }
     void inputChanged() { failure_.clear(); validateInput(); }
     QTabWidget* tabs_;
     QLineEdit *url_, *file_, *name_;

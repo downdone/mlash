@@ -1,10 +1,10 @@
 #pragma once
 #include "app/AppController.h"
-#include <QDialog>
+#include "TaskDialog.h"
 
 class QListWidget; class QLineEdit; class QCheckBox; class QLabel; class QPushButton; class QPlainTextEdit;
 namespace mlash {
-class BackupDialog final : public QDialog {
+class BackupDialog final : public TaskDialog {
     Q_OBJECT
 public:
     BackupDialog(AppController* controller, bool restore, QWidget* parent = nullptr);

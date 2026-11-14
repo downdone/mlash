@@ -269,8 +269,8 @@ private slots:
         auto* dialog=new ProtocolSettingsDialog(&controller,&window); dialog->show(); QCoreApplication::processEvents();
         auto* help=dialog->findChild<QToolButton*>("contextHelp"); QVERIFY(help); const int before=operations.size();
         help->setFocus(Qt::TabFocusReason); QTest::keyClick(help,Qt::Key_Space);
-        auto* explanation=dialog->findChild<QMessageBox*>("contextHelpDialog"); QTRY_VERIFY(explanation&&explanation->isVisible()); QVERIFY(explanation->text().contains("确认后才下载"));
-        explanation->done(QMessageBox::Close); dialog->hide(); delete dialog; QCOMPARE(operations.size(),before); QCOMPARE(platform->writes,0);
+        auto* explanation=dialog->findChild<QLabel*>("contextExplanation"); QTRY_VERIFY(explanation&&explanation->isVisible()); QVERIFY(explanation->text().contains("确认后才下载")); QVERIFY(!dialog->findChild<QMessageBox*>("contextHelpDialog"));
+        help->click(); QVERIFY(!explanation->isVisible()); dialog->hide(); delete dialog; QCOMPARE(operations.size(),before); QCOMPARE(platform->writes,0);
     }
     void taskEntryPointsAndSettingsStayCoherent() {
         QTemporaryDir dir; auto platform=std::make_shared<ReviewPlatform>(); AppController controller(dir.path(),true,nullptr,platform);

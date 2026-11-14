@@ -18,10 +18,10 @@ public:
     ActionRow(const QString& title, UiIcons::Glyph glyph, const QString& value={}, const QString& subtitle={}, QWidget* parent=nullptr)
         : QPushButton(parent) {
         setProperty("prototypeRow",true); setCursor(Qt::PointingHandCursor); setAccessibleName(title); setAutoDefault(false);
-        auto* layout=new QHBoxLayout(this); layout->setContentsMargins(16,10,12,10); layout->setSpacing(14);
+        auto* layout=new QHBoxLayout(this); layout->setContentsMargins(12,4,10,4); layout->setSpacing(12);
         icon_=new QLabel; icon_->setFixedSize(22,22); icon_->setPixmap(UiIcons::icon(glyph,UiTheme::Brand).pixmap(22,22));
         icon_->setAttribute(Qt::WA_TransparentForMouseEvents); layout->addWidget(icon_);
-        auto* text=new QVBoxLayout; text->setSpacing(2); title_=new ElidedLabel(title); title_->setObjectName("directoryTitle");
+        auto* text=new QVBoxLayout; text->setSpacing(1); title_=new ElidedLabel(title); title_->setObjectName("directoryTitle");
         title_->setAttribute(Qt::WA_TransparentForMouseEvents); text->addWidget(title_);
         subtitle_=new ElidedLabel(subtitle); subtitle_->setProperty("secondary",true); subtitle_->setProperty("caption",true);
         subtitle_->setAttribute(Qt::WA_TransparentForMouseEvents); subtitle_->setVisible(!subtitle.isEmpty()); text->addWidget(subtitle_); layout->addLayout(text,1);
@@ -37,7 +37,7 @@ public:
     void setValue(const QString& value) { value_->setText(value); setAccessibleDescription(value); }
     void setSubtitle(const QString& text) { subtitle_->setText(text); subtitle_->setVisible(!text.isEmpty()); updateGeometry(); }
     void setTrailingControl(QWidget* control) { value_->hide(); chevron_->hide(); static_cast<QHBoxLayout*>(layout())->addWidget(control,0,Qt::AlignVCenter); }
-    QSize sizeHint() const override { return {260,qMax(48,layout()->minimumSize().height())}; }
+    QSize sizeHint() const override { return {260,qMax(UiTheme::RowHeight,layout()->minimumSize().height())}; }
     QSize minimumSizeHint() const override { return {100,sizeHint().height()}; }
 protected:
     void paintEvent(QPaintEvent*) override {
@@ -48,12 +48,12 @@ protected:
             if (!property("lastRow").toBool()) shape.addRect(QRectF(0,height()-10,width(),10));
             painter.fillPath(shape,QColor(isDown()?UiTheme::Pressed:UiTheme::Hover));
         }
-        if (!property("lastRow").toBool()) { painter.setPen(QColor(UiTheme::Separator)); painter.drawLine(52,height()-1,width(),height()-1); }
+        if (!property("lastRow").toBool()) { painter.setPen(QColor(UiTheme::Separator)); painter.drawLine(46,height()-1,width(),height()-1); }
         if (hasFocus()&&property("keyboardFocus").toBool()) { painter.setPen(QPen(QColor(UiTheme::Focus),1)); painter.setBrush(Qt::NoBrush); painter.drawRoundedRect(rect().adjusted(1,1,-2,-2),5,5); }
     }
     bool event(QEvent* event) override {
         const auto result=QPushButton::event(event);
-        if ((event->type()==QEvent::LayoutRequest||event->type()==QEvent::FontChange||event->type()==QEvent::StyleChange)&&layout()) setMinimumHeight(qMax(48,layout()->minimumSize().height()));
+        if ((event->type()==QEvent::LayoutRequest||event->type()==QEvent::FontChange||event->type()==QEvent::StyleChange)&&layout()) setMinimumHeight(qMax(UiTheme::RowHeight,layout()->minimumSize().height()));
         return result;
     }
 private:
@@ -62,7 +62,7 @@ private:
 };
 
 inline QVBoxLayout* group(QVBoxLayout* page,const QString& title={}) {
-    if (!title.isEmpty()) { page->addSpacing(8); auto* label=new QLabel(title); label->setObjectName("prototypeSection"); label->setProperty("secondary",true); page->addWidget(label); }
+    if (!title.isEmpty()) { page->addSpacing(4); auto* label=new QLabel(title); label->setObjectName("prototypeSection"); label->setProperty("secondary",true); page->addWidget(label); }
     auto* frame=new QFrame; frame->setObjectName("prototypeGroup"); auto* rows=new QVBoxLayout(frame);
     rows->setContentsMargins(0,0,0,0); rows->setSpacing(0); page->addWidget(frame); return rows;
 }

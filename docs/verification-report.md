@@ -2,6 +2,54 @@
 
 本文只记录实际结果，区分本轮执行、历史匿名汇总与尚未验证的资格。原始配置、私人环境、真实订阅及原始诊断不进入公开文档。
 
+## R19：1.19.0 发布准备（2026-11-14）
+
+用户授权发布到 GitHub Releases。汇总 U12/U13，更新 CMake、入口版本、变更记录和 1.19.0 发布说明；依赖、固定内核及发行工作流保持不变。Inspector 关闭后边距的旧测试同步使用当前 ContentTop，保留几何恢复断言。版本/发布标签检查、文档导航/隐私/UI token、四项文档工具和十七项发布工具检查通过。
+
+已有本机实现与原生证据见下文；本轮 Windows 完整回归、发布及附件复核结果待实际执行后记录。预发布仍为 release_qualified=false，不能以自动构建替代系统/长期验收。
+
+## U13 紧凑密度（2026-11-14）
+
+先记录 [U13 方案](design/u13-compact-density.md) 和 [ADR 0053](adr/0053-compact-density.md)，再实施。UiTheme 集中收紧顶栏/正文/共享行/字号，双行高度与绘制改为实际正文加副文指标，配置列表容器随行高收缩；设置目录和工作区页签同步减少留白。短列表的多余空间留在末尾，长名称给当前标记预留区域。没有更改 Controller 命令、持久化格式、平台能力或恢复保护。
+
+使用同一 30 个虚构节点、1040×720、100% 字号设置的 Cocoa 夹具比较：
+
+| 观测 | U12 | U13 最终原生整组 |
+|---|---:|---:|
+| 节点行高（DIP） | 52 | 38 |
+| 控制卡高（DIP） | 146 | 108 |
+| 组头顶部 y（DIP） | 270 | 206 |
+| 节点视口高（DIP） | 381 | 455 |
+| 完整可见成员 | 6 | 10 |
+
+初次 U13 单用例观测控制卡 112、组头 y=210；最终原生整组记录为上表值。仅为这些隔离渲染场景的实际几何，未把图像估算的 Shadowrocket 尺寸或不同平台字号换算冒充实测。六节点短列表另有检查，组头保持顶部预算，剩余空白不再均摊进工具排。
+
+构建入口 `scripts/build.ps1 -Preset portable` 完整 arm64 Release 编译/链接成功，固定 Qt 6.10.2，版本仍为 1.18.0。经标准测试入口执行 flat_workspace_tests、status_bar_tests、connection_view_tests、ui_refinement_tests 四组全部通过（33.68 秒）；追加实际鼠标命中回归后，专项再次通过（4.03 秒）。检查选择、测速、详情互不误触，覆盖 100/120% 文字，三尺寸首页/Inspector，失败留稿/取消和隐藏任务等既有保护。
+
+Cocoa 原生工作区专项七项全部通过（含初始化/清理为 9 passed，5.604 秒）；外观程序 allPagesAndDialogsAcrossAppearances、groupedSettingsAndPopulatedPagesRemainUsable、toolWindowsKeepActionsAndDraftsAccessible 三项全部通过（含初始化/清理为 5 passed，20.395 秒）。取得 26 张专项、240 张页面/工具组合截图；已图像复核首页、短列表、配置、设置及前后密度对比。原始截图与日志位于 `build/u13-before/`、`build/u13-after/`、`build/u13-pages/` 和 `build/u13-*.log/txt`，不纳入源码分发。默认测试未改宿主系统代理，模拟就绪/代理状态不作实际核心验证。
+
+文档链接/导航检查 114 份 Markdown、隐私检查 121 份文档、UI token 检查均零问题，git diff --check 通过。未验 Windows 原生与完整回归、真实系统/公网任务、人工读屏、150% 系统 DPI、长期性能及正式发行资格；本轮未提交、推送或打包发布。
+
+## U12 页面内工作区与首页收敛（2026-11-14）
+
+按 [事前设计与事后复核](design/u12-flat-workspaces.md)、[ADR 0052](adr/0052-flat-task-workspaces.md) 实施。首页采用三行控制、右侧图标工具排、默认收起搜索、来源/真实浏览组单份标题和按内容结束的节点列表。配置副标题角色不再误读 UUID，非空列表移除覆盖内容的空态导入动作；稳定正文宿主修正窄窗 Inspector 顶栏/状态栏错位。
+
+高级表单与嵌套编辑转入正文工作区；内核直达完整管理，备份四任务同级，配置内容按对象切换，来源与维护合并。重复入口复用、同级/返回留稿、隐藏 pending/草稿参与关闭保护、父子任务关闭、普通帮助与网站结果就地展开均已实施。组参数绑定配置/组身份，切走隐藏、返回恢复；外部预填未编辑可取消。日志在阅读历史时直接显示“回到最新”，常态保持安静。
+
+构建：使用固定 Qt 6.10.2，本机 arm64 Release 经 `scripts/build.ps1 -Preset portable` 编译及链接成功，未更改发行版本或平台适配。构建日志与测试原始结果保留在 `build/u12-*.log`、`build/u12-*.txt` 及 CTest XML，不进入源码分发。
+
+自动回归：通过标准测试脚本执行 flat_workspace_tests、status_bar_tests、tool_window_tests、proxy_bypass_tests、protocol_tests、connection_view_tests、home_metrics_tests、ui_refinement_tests、release_tools 九组，全部通过（42.00 秒）。专项使用隔离临时存储及明确禁止 OS 写入的平台夹具，覆盖失败留稿/取消、隐藏草稿、提交期间拒绝关闭/换对象、嵌套生命周期、对象/组身份、搜索定位与恢复、配置实际显示角色，以及 Inspector 三尺寸外壳几何。不能把模拟 Ready/Owned 状态作为实际核心与系统代理验证。
+
+Cocoa 原生自动检查：工作区专项六项与外观程序的 allPagesAndDialogsAcrossAppearances、groupedSettingsAndPopulatedPagesRemainUsable、toolWindowsKeepActionsAndDraftsAccessible 实际通过。截图目录 `build/u12-review/` 与 `build/u12-pages/` 包含首页/配置/备份/内核任务、三尺寸 Inspector，以及八个旧入口适配、浅深色和 100/120% 文字组合；已复核首页、页面合览及任务布局。图像与自动按键不替代人工前台/读屏验收。
+
+文档导航检查 112 份 Markdown、隐私检查 119 份文档、UI token 检查及四项文档工具回归全部通过，git diff --check 无问题。
+
+失败与修复：首次协议组因 macOS 默认临时路径过长无法创建本地 IPC，使用短隔离临时目录后完整协议组通过；新布局测试误取隐藏工作区的返回按钮，改为检验当前可见宿主。状态详情原测试仍要求模态消息框，更新为验证正文只读全文后通过。切组回归曾访问重建后已销毁的菜单项，改为触发一次即停止；产品的 selectGroup 同时按值持有组名，避免菜单销毁使后续组名引用失效。以上修复未绕过业务边界。
+
+扩展检查的限制：page_lifecycle_tests 与 settings_value_tests 在此平台等待 exitReady 失败，home_control_tests 在非 Windows 存储夹具准备阶段失败；剪贴板 NodeLinks 个案亦在默认平台存储初始化中止，未进入 UI。保留这些失败记录，不将本轮称为完整全绿；对应页面/关闭草稿/空态和失败保护通过新隔离夹具专项验证。没有放宽非 Windows Unsupported 或代理恢复保护。
+
+未验：Windows 原生与该分支完整 Windows 回归、真实核心/公网任务、实际系统代理/TUN/登录恢复、人工读屏、150% 系统 DPI、长期性能及正式发行资格。尚未提交、推送或发布本轮变更；此前 1.18.0 公开附件不包含 U12。
+
 ## R18 GitHub 发布与远端核验（2026-11-14）
 
 - 当前 UI 与 1.18.0 经 [PR #4](https://github.com/downdone/mlash/pull/4) 合入 main，合入提交 `0fa2eb79e5f47acb1e59b24fef10d3d6c92ca7cd`。发布标签 `v1.18.0` 绑定 `d6cfc9c48a85c3fac20346178e614ead97f38812`，是 main 的祖先，代码树与合入结果一致；不移动已发布标签。

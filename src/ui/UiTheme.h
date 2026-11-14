@@ -3,6 +3,7 @@
 #include <QString>
 #include <QObject>
 #include <QFont>
+#include <QFontMetrics>
 
 namespace mlash::UiTheme {
 // Semantic roles are updated together by applyAppearance, never by a page.
@@ -13,16 +14,20 @@ inline const char *Primary="#0068D9", *OnPrimary="#FFFFFF", *Hover="#F2F5FA", *F
 inline const char *Control="#F0F1F3", *Pressed="#E2E5EA", *PrimaryPressed="#0057B8";
 inline const char *Success="#08745B", *Warning="#965A00", *Error="#BF303C", *Track="#B8BEC7";
 inline constexpr const char* ArtworkSurface="#F2F2F7";
-inline constexpr int ControlHeight = 30, TableRow = 32, PanelGap = 12, PopupRadius = 8;
-inline constexpr int ContentInset = 20, PanelInset = 16, SidebarWidth = 208;
-// U10 compact layout; font metrics may expand rows at larger text scales.
-inline constexpr int TopbarHeight = 56, SidebarItemHeight = 40, RowHeight = 52, NodeRowHeight = 52;
-inline constexpr int SettingRowHeight = 48, ProfileRowHeight = 60, DrawerWidth = 350;
+inline constexpr int ControlHeight = 30, TableRow = 30, PanelGap = 8, PopupRadius = 8;
+inline constexpr int ContentInset = 12, ContentTop = 12, PanelInset = 12, SidebarWidth = 188;
+// U13 density baseline; actual font metrics expand rows at larger text scales.
+inline constexpr int TopbarHeight = 44, SidebarItemHeight = 32, RowHeight = 38, NodeRowHeight = 38;
+inline constexpr int SettingRowHeight = 38, ProfileRowHeight = 40, DrawerWidth = 350;
 #ifdef Q_OS_MACOS
-inline constexpr int BodyPoints=12, DialogPoints=20, SectionPoints=13, ValuePoints=22, TitlePoints=15;
+inline constexpr int BodyPoints=11, DialogPoints=18, SectionPoints=12, ValuePoints=20, TitlePoints=14;
 #else
 inline constexpr int BodyPoints=11, DialogPoints=18, SectionPoints=11, ValuePoints=20, TitlePoints=13;
 #endif
+inline QFont rowCaptionFont(QFont font) { font.setPointSizeF(font.pointSizeF()*0.82); return font; }
+inline int twoLineRowHeight(const QFont& font,int minimum=NodeRowHeight) {
+    return qMax(minimum,QFontMetrics(font).height()+QFontMetrics(rowCaptionFont(font)).height()+6);
+}
 class AppearanceNotifier final : public QObject {
     Q_OBJECT
 public:

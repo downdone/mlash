@@ -119,7 +119,7 @@ private slots:
         QCOMPARE(inspector->property("inspectorMode").toString(),QString("page")); QVERIFY(!window.findChild<QStackedWidget*>("mainPages")->isVisible()); save("inspector-page");
         window.resize(1440,900); QTest::qWait(40); QCOMPARE(inspector->property("inspectorMode").toString(),QString("side"));
         QVERIFY(window.findChild<QStackedWidget*>("mainPages")->isVisible()); QVERIFY(window.findChild<QStackedWidget*>("mainPages")->contentsMargins().right()>300); save("inspector-side");
-        window.findChild<QToolButton*>("drawerClose")->click(); QVERIFY(!inspector->isVisible()); QCOMPARE(window.findChild<QStackedWidget*>("mainPages")->contentsMargins(),QMargins(UiTheme::ContentInset,18,UiTheme::ContentInset,18));
+        window.findChild<QToolButton*>("drawerClose")->click(); QVERIFY(!inspector->isVisible()); QCOMPARE(window.findChild<QStackedWidget*>("mainPages")->contentsMargins(),QMargins(UiTheme::ContentInset,UiTheme::ContentTop,UiTheme::ContentInset,UiTheme::ContentTop));
         for (const auto scheme:QStringList{"light","dark"}) {
             UiTheme::setPreferences(scheme,120); window.resize(840,560); window.navigate(Route{ViewIds::Settings}); QTest::qWait(40); save("settings-"+scheme+"-120");
             auto* directory=window.findChild<QScrollArea*>("settingsDirectoryScroll"); QCOMPARE(directory->horizontalScrollBar()->maximum(),0); QVERIFY(directory->widget()->width()<=directory->viewport()->width());
@@ -213,8 +213,10 @@ private slots:
             controller.operationFinished(true,"操作完成"); QVERIFY(stable());
         }
         const auto before=window.centralWidget()->geometry(); QTRY_VERIFY_WITH_TIMEOUT(message->text().isEmpty(),4500); QVERIFY(!details->isVisible()); QCOMPARE(window.centralWidget()->geometry(),before); QVERIFY(status->isVisible());
-        controller.operationFinished(false,longMessage); bool readable=false;
-        QTimer::singleShot(0,&window,[&] { if (auto* dialog=window.findChild<QMessageBox*>("statusDetailsDialog")) { readable=dialog->textFormat()==Qt::PlainText&&dialog->text()==longMessage; dialog->accept(); } }); details->click(); QVERIFY(readable); QCOMPARE(window.centralWidget()->geometry(),before);
+        controller.operationFinished(false,longMessage); details->click();
+        QPointer<QDialog> detail=window.findChild<QDialog*>("statusDetailsDialog"); QVERIFY(detail&&detail->isVisible()); QVERIFY(!detail->isWindow());
+        auto* full=detail->findChild<QPlainTextEdit*>(); QVERIFY(full&&full->isReadOnly()); QCOMPARE(full->toPlainText(),longMessage); QCOMPARE(window.centralWidget()->geometry(),before);
+        detail->reject(); QTRY_VERIFY(detail.isNull());
         const auto output=qEnvironmentVariable("MLASH_UI_SCREENSHOTS"); if (!output.isEmpty()) { QVERIFY(QDir().mkpath(output)); for (int page:{0,2,6}) { window.setPage(page); QCoreApplication::processEvents(); QVERIFY(window.grab().save(output+QString("/status-page-%1.png").arg(page))); } }
     }
     void historyReadingAndDraftFeedback() {

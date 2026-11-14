@@ -1,9 +1,9 @@
 #pragma once
 #include "app/AppController.h"
-#include <QDialog>
+#include "TaskDialog.h"
 class QComboBox; class QLabel; class QPushButton; class QToolButton;
 namespace mlash {
-class ConnectionDetailsDialog final : public QDialog {
+class ConnectionDetailsDialog final : public TaskDialog {
     Q_OBJECT
 public:
     ConnectionDetailsDialog(AppController* controller,QJsonObject row,QString profile,QString version,QWidget* parent=nullptr);

@@ -1,3 +1,4 @@
+#include "DialogDraftGuard.h"
 #include "BackupDialog.h"
 #include "profile/BackupArchive.h"
 #include "ElidedLabel.h"
@@ -27,7 +28,7 @@ public:
     int heightForWidth(int) const override { return -1; }
 };
 }
-BackupDialog::BackupDialog(AppController* controller, bool restore, QWidget* parent) : QDialog(parent), controller_(controller), restore_(restore) {
+BackupDialog::BackupDialog(AppController* controller, bool restore, QWidget* parent) : TaskDialog(parent), controller_(controller), restore_(restore) {
     setAttribute(Qt::WA_DeleteOnClose); setObjectName("backupDialog"); setWindowTitle(restore ? "恢复本地备份" : "创建本地备份"); resize(520, 390);
     auto* outer=new QVBoxLayout(this); auto* scroll=new BackupViewport; scroll->setObjectName("backupScroll"); scroll->setWidgetResizable(true); scroll->setFrameShape(QFrame::NoFrame); scroll->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff); auto* body=new QWidget; auto* layout=new QVBoxLayout(body); layout->setContentsMargins(0,0,0,0); scroll->setWidget(body); outer->addWidget(scroll,1); auto* description = new QLabel(restore ? "恢复为新订阅，保留现有数据。" : "使用密码加密保存所选内容。"); description->setWordWrap(true); layout->addWidget(description);
     auto* form = new QFormLayout; auto* source = new QWidget; auto* sourceRow = new QHBoxLayout(source); sourceRow->setContentsMargins(0,0,0,0); path_ = new QLineEdit; path_->setObjectName("backupPath"); sourceRow->addWidget(path_,1); auto* browse = new QPushButton("浏览…"); sourceRow->addWidget(browse); form->addRow("备份文件", source);
@@ -79,6 +80,7 @@ BackupDialog::BackupDialog(AppController* controller, bool restore, QWidget* par
         else { hint_->setText(message); updateActions(); }
     });
     updateActions();
+    DialogDraftGuard::protect(this,[this] { return !path_->text().isEmpty()||!password_->text().isEmpty()||!confirm_->text().isEmpty(); },[this] { return submitted_||previewing_||stopping_; });
 }
 void BackupDialog::setBackupPath(const QString& path) { path_->setText(path); }
 void BackupDialog::updateActions() {

@@ -41,7 +41,7 @@ QJsonArray ConnectionDetailsDialog::ruleSuggestions(const QJsonObject& row) {
     return values;
 }
 ConnectionDetailsDialog::ConnectionDetailsDialog(AppController* controller,QJsonObject row,QString profile,QString version,QWidget* parent)
-    :QDialog(parent),controller_(controller),row_(std::move(row)),profile_(std::move(profile)),version_(std::move(version)) {
+    :TaskDialog(parent),controller_(controller),row_(std::move(row)),profile_(std::move(profile)),version_(std::move(version)) {
     generation_=controller_->state().generation;
     setObjectName("connectionDetails"); setAttribute(Qt::WA_DeleteOnClose); setWindowTitle("连接详情 · 打开时快照"); resize(620,510);
     auto* layout=new QVBoxLayout(this); auto* note=new QLabel("打开时的连接快照"); note->setWordWrap(true); layout->addWidget(note);

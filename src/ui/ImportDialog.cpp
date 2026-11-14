@@ -36,7 +36,7 @@ private:
     }
 };
 }
-ImportDialog::ImportDialog(QWidget* parent) : QDialog(parent) {
+ImportDialog::ImportDialog(QWidget* parent) : TaskDialog(parent) {
     setWindowTitle("添加订阅 · Mlash"); setObjectName("importDialog"); resize(520, 460); setMinimumSize(420,340);
     auto* outer = new QVBoxLayout(this); outer->setContentsMargins(16,16,16,14); outer->setSpacing(10);
     auto* title = new QLabel("添加订阅"); title->setObjectName("dialogTitle"); outer->addWidget(title);
@@ -66,7 +66,8 @@ ImportDialog::ImportDialog(QWidget* parent) : QDialog(parent) {
     connect(tabs_, &QTabWidget::currentChanged, this, &ImportDialog::inputChanged);
     connect(links_,&NodeLinksEditor::changed,this,&ImportDialog::inputChanged);
     connect(url_, &QLineEdit::textChanged, this, &ImportDialog::inputChanged); connect(file_, &QLineEdit::textChanged, this, &ImportDialog::inputChanged);
-    DialogDraftGuard::protect(this,[this] { return isNodeLinks()&&!pending_&&!links_->text().trimmed().isEmpty(); });
+    rememberInputs();
+    DialogDraftGuard::protect(this,[this] { return !pending_&&inputs()!=initialInputs_; },[this] { return pending_||links_->checking(); });
     validateInput();
 }
 bool ImportDialog::isUrl() const { return tabs_->currentIndex() == 0; }
@@ -95,9 +96,9 @@ void ImportDialog::accept() {
     if (!import_->isEnabled()||pending_) return;
     pending_=true; failure_.clear();
     auto* close=findChild<QDialogButtonBox*>()->button(QDialogButtonBox::Cancel);
-    close->setText("关闭"); close->setToolTip("关闭窗口后，已提交的导入仍继续；结果显示在状态栏。");
+    close->setText("关闭"); close->setToolTip("返回页面后，已提交的导入仍继续；结果显示在状态栏。");
     tabs_->setEnabled(false); name_->setEnabled(false); download_->setEnabled(false);
-    import_->setEnabled(false); hint_->setText("正在导入并校验；关闭此窗口后可在状态栏查看结果。");
+    import_->setEnabled(false); hint_->setText("正在导入并校验；返回后可在状态栏查看结果。");
     if (isNodeLinks()) controller_->importNodeLinks(profileName(),source());
     else if (isUrl()) controller_->importUrl(profileName(),QUrl(source()),downloadPolicy());
     else controller_->importFile(profileName(),source());
@@ -106,9 +107,10 @@ QString ImportDialog::source() const { return isNodeLinks()?links_->text():(isUr
 QString ImportDialog::profileName() const { return name_->text().trimmed(); }
 DownloadPolicy ImportDialog::downloadPolicy() const { return download_->policy(); }
 void ImportDialog::setSourceTab(bool url) { tabs_->setCurrentIndex(url ? 0 : 1); }
-void ImportDialog::setPrefill(const QString& source,bool url) { setSourceTab(url); (url?url_:file_)->setText(source); }
-void ImportDialog::setNodeLinks(const QString& text) { tabs_->setCurrentIndex(2); links_->setText(text); }
-void ImportDialog::setProtocolSource(const QString& url,const QString& name) { setWindowTitle("确认链接订阅 · Mlash"); setSourceTab(true); url_->setText(url); name_->setText(name); auto* origin=new QLabel("网站请求添加来自 "+QUrl(url).host()+" 的订阅；只有点击“导入并校验”才会下载，不会自动启动或切换订阅。"); origin->setTextFormat(Qt::PlainText); origin->setWordWrap(true); qobject_cast<QVBoxLayout*>(tabs_->parentWidget()->layout())->insertWidget(0,origin); }
+void ImportDialog::setPrefill(const QString& source,bool url) { setSourceTab(url); (url?url_:file_)->setText(source); rememberInputs(); }
+void ImportDialog::setNodeLinks(const QString& text) { tabs_->setCurrentIndex(2); links_->setText(text); rememberInputs(); }
+void ImportDialog::setProtocolSource(const QString& url,const QString& name) { setWindowTitle("确认链接订阅 · Mlash"); setSourceTab(true); url_->setText(url); name_->setText(name); rememberInputs(); auto* origin=new QLabel("网站请求添加来自 "+QUrl(url).host()+" 的订阅；只有点击“导入并校验”才会下载，不会自动启动或切换订阅。"); origin->setTextFormat(Qt::PlainText); origin->setWordWrap(true); qobject_cast<QVBoxLayout*>(tabs_->parentWidget()->layout())->insertWidget(0,origin); }
+QStringList ImportDialog::inputs() const { return {url_->text(),file_->text(),links_->text(),name_->text(),download_->userAgentEditor()->text()}; }
 void ImportDialog::validateInput() {
     bool valid = !source().isEmpty(); QString hint;
     if (isNodeLinks()) { valid=links_->ready(); hint=valid?"检查已完成；导入后创建本地订阅快照，仍需明确使用。":"请先检查链接并确认节点预览。"; }

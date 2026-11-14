@@ -1,6 +1,8 @@
+#include "TaskDialog.h"
 #include "ProviderPolicyDialog.h"
 #include "ProfileChangesDialog.h"
 #include "MainWindow.h"
+#include "TaskWorkspace.h"
 #include "MainWindowParts.h"
 #include "StatusSentence.h"
 #include "FeedbackSync.h"
@@ -105,7 +107,7 @@ MainWindow::MainWindow(AppController* controller, QWidget* parent) : QMainWindow
     auto* central = new QWidget(this); auto* layout = new QHBoxLayout(central);
     central->setObjectName("mainSurface"); central->setAttribute(Qt::WA_StyledBackground, true);
     layout->setContentsMargins(0,0,0,0); layout->setSpacing(0);
-    auto* sidebar = new QWidget; sidebar->setObjectName("sidebar"); sidebar->setFixedWidth(UiTheme::SidebarWidth); sidebar->setAttribute(Qt::WA_StyledBackground); auto* sideLayout = new QVBoxLayout(sidebar); sideLayout->setContentsMargins(12,16,12,12); sideLayout->setSpacing(8);
+    auto* sidebar = new QWidget; sidebar->setObjectName("sidebar"); sidebar->setFixedWidth(UiTheme::SidebarWidth); sidebar->setAttribute(Qt::WA_StyledBackground); auto* sideLayout = new QVBoxLayout(sidebar); sideLayout->setContentsMargins(8,8,8,8); sideLayout->setSpacing(6);
     navigation_ = new QListWidget; navigation_->setObjectName("navigation"); navigation_->addItems({"首页", "配置", "数据", "设置"}); navigation_->setIconSize(QSize(18, 18));
     const QList<int> pageOrder{ViewIds::Home,ViewIds::Profiles,ViewIds::Data,ViewIds::Settings};
     for (int i=0;i<pageOrder.size();++i) { navigation_->item(i)->setData(Qt::UserRole,pageOrder[i]); navigation_->item(i)->setIcon(navigationIcon(navKindOfView(pageOrder[i]))); }
@@ -124,6 +126,7 @@ MainWindow::MainWindow(AppController* controller, QWidget* parent) : QMainWindow
     auto* version = new QLabel(QString("v" MLASH_VERSION)); version->setObjectName("secondaryText"); sideLayout->addWidget(version);
     // K1/K6：页面栈只有五个视图，顺序与 ViewIds 一致；数据页内部再分四个页签。
     pages_ = new QStackedWidget; pages_->setObjectName("mainPages");
+    auto pagePolicy=pages_->sizePolicy(); pagePolicy.setRetainSizeWhenHidden(true); pages_->setSizePolicy(pagePolicy);
     pages_->addWidget(homePage());                 // ViewIds::Home
     pages_->addWidget(profilesPage());             // ViewIds::Profiles
     pages_->addWidget(rulesPage());                // ViewIds::Rules
@@ -143,7 +146,7 @@ MainWindow::MainWindow(AppController* controller, QWidget* parent) : QMainWindow
     for (int page = 0; page < pages_->count(); ++page) { if (pages_->widget(page)->objectName().isEmpty()) pages_->widget(page)->setObjectName("pageSurface"); pages_->widget(page)->setProperty("pageSurface",true); pages_->widget(page)->setAttribute(Qt::WA_StyledBackground, true); pages_->widget(page)->setAutoFillBackground(true); }
     layout->addWidget(sidebar);
     // K1（原型 topbar）：内容区首行固定 72px——左标题/副标题，右状态胶囊 + 主题钮 + 更多钮。
-    auto* content = new QWidget(central); content->setObjectName("contentSurface"); auto* contentLayout = new QVBoxLayout(content); contentLayout->setContentsMargins(0,0,0,0); contentLayout->setSpacing(0); pages_->setContentsMargins(UiTheme::ContentInset,18,UiTheme::ContentInset,18);
+    auto* content = new QWidget(central); content->setObjectName("contentSurface"); auto* contentLayout = new QVBoxLayout(content); contentLayout->setContentsMargins(0,0,0,0); contentLayout->setSpacing(0); pages_->setContentsMargins(UiTheme::ContentInset,UiTheme::ContentTop,UiTheme::ContentInset,UiTheme::ContentTop);
     auto* topbar = new QWidget(content); topbar->setObjectName("topbar"); topbar->setFixedHeight(UiTheme::TopbarHeight);
     // Equal-width edge slots keep the title centered independently of toolbar actions.
     auto* topbarLayout = new QHBoxLayout(topbar); topbarLayout->setContentsMargins(16,0,16,0); topbarLayout->setSpacing(0);
@@ -158,13 +161,13 @@ MainWindow::MainWindow(AppController* controller, QWidget* parent) : QMainWindow
     auto* trailingSlot = new QWidget(topbar); trailingSlot->setFixedWidth(76);
     auto* trailingLayout = new QHBoxLayout(trailingSlot); trailingLayout->setContentsMargins(0,0,0,0); trailingLayout->setSpacing(4);
     topbarLayout->addWidget(trailingSlot);
-    auto* importButton=new QToolButton(leadingSlot); importButton->setObjectName("toolbarImport"); importButton->setProperty("prototypeIcon",true); importButton->setIcon(UiIcons::icon(UiIcons::Glyph::Folder,UiTheme::Brand)); importButton->setToolTip("导入配置");
+    auto* importButton=new QToolButton(leadingSlot); importButton->setObjectName("toolbarImport"); importButton->setProperty("prototypeIcon",true); importButton->setIcon(UiIcons::icon(UiIcons::Glyph::Import,UiTheme::Brand)); importButton->setIconSize(QSize(22,22)); importButton->setFixedSize(32,32); importButton->setToolTip("导入配置");
     auto* leadingLayout=new QHBoxLayout(leadingSlot); leadingLayout->setContentsMargins(0,0,0,0); leadingLayout->addWidget(importButton,0,Qt::AlignLeft);
     connect(importButton,&QToolButton::clicked,this,[this] { addSubscription(false); });
-    auto* addButton=new QToolButton; addButton->setObjectName("toolbarAdd"); addButton->setProperty("prototypeIcon",true); addButton->setIcon(UiIcons::icon(UiIcons::Glyph::Plus,UiTheme::Brand)); addButton->setToolTip("添加配置"); trailingLayout->addStretch(); trailingLayout->addWidget(addButton);
+    auto* addButton=new QToolButton; addButton->setObjectName("toolbarAdd"); addButton->setProperty("prototypeIcon",true); addButton->setIcon(UiIcons::icon(UiIcons::Glyph::Plus,UiTheme::Brand)); addButton->setIconSize(QSize(22,22)); addButton->setFixedSize(32,32); addButton->setToolTip("添加配置"); trailingLayout->addStretch(); trailingLayout->addWidget(addButton);
     connect(addButton,&QToolButton::clicked,this,&MainWindow::addUrl);
     contentLayout->addWidget(topbar);
-    contentLayout->addWidget(pages_, 1);
+    contentStack_=new QStackedWidget(content); contentStack_->setObjectName("contentHost"); contentStack_->addWidget(pages_); contentLayout->addWidget(contentStack_,1);
     layout->addWidget(content, 1); setCentralWidget(central);
     TopbarInfo topbarInfo; topbarInfo.title=topbarTitle_; topbarInfo.subtitle=topbarSubtitle_; topbarInfo.statusText=topbarStatusText_; topbarInfo.dot=topbarDot_; registerTopbar(this,topbarInfo);
     operationStatus_=new QStatusBar(this); operationStatus_->setObjectName("operationStatusBar"); operationStatus_->setSizeGripEnabled(false); contentLayout->addWidget(operationStatus_);
@@ -172,8 +175,15 @@ MainWindow::MainWindow(AppController* controller, QWidget* parent) : QMainWindow
     message_=new ElidedLabel("正在初始化"); message_->setObjectName("operationMessage"); message_->setAccessibleName("操作状态"); message_->setSizePolicy(QSizePolicy::Ignored,QSizePolicy::Expanding); operationStatus_->addWidget(message_,1);
     operationAlarm_=new ElidedLabel; operationAlarm_->setObjectName("operationAlarm"); operationAlarm_->setAccessibleName("当前告警"); operationAlarm_->setSizePolicy(QSizePolicy::Ignored,QSizePolicy::Preferred); operationAlarm_->setProperty("state","error"); operationAlarm_->hide(); operationStatus_->addPermanentWidget(operationAlarm_,1);
     auto* details=new QToolButton; details->setObjectName("statusDetails"); details->setText("详情"); details->setToolTip("查看及复制完整状态信息"); operationStatus_->addPermanentWidget(details);
-    connect(details,&QToolButton::clicked,this,[this] { const auto text=message_->toolTip().isEmpty()?message_->text():message_->toolTip(); QMessageBox dialog(QMessageBox::Information,"操作信息 · Mlash",text,QMessageBox::Ok,this); dialog.setObjectName("statusDetailsDialog"); dialog.setTextFormat(Qt::PlainText); dialog.setTextInteractionFlags(Qt::TextSelectableByMouse); dialog.button(QMessageBox::Ok)->setText("关闭"); auto* copy=dialog.addButton("复制消息",QMessageBox::ActionRole); connect(copy,&QPushButton::clicked,&dialog,[text] { QApplication::clipboard()->setText(text); }); dialog.exec(); });
-    auto* resolve=new QToolButton; resolve->setObjectName("statusResolve"); resolve->setText("处理"); resolve->setPopupMode(QToolButton::InstantPopup); auto* resolveMenu=new QMenu(resolve); resolve->setMenu(resolveMenu); resolveMenu->addAction("查看日志",this,[this] { navigate(Route{ViewIds::Data, kNoCategory, HomeAnchor::Control, int(ViewIds::DataTab::Logs)}); }); resolveMenu->addAction("订阅管理",this,[this] { navigate(Route{ViewIds::Profiles}); }); resolveMenu->addAction("TUN 与服务…",this,[this] { (new TunDialog(controller_,this))->show(); }); resolveMenu->addAction("刷新运行状态",controller_,&AppController::refresh); operationStatus_->addPermanentWidget(resolve); resolve->hide();
+    connect(details,&QToolButton::clicked,this,[this] {
+        const auto text=message_->toolTip().isEmpty()?message_->text():message_->toolTip();
+        if (auto* previous=qobject_cast<QDialog*>(taskWorkspace()->editor("operation-details"))) previous->reject();
+        auto* task=new TaskDialog(this); task->setObjectName("statusDetailsDialog"); task->setWindowTitle("操作信息");
+        task->setAttribute(Qt::WA_DeleteOnClose);
+        auto* box=new QVBoxLayout(task); auto* content=new QPlainTextEdit(text); content->setReadOnly(true); box->addWidget(content,1);
+        auto* copy=new QPushButton("复制消息"); box->addWidget(copy,0,Qt::AlignRight); connect(copy,&QPushButton::clicked,task,[text] { QApplication::clipboard()->setText(text); }); presentTask(task,"operation-details");
+    });
+    auto* resolve=new QToolButton; resolve->setObjectName("statusResolve"); resolve->setText("处理"); resolve->setPopupMode(QToolButton::InstantPopup); auto* resolveMenu=new QMenu(resolve); resolve->setMenu(resolveMenu); resolveMenu->addAction("查看日志",this,[this] { navigate(Route{ViewIds::Data, kNoCategory, HomeAnchor::Control, int(ViewIds::DataTab::Logs)}); }); resolveMenu->addAction("订阅管理",this,[this] { navigate(Route{ViewIds::Profiles}); }); resolveMenu->addAction("TUN 与服务…",this,[this] { showTool("tun",{},[this] { return new TunDialog(controller_,this); }); }); resolveMenu->addAction("刷新运行状态",controller_,&AppController::refresh); operationStatus_->addPermanentWidget(resolve); resolve->hide();
     connect(&refreshTimer_, &QTimer::timeout, this, [this] { if (!controller_->state().busy) controller_->refresh(); });
     connect(navigation_, &QListWidget::currentRowChanged, this, [this](int index) {
         // 条目里存的是视图 ID（0/1/3/4），不能再交给 setPage() 当旧编号解释：
@@ -299,7 +309,7 @@ void MainWindow::updateDataPanelVisibility() {
     // 四个面板的可见性互相独立，且每个 setter 都有破坏性副作用
     // （连接会清快照、日志会停流、测试会取消、首页会停采样），所以一律用
     // 「视图可见 && 当前页签」合成，不能直接传 false 再传 true。
-    const bool showing = isVisible() && route_.view == ViewIds::Data;
+    const bool showing = isVisible() && route_.view == ViewIds::Data && (!contentStack_||contentStack_->currentIndex()==0);
     const int tab = currentDataTab();
     if (tab >= 0 && dataPanels_) dataPanels_->setCurrentIndex(tab);
     controller_->setHomeVisible(showing && tab == int(ViewIds::DataTab::Traffic));
@@ -353,7 +363,9 @@ QWidget* MainWindow::diagnosticsPanel() {
     // 日志页的空/无匹配/未就绪不能表现为一块空白面板（状态呈现规格：禁止空表格）。
     logEmpty_ = new QLabel(logView_); logEmpty_->setObjectName("logEmptyState"); logEmpty_->setAlignment(Qt::AlignCenter); logEmpty_->setWordWrap(true); logEmpty_->setTextFormat(Qt::PlainText); logEmpty_->setAttribute(Qt::WA_TransparentForMouseEvents); logEmpty_->hide(); followLogs_=new QPushButton("回到最新"); actions->addWidget(followLogs_); followLogs_->setObjectName("followLatestLogs"); followLogs_->setProperty("quiet",true); followLogs_->setToolTip("滚动到最新记录");
     connect(followLogs_,&QPushButton::clicked,this,[this] { auto cursor=logView_->textCursor(); cursor.clearSelection(); logView_->setTextCursor(cursor); logView_->verticalScrollBar()->setValue(logView_->verticalScrollBar()->maximum()); });
-    connect(logView_->verticalScrollBar(),&QScrollBar::valueChanged,this,[this](int value) { followLogs_->setEnabled(value<logView_->verticalScrollBar()->maximum()); });
+    connect(logView_->verticalScrollBar(),&QScrollBar::valueChanged,this,[this](int value) { const bool history=value<logView_->verticalScrollBar()->maximum(); followLogs_->setEnabled(history); followLogs_->setVisible(history); });
+    copy->hide(); clearButton->hide(); followLogs_->hide(); menu->addSeparator(); menu->addAction(clear);
+    auto* copyLogAction=menu->addAction("复制选中"); copyLogAction->setEnabled(false); connect(logView_,&QPlainTextEdit::copyAvailable,copyLogAction,&QAction::setEnabled); connect(copyLogAction,&QAction::triggered,copy,&QPushButton::click);
     copy->setEnabled(false); connect(logView_,&QPlainTextEdit::copyAvailable,copy,&QPushButton::setEnabled);
     connect(logSearch_, &QLineEdit::textChanged, this, &MainWindow::updateLogs);
     controller_->setDiagnosticsLevel("all");
@@ -396,7 +408,7 @@ QWidget* MainWindow::rulesPage() {
     auto* active = new QTableView; active->setObjectName("activeRulesTable"); active->setModel(&rulesFilter_); active->setEditTriggers(QAbstractItemView::NoEditTriggers); active->verticalHeader()->hide(); styleTable(active); active->horizontalHeader()->setSectionResizeMode(1, QHeaderView::Stretch); active->setColumnWidth(0, 130); active->setColumnWidth(2, 140); readLayout->addWidget(active); auto* emptyRuntime=emptyState(active,"暂未读取到内核规则"); emptyRuntime->setObjectName("rulesRuntimeEmpty"); tabs->addTab(readPage, "内核实际规则");
     connect(tabs, &QTabWidget::currentChanged, this, [this](int index) { controller_->setRulesVisible(isVisible() && route_.view == ViewIds::Rules && index == 1); if (index == 1) controller_->refreshRules(); updateActions(); });
     rulesHint_ = new ElidedLabel; rulesHint_->setObjectName("secondaryText"); rulesHint_->setSizePolicy(QSizePolicy::Ignored,QSizePolicy::Preferred);
-    auto* advanced = new QPushButton("完整规则编辑…"); advanced->setToolTip("推荐：按类型、匹配条件和目标分列编辑；也可查看订阅来源规则。下方文本保留高级编辑能力。"); advanced->setObjectName("advancedRules"); row->insertWidget(row->indexOf(providers),advanced); connect(advanced,&QPushButton::clicked,this,[this] { if (controller_->state().busy || rulesDraftProfile_.isEmpty()) return; QStringList draft; for (const auto& raw:rulesEditor_->toPlainText().split('\n')) { const auto line=raw.trimmed(); if (line.isEmpty()||line.startsWith('#')) continue; if (line.size()>1024||line.split(',').size()>(line.section(',',0,0)=="MATCH"?3:4)||draft.size()>=256) { rulesHint_->setText("请先修正超长、额外字段或超过256条的文本，原草稿保留"); return; } draft.append(line); } auto* dialog=new RuleOverlayDialog(controller_,rulesDraftProfile_,this,{{"prepend",QJsonArray::fromStringList(draft)},{"expected",rulesExpected_}}); connect(dialog,&QDialog::accepted,this,[this] { rulesDirty_=false; loadRuleDraft(); }); dialog->open(); }); connect(tabs,&QTabWidget::currentChanged,advanced,[advanced](int index) { advanced->setVisible(index==0); });
+    auto* advanced = new QPushButton("完整规则编辑…"); advanced->setToolTip("推荐：按类型、匹配条件和目标分列编辑；也可查看订阅来源规则。下方文本保留高级编辑能力。"); advanced->setObjectName("advancedRules"); row->insertWidget(row->indexOf(providers),advanced); connect(advanced,&QPushButton::clicked,this,[this] { if (controller_->state().busy || rulesDraftProfile_.isEmpty()) return; QStringList draft; for (const auto& raw:rulesEditor_->toPlainText().split('\n')) { const auto line=raw.trimmed(); if (line.isEmpty()||line.startsWith('#')) continue; if (line.size()>1024||line.split(',').size()>(line.section(',',0,0)=="MATCH"?3:4)||draft.size()>=256) { rulesHint_->setText("请先修正超长、额外字段或超过256条的文本，原草稿保留"); return; } draft.append(line); } auto* dialog=new RuleOverlayDialog(controller_,rulesDraftProfile_,this,{{"prepend",QJsonArray::fromStringList(draft)},{"expected",rulesExpected_}}); connect(dialog,&QDialog::accepted,this,[this] { rulesDirty_=false; loadRuleDraft(); }); presentTask(dialog); }); connect(tabs,&QTabWidget::currentChanged,advanced,[advanced](int index) { advanced->setVisible(index==0); });
     auto* bottom = new QHBoxLayout; auto* reset = button("放弃修改", bottom); reset->setObjectName("resetCustomRules"); bottom->addWidget(rulesHint_,1); saveRules_ = button("保存规则", bottom); saveRules_->setObjectName("saveCustomRules"); saveRules_->setProperty("primary", true); content->addLayout(bottom); mutations_ += {saveRules_, reset, add, type, match, target};
     connect(tabs, &QTabWidget::currentChanged, this, [this, reset](int index) { reset->setVisible(index == 0); saveRules_->setVisible(index == 0); rulesHint_->setText(index==0&&rulesDirty_?"有未保存修改":QString()); });
     connect(reset, &QPushButton::clicked, this, [this] { rulesDirty_ = false; loadRuleDraft(); });
@@ -454,7 +466,8 @@ QWidget* MainWindow::connectionsPanel() {
     connectionsTable_ = new QTableView; connectionsTable_->setObjectName("connectionsTable"); connectionsTable_->setModel(&connectionsFilter_); connectionsTable_->setEditTriggers(QAbstractItemView::NoEditTriggers); connectionsTable_->setSelectionBehavior(QAbstractItemView::SelectRows); connectionsTable_->setSelectionMode(QAbstractItemView::SingleSelection); connectionsTable_->verticalHeader()->hide(); styleTable(connectionsTable_); connectionsTable_->setSortingEnabled(true); connectionsTable_->sortByColumn(-1,Qt::AscendingOrder); content->addWidget(connectionsTable_, 1);
     connectionOptions_=new ConnectionOptions(controller_,connectionsTable_,&connectionsFilter_,search,nullptr); tools->addWidget(connectionOptions_); connectionOptions_->addViewAction(order); connect(connectionsTable_->horizontalHeader(),&QHeaderView::sortIndicatorChanged,order,[this,order] { order->setEnabled(connectionsFilter_.sortColumn()>=0); }); order->setEnabled(false);
     connectionEmpty_=emptyState(connectionsTable_,"暂无活动连接");
-    auto* bottom = new QHBoxLayout; connectionsHint_ = new ElidedLabel("内核未就绪"); connectionsHint_->setObjectName("connectionSamplingStatus"); connectionsHint_->setProperty("secondary",true); connectionsHint_->setSizePolicy(QSizePolicy::Ignored, QSizePolicy::Preferred); bottom->addWidget(connectionsHint_, 1); connectionDetailsButton_=actionButton(details,bottom,"connectionDetailsButton"); connectionCopyButton_=actionButton(copy,bottom,"connectionCopyButton"); closeConnection_ = button("断开选中", bottom); closeConnection_->setObjectName("closeSelectedConnection"); closeConnection_->setProperty("danger",true); closeConnection_->setEnabled(false); content->addLayout(bottom);
+    auto* bottom = new QHBoxLayout; connectionsHint_ = new ElidedLabel("内核未就绪"); connectionsHint_->setObjectName("connectionSamplingStatus"); connectionsHint_->setProperty("secondary",true); connectionsHint_->setSizePolicy(QSizePolicy::Ignored, QSizePolicy::Preferred); bottom->addWidget(connectionsHint_, 1); connectionDetailsButton_=actionButton(details,bottom,"connectionDetailsButton"); connectionCopyButton_=actionButton(copy,bottom,"connectionCopyButton"); closeConnection_ = button("断开选中", bottom); closeConnection_->setObjectName("closeSelectedConnection"); closeConnection_->setProperty("danger",true); closeConnection_->setEnabled(false); content->addLayout(bottom); connectionDetailsButton_->hide(); connectionCopyButton_->hide(); closeConnection_->hide();
+    auto* inspectKey=new QShortcut(QKeySequence(Qt::Key_Return),connectionsTable_); inspectKey->setContext(Qt::WidgetWithChildrenShortcut); connect(inspectKey,&QShortcut::activated,this,[this] { connectionDetails(); });
     connect(connectionsTable_->selectionModel(), &QItemSelectionModel::selectionChanged, this, &MainWindow::updateActions);
     connect(closeConnection_, &QPushButton::clicked, this, [this] { const auto selected = connectionsTable_->selectionModel()->selectedRows(); if (!selected.isEmpty()) controller_->closeConnection(selected.first().data(Qt::UserRole).toString()); }); connect(connectionsTable_,&QTableView::doubleClicked,this,[this] { connectionDetails(); });
     connectionsTable_->setContextMenuPolicy(Qt::CustomContextMenu); connect(connectionsTable_,&QWidget::customContextMenuRequested,this,[this,details,copy](const QPoint& point) { const auto index=connectionsTable_->indexAt(point); if (!index.isValid()) return; connectionsTable_->selectRow(index.row()); QMenu menu(this); menu.addAction(details); menu.addAction(copy); auto* close=menu.addAction("断开选中"); close->setEnabled(closeConnection_->isEnabled()); connect(close,&QAction::triggered,closeConnection_,&QPushButton::click); menu.exec(connectionsTable_->viewport()->mapToGlobal(point)); });
@@ -485,7 +498,11 @@ void MainWindow::prefillConnectionRule(const QJsonObject& suggestion) {
     if (!exists&&prepend.size()+profile.appendRules.size()>=256) { refuse("前置和追加已达256条，当前草稿保留；请先减少条目。"); return; } if (!exists) prepend.prepend(candidate);
     auto* dialog=new RuleOverlayDialog(controller_,id,this,{{"prepend",QJsonArray::fromStringList(prepend)},{"expected",expected},{"contextNote",QString("来自连接观察快照 · 采样 %1。%2请核对匹配范围和目标，点击保存前不会改变网络。").arg(suggestion.value("observed_at").toString("未知"),exists?QString("已定位已有同样条目；"):QString("新条目置于前置首行；"))}});
     if (auto* table=dialog->findChild<QTableWidget*>("prependRulesTable")) table->setCurrentCell(prepend.indexOf(candidate),2);
-    connect(dialog,&QDialog::accepted,this,[this,id,text,expectedMain] { if (rulesDraftProfile_!=id) return; if (rulesEditor_->toPlainText()==text&&rulesExpected_==expectedMain) { rulesDirty_=false; loadRuleDraft(); } else if (rulesDirty_) rulesHint_->setText("规则列表已保存，当前窗口另有草稿，已保留；请核对后重新载入。"); }); dialog->open();
+    connect(dialog,&QDialog::accepted,this,[this,id,text,expectedMain] { if (rulesDraftProfile_!=id) return; if (rulesEditor_->toPlainText()==text&&rulesExpected_==expectedMain) { rulesDirty_=false; loadRuleDraft(); } else if (rulesDirty_) rulesHint_->setText("规则列表已保存，当前窗口另有草稿，已保留；请核对后重新载入。"); });
+    navigate(Route{ViewIds::Profiles});
+    auto* workspace=taskWorkspace();
+    if (!workspace->configure("profile:"+id,profile.name,{},[this] { returnFromWorkspace(); })) { dialog->deleteLater(); return; }
+    profileDetailId_=id; presentTask(dialog,"rules","规则");
 }
 
 void MainWindow::updateConnections() {
@@ -837,7 +854,7 @@ if (logEmpty_)         logEmpty_->setVisible(!reason.isEmpty());
     const auto text=filtered.join('\n'); displayedLogLines_=filtered;
     auto* scroll=logView_->verticalScrollBar(); const int position=scroll->value(); const bool follow=position==scroll->maximum() && !logView_->textCursor().hasSelection();
     logView_->setPlainText(text); scroll->setValue(follow?scroll->maximum():position);
-    if (followLogs_) followLogs_->setEnabled(scroll->value()<scroll->maximum());
+    if (followLogs_) { const bool history=scroll->value()<scroll->maximum(); followLogs_->setEnabled(history); followLogs_->setVisible(history); }
 }
 void MainWindow::appendLogLine(const QString& line) {
     displayedLogLines_.append(line); if (displayedLogLines_.size()>2000) displayedLogLines_.removeFirst();
@@ -847,7 +864,7 @@ void MainWindow::appendLogLine(const QString& line) {
     if (!logView_->document()->isEmpty()) cursor.insertBlock();
     cursor.insertText(line);
     scroll->setValue(follow?scroll->maximum():position);
-    if (followLogs_) followLogs_->setEnabled(scroll->value()<scroll->maximum());
+    if (followLogs_) { const bool history=scroll->value()<scroll->maximum(); followLogs_->setEnabled(history); followLogs_->setVisible(history); }
 }
 void MainWindow::syncSectionNavigation(const Route& route) {
     // 侧栏只有四个入口（首页 / 配置 / 数据 / 设置），规则页仍可由托盘与设置搜索进入，
@@ -870,6 +887,7 @@ void MainWindow::navigate(Route route) {
     // 旧编号只允许出现在 setPage()/GuiHost 这类整数入口，那里已经过 fromLegacyPage()。
     // 这里不能再按 view==2 猜测「首页节点」：K 版起 2 是规则视图，按数字归一化会把规则页吞掉。
     if (!isRoutableView(route)) return;
+    if (contentStack_) contentStack_->setCurrentIndex(0);
     if (route.view==ViewIds::Profiles&&profileStack_) { profileStack_->setCurrentIndex(0); profileDetailId_.clear(); }
     if (route.view!=route_.view) if (auto* drawer=qobject_cast<DetailsDrawer*>(detailsDrawer_.data())) drawer->closeDrawer();
     // 设置分类只在调用方显式给出时应用；kNoCategory 表示沿用当前分类。
@@ -902,12 +920,14 @@ void MainWindow::navigate(Route route) {
         if (dataPanels_) updateDataPanelVisibility();
     }
     if (route.view != ViewIds::Settings && configPreview_) configPreview_->close();
+    if (outboundDialog_) outboundDialog_->close();
     pages_->setCurrentIndex(stackIndex(route.view));
     syncSectionNavigation(route);
     // 页面副作用集中在各页对象的 onEnter/onLeave（S1），这里只按顺序触发。
     pageRouter_.go(route);
 }
 void MainWindow::enterView(int view, const Route& route) {
+    if (contentStack_&&contentStack_->currentIndex()!=0) return;
     // 进入某视图时的全部副作用都在这里；离开时的清理在 leaveView。
     // 两个函数合起来就是设计文档的「页面生命周期契约」表，逐行对应。
     switch (view) {
@@ -967,7 +987,23 @@ void MainWindow::leaveView(int view) {
 QWidget* MainWindow::showTool(const QString& tool, const QString& objectKey, const std::function<QWidget*()>& factory) {
     // 唯一入口（S2）：同一「工具+对象」第二次打开时 raise 已有窗口，不再新建。
     // 单例工具把 objectKey 留空。
-    return toolWindows_.show(tool, objectKey, factory);
+    auto* workspace=taskWorkspace();
+    if (!workspace->creating()) {
+        if (route_.view==ViewIds::Settings&&(tool=="backup"||tool=="local-backup"||tool=="remote-backup")) {
+            const auto task=tool=="backup"?objectKey:tool=="local-backup"?QString("plan"):QString("webdav");
+            openBackupTask(task); return taskWorkspace()->editor("backup:"+task);
+        }
+        const QHash<QString,QString> profileTasks{{"dns","dns"},{"proxy-editor","nodes"},{"proxy-chain","chain"}};
+        if (route_.view==ViewIds::Profiles&&profileTasks.contains(tool)&&!objectKey.isEmpty()) {
+            openProfileTask(objectKey,profileTasks.value(tool)); return taskWorkspace()->editor(profileTasks.value(tool));
+        }
+    }
+    if (route_.view==ViewIds::Settings&&!workspace->creating()) workspace=taskWorkspaceFor(tool);
+    const auto key=tool+":"+objectKey;
+    if (auto* existing=workspace->editor(key)) { workspace->select(key); showWorkspace(workspace); return existing; }
+    auto* widget=toolWindows_.show(tool,objectKey,factory);
+    if (auto* dialog=qobject_cast<QDialog*>(widget)) presentTask(dialog,key);
+    return widget;
 }
 void MainWindow::setPage(int index) { navigate(fromLegacyPage(index)); }
 Route MainWindow::currentRoute() const { return route_; }
@@ -979,7 +1015,35 @@ void MainWindow::applyHomeAnchor(HomeAnchor anchor) {
     const QPointer<QWidget> section = nodeSection_;
     QTimer::singleShot(0, this, [scroll, section] { if (scroll && section) scroll->ensureWidgetVisible(section, 0, 0); });
 }
-void MainWindow::showOutboundDiagnostics() { if (outboundDialog_) { outboundDialog_->show(); outboundDialog_->raise(); return; } outboundDialog_=new OutboundDialog(controller_,this); outboundDialog_->show(); }
+void MainWindow::showOutboundDiagnostics() { showTool("outbound",{},[this] { outboundDialog_=new OutboundDialog(controller_,this); return outboundDialog_.data(); }); }
+TaskWorkspace* MainWindow::taskWorkspace() {
+    const int domain=route_.view==ViewIds::Rules?ViewIds::Profiles:route_.view;
+    if (auto* workspace=workspaces_.value(domain)) return workspace;
+    return taskWorkspaceFor("default");
+}
+TaskWorkspace* MainWindow::taskWorkspaceFor(const QString& family) {
+    const int domain=route_.view==ViewIds::Rules?ViewIds::Profiles:route_.view;
+    const auto key=QString::number(domain)+":"+family;
+    if (auto* workspace=taskFamilies_.value(key)) { workspaces_[domain]=workspace; return workspace; }
+    auto* workspace=new TaskWorkspace; workspaces_[domain]=workspace; taskFamilies_[key]=workspace; contentStack_->addWidget(workspace);
+    workspace->configure(domain==ViewIds::Settings?QString("settings"):QString("section-%1").arg(domain),ViewIds::title(domain),{},[this] { returnFromWorkspace(); });
+    workspace->requested=[this,workspace] { showWorkspace(workspace); };
+    return workspace;
+}
+void MainWindow::showWorkspace(TaskWorkspace* workspace) {
+    if (auto* drawer=qobject_cast<DetailsDrawer*>(detailsDrawer_.data())) drawer->closeDrawer();
+    contentStack_->setCurrentWidget(workspace);
+    refreshTimer_.stop(); controller_->setHomeVisible(false); controller_->setRulesVisible(false);
+    controller_->setConnectionsVisible(false); controller_->setDiagnosticsVisible(false); websitePage_->setActive(false);
+}
+void MainWindow::returnFromWorkspace() {
+    if (outboundDialog_) outboundDialog_->close();
+    contentStack_->setCurrentIndex(0); enterView(route_.view,route_);
+}
+void MainWindow::presentTask(QDialog* editor,const QString& key,const QString& title) {
+    auto* workspace=taskWorkspace();
+    workspace->mount(editor,key,title);
+}
 bool MainWindow::confirmDiscardEdits() {
     if (DialogDraftGuard::hasPending(this) || rulesSaving_ || settingsApplying_) return false;
     if (!rulesDirty_ && !settingsDirty() && !DialogDraftGuard::hasDrafts(this)) return true;
@@ -1007,7 +1071,7 @@ void MainWindow::updateTopbar() {
         : state.core == CoreState::Failed ? QString("启动失败")
         : state.core == CoreState::Stopping ? QString("停止中") : QString("未连接");
     const bool configActions=route_.view==ViewIds::Home||route_.view==ViewIds::Profiles;
-    for (const auto& name:{"toolbarImport","toolbarAdd"}) if (auto* button=findChild<QToolButton*>(name)) { button->setVisible(configActions); button->setIcon(UiIcons::icon(QString(name)=="toolbarAdd"?UiIcons::Glyph::Plus:UiIcons::Glyph::Folder,UiTheme::Brand)); }
+    for (const auto& name:{"toolbarImport","toolbarAdd"}) if (auto* button=findChild<QToolButton*>(name)) { button->setVisible(configActions); button->setIcon(UiIcons::icon(QString(name)=="toolbarAdd"?UiIcons::Glyph::Plus:UiIcons::Glyph::Import,UiTheme::Brand)); }
     WindowParts::updateTopbar(this, route_.view==ViewIds::Home?QString("Mlash"):route_.view==ViewIds::Rules?QString("配置"):ViewIds::title(route_.view), ViewIds::subtitle(route_.view), status, dotState);
     if (topbarStatusText_) topbarStatusText_->setToolTip(sentence.line1);
 }
@@ -1026,6 +1090,7 @@ void MainWindow::showEvent(QShowEvent* event) {
     // 这里只补齐栈位置与可见性，页签/侧栏/订阅标记已由 navigate 处理过。
     if (const int target = stackIndex(route_.view); target != pages_->currentIndex()) pages_->setCurrentIndex(target);
     updateTopbar();
+    if (contentStack_&&contentStack_->currentIndex()!=0) return;
     switch (route_.view) {
     case ViewIds::Home:
         controller_->setHomeVisible(true);

@@ -1,9 +1,9 @@
 #pragma once
 #include "app/AppController.h"
-#include <QDialog>
+#include "TaskDialog.h"
 class QListWidget; class QComboBox; class QPushButton; class QLabel;
 namespace mlash {
-class ProxyChainDialog final:public QDialog {
+class ProxyChainDialog final:public TaskDialog {
     Q_OBJECT
 public:
     ProxyChainDialog(AppController* controller,const QString& id,QWidget* parent=nullptr);

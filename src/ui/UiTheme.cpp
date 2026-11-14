@@ -106,20 +106,25 @@ QString styleSheet() {
         QPushButton[directoryAction="true"]:hover { background: @Hover; }
         QPushButton[directoryAction="true"]:focus[keyboardFocus="true"] { border: 1px solid @Focus; border-radius: 5px; }
         QFrame#remoteProfileGroup, QFrame#localProfileGroup, QFrame#prototypeGroup { background: @Surface; border: none; border-radius: 10px; }
-        QLabel#remoteProfileHeading, QLabel#localProfileHeading, QLabel#prototypeSection { padding: 10px 16px 0px 16px; font-weight: 500; }
+        QLabel#remoteProfileHeading, QLabel#localProfileHeading, QLabel#prototypeSection { padding: 4px 12px 0px 12px; font-weight: 500; }
         QPushButton[prototypeRow="true"] { text-align: left; background: transparent; border: none; border-bottom: 1px solid @Separator; border-radius: 0; padding: 0; }
         QPushButton[prototypeRow="true"]:hover { background: @Hover; }
         QPushButton[prototypeRow="true"][keyboardFocus="true"]:focus { border: 1px solid @Focus; }
         QPushButton[backLink="true"] { background: transparent; border: none; color: @Brand; padding: 3px 0; }
         QLabel[caption="true"] { font-size: 9pt; }
         QToolButton[prototypeIcon="true"] { background: transparent; border: none; padding: 5px; color: @Brand; }
-        QToolButton#browseGroup { color: @Ink; padding-right: 22px; }
+        QToolButton#browseGroup { color: @Ink; padding: 5px; }
         QToolButton[prototypeIcon="true"]:hover { background: @Hover; }
         QWidget#settingsCanvas, QWidget#settingsDirectory, QWidget#profileDetailsPage { background: @Window; }
         QFrame#panel { border: none; }
         QFrame#homeControlCard { border: none; border-radius: 10px; }
+        QFrame#homeControlSeparator { background: @Separator; border: none; margin-left: 35px; }
+        QTabBar#taskTabs, QTabBar#profileTaskTabs { background: @Sidebar; border-radius: 7px; }
+        QTabBar#taskTabs::tab, QTabBar#profileTaskTabs::tab { border: none; background: transparent; color: @Secondary; padding: 4px 10px; margin: 1px; border-radius: 5px; }
+        QTabBar#taskTabs::tab:selected, QTabBar#profileTaskTabs::tab:selected { background: @Surface; color: @Ink; }
+        QDialog[embeddedTask="true"] { background: @Window; }
         QTabBar#dataTabs { background: @Sidebar; border-radius: 7px; }
-        QTabBar#dataTabs::tab { border: none; background: transparent; color: @Secondary; padding: 6px 16px; margin: 3px; border-radius: 5px; }
+        QTabBar#dataTabs::tab { border: none; background: transparent; color: @Secondary; padding: 4px 12px; margin: 2px; border-radius: 5px; }
         QTabBar#dataTabs::tab:selected { background: @Surface; color: @Ink; }
         QLabel#topbarTitle { font-size: @TitlePoints; font-weight: 700; }
         QLabel#topbarSubtitle { color: @Secondary; }
@@ -130,7 +135,7 @@ QString styleSheet() {
         QLabel#topbarDot[state="active"] { color: @Brand; }
         QLabel#topbarDot[state="idle"] { color: @Secondary; }
         /* K6：数据页四个 tab 用同一套胶囊样式（QTabBar 基础规则已给出）。 */
-        QTabBar#dataTabs::tab { padding: 5px 16px; }
+        QTabBar#dataTabs::tab { padding: 4px 12px; }
         QLabel#sectionHeading { font-size: @SectionPoints; font-weight: 600; }
         QLabel#sectionCount { color: @Secondary; }
         QWidget#sidebar { background: @Sidebar; border: none; border-right: 1px solid @Border; }
@@ -189,7 +194,7 @@ QString styleSheet() {
         QListWidget#proxyGroups { border: none; background: transparent; outline: none; }
         QLabel#statValue { font-size: @BodyPoints; font-weight: 600; }
         QListWidget#navigation { border: none; background: transparent; outline: none; }
-        QListWidget#navigation::item { padding: 8px 10px; margin: 2px 0px; border-radius: 7px; }
+        QListWidget#navigation::item { padding: 5px 8px; margin: 0px; border-radius: 7px; }
         QListWidget#navigation::item:hover { background: @Hover; }
         QListWidget#navigation::item:selected { background: @Primary; color: @OnPrimary; }
         QPushButton, QToolButton { min-height: 22px; padding: 3px 10px; border: 1px solid transparent; border-radius: 7px; background: @Control; }

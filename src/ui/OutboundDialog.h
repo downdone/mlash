@@ -1,9 +1,9 @@
 #pragma once
 #include "app/AppController.h"
-#include <QDialog>
+#include "TaskDialog.h"
 class QPushButton; class QComboBox; class QPlainTextEdit; class QLabel; class QTabWidget; class QTableWidget;
 namespace mlash {
-class OutboundDialog final : public QDialog {
+class OutboundDialog final : public TaskDialog {
     Q_OBJECT
 public:
     explicit OutboundDialog(AppController* controller,QWidget* parent=nullptr);

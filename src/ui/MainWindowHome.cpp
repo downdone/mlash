@@ -16,15 +16,15 @@ void syncHomeChoices(QComboBox* combo, const QJsonArray& choices) {
 }
 
 QWidget* MainWindow::homePage() {
-    auto* page = new QWidget; auto* layout = new QVBoxLayout(page); layout->setContentsMargins(0, 0, 0, 0); layout->setSpacing(10);
+    auto* page = new QWidget; auto* layout = new QVBoxLayout(page); layout->setContentsMargins(0, 0, 0, 0); layout->setSpacing(6);
     // 控制区（H1 / ADR 0048）：一张卡片、三行——当前代理 / 路由方式 / 连通性。
     // 行尾动作即主控件，标题行不再单独占位（原型 01）。
-    auto* control = panel(); control->setObjectName("homeControlCard");
-    auto* summary = new QVBoxLayout(control); summary->setContentsMargins(16, 4, 16, 4); summary->setSpacing(0);
+    auto* control = panel(); control->setObjectName("homeControlCard"); control->setSizePolicy(QSizePolicy::Preferred,QSizePolicy::Maximum);
+    auto* summary = new QVBoxLayout(control); summary->setContentsMargins(12, 0, 12, 0); summary->setSpacing(0);
 
     // ① 当前代理：当前成员名 + 「订阅 · 选择方式」 + 状态句，行尾为系统代理开关。
-    auto* currentRow = new QWidget; currentRow->setObjectName("homeControlRow"); currentRow->setProperty("first", true);
-    auto* currentLayout = new QHBoxLayout(currentRow); currentLayout->setContentsMargins(0, 8, 0, 8); currentLayout->setSpacing(13);
+    auto* currentRow = new QWidget; currentRow->setObjectName("homeControlRow"); currentRow->setProperty("first", true); currentRow->setMinimumHeight(UiTheme::RowHeight);
+    auto* currentLayout = new QHBoxLayout(currentRow); currentLayout->setContentsMargins(0, 4, 0, 4); currentLayout->setSpacing(12);
     statusDot_ = new QLabel; statusDot_->setObjectName("statusDot"); statusDot_->setFixedSize(0,0); statusDot_->hide(); auto* currentIcon=new QLabel; currentIcon->setPixmap(UiIcons::icon(UiIcons::Glyph::Rocket,UiTheme::Brand).pixmap(22,22)); currentIcon->setFixedSize(22,22); currentLayout->addWidget(currentIcon,0,Qt::AlignVCenter);
     auto* currentText = new QVBoxLayout; currentText->setSpacing(3);
     overviewTitle_ = new QLabel("尚未连接"); overviewTitle_->setObjectName("overviewTitle"); overviewTitle_->setTextFormat(Qt::PlainText);
@@ -51,8 +51,8 @@ QWidget* MainWindow::homePage() {
     });
 
     // ② 路由方式：整行可点，行下方弹出浮层菜单（原型 03）；当前项带勾。
-    homeRouteRow_ = new DashboardCardButton; homeRouteRow_->setObjectName("homeRouteRow"); homeRouteRow_->setProperty("controlRow", true);
-    auto* routeLayout = new QHBoxLayout(homeRouteRow_); routeLayout->setContentsMargins(0, 8, 0, 8); routeLayout->setSpacing(13);
+    homeRouteRow_ = new DashboardCardButton; homeRouteRow_->setObjectName("homeRouteRow"); homeRouteRow_->setProperty("controlRow", true); homeRouteRow_->setMinimumHeight(UiTheme::RowHeight);
+    auto* routeLayout = new QHBoxLayout(homeRouteRow_); routeLayout->setContentsMargins(0, 4, 0, 4); routeLayout->setSpacing(12);
     auto* routeIcon=new QLabel; routeIcon->setFixedSize(22,22); routeIcon->setPixmap(UiIcons::icon(UiIcons::Glyph::Route,UiTheme::Brand).pixmap(22,22)); routeLayout->addWidget(routeIcon);
     auto* routeText = new QVBoxLayout; routeText->setSpacing(3);
     auto* routeTitle = new QLabel("全局路由"); routeTitle->setObjectName("homeControlTitle"); routeTitle->setTextFormat(Qt::PlainText);
@@ -74,11 +74,13 @@ QWidget* MainWindow::homePage() {
         }
         menu.exec(homeRouteRow_->mapToGlobal(QPoint(0, homeRouteRow_->height())));
     });
+    auto* firstSeparator=new QFrame; firstSeparator->setObjectName("homeControlSeparator"); firstSeparator->setFixedHeight(1); summary->addWidget(firstSeparator);
     summary->addWidget(homeRouteRow_);
+    auto* secondSeparator=new QFrame; secondSeparator->setObjectName("homeControlSeparator"); secondSeparator->setFixedHeight(1); summary->addWidget(secondSeparator);
 
     // ③ 连通性测试：结果/测试目标 + 「开始测试」，行尾箭头进网站测试页。
-    auto* connectivityRow = new QWidget; connectivityRow->setObjectName("homeControlRow");
-    auto* connectivityLayout = new QHBoxLayout(connectivityRow); connectivityLayout->setContentsMargins(0, 8, 0, 8); connectivityLayout->setSpacing(13);
+    auto* connectivityRow = new QWidget; connectivityRow->setObjectName("homeControlRow"); connectivityRow->setMinimumHeight(UiTheme::RowHeight);
+    auto* connectivityLayout = new QHBoxLayout(connectivityRow); connectivityLayout->setContentsMargins(0, 4, 0, 4); connectivityLayout->setSpacing(12);
     auto* probeIcon=new QLabel; probeIcon->setFixedSize(22,22); probeIcon->setPixmap(UiIcons::icon(UiIcons::Glyph::Gauge,UiTheme::Brand).pixmap(22,22)); connectivityLayout->addWidget(probeIcon);
     connect(UiTheme::notifier(),&UiTheme::AppearanceNotifier::changed,probeIcon,[probeIcon] { probeIcon->setPixmap(UiIcons::icon(UiIcons::Glyph::Gauge,UiTheme::Brand).pixmap(22,22)); });
     auto* connectivityText = new QVBoxLayout; connectivityText->setSpacing(3);
@@ -105,7 +107,7 @@ QWidget* MainWindow::homePage() {
 
     // 节点区（原型 01）：标题行 + 策略组上下文，全部来自 nodeSection()。
     nodeSection_ = nodeSection(); layout->addWidget(nodeSection_,1);
-    auto* empty=new QWidget; empty->setObjectName("prototypeHomeEmpty"); auto* emptyLayout=new QVBoxLayout(empty); emptyLayout->setContentsMargins(20,28,20,28);
+    auto* empty=new QWidget; empty->setObjectName("prototypeHomeEmpty"); empty->setMaximumHeight(150); auto* emptyLayout=new QVBoxLayout(empty); emptyLayout->setContentsMargins(20,28,20,28);
     auto* emptyTitle=new QLabel("还没有配置"); emptyTitle->setAlignment(Qt::AlignCenter); emptyLayout->addWidget(emptyTitle);
     auto* emptyText=new QLabel("导入订阅或本地配置后，选择节点并连接。"); emptyText->setAlignment(Qt::AlignCenter); emptyText->setProperty("secondary",true); emptyLayout->addWidget(emptyText);
     auto* import=new QPushButton("导入配置"); import->setProperty("primary",true); emptyLayout->addWidget(import,0,Qt::AlignHCenter); connect(import,&QPushButton::clicked,this,&MainWindow::addUrl); layout->addWidget(empty);
@@ -152,7 +154,7 @@ void MainWindow::updateHome() {
         const Profile* active=nullptr; for (const auto& profile:controller_->profiles()) if (profile.id==current.activeProfile) active=&profile;
         const auto node = controller_->homeNode();
         overviewTitle_->setText(hasActive&&current.ready ? (node.isEmpty() ? QString("没有唯一当前节点") : node) : QString("未连接"));
-        const auto mode = current.mode=="global" ? QString("全局") : current.mode=="direct" ? QString("直连") : QString("手动选择");
+        const auto mode = current.mode=="global" ? QString("全局") : current.mode=="direct" ? QString("直连") : QString("规则");
         homeCurrentMeta_->setText(hasActive ? (active ? active->name : QString("订阅未加载")) + " · " + mode : QString("未订阅"));
         homeCurrentMeta_->setVisible(false);
         // 状态句：内核 / 接管 / 可达 三段，只报告观测（P3）。
@@ -168,6 +170,8 @@ void MainWindow::updateHome() {
         const auto detail=homeStateLine_->text();
         homeStateLine_->setText(current.ready?(current.tunObserved?QString("TUN 已接管"):current.proxy==ProxyState::Owned?QString("系统代理已接管"):current.proxy==ProxyState::External?QString("外部系统代理"):QString("系统代理未开启"))+(active?" · "+active->name:QString()):QString("未连接"));
         homeStateLine_->setToolTip(detail);
+        homeStateLine_->setVisible(current.core==CoreState::Failed||current.proxy==ProxyState::External||current.readOnly);
+        if (current.core==CoreState::Failed) homeStateLine_->setText("连接失败 · "+current.lastError);
     }
     // 控制区第 2 行：当前路由方式。
     if (homeRouteValue_) homeRouteValue_->setText(current.mode=="global"?"全局模式":current.mode=="direct"?"直连模式":"规则模式");

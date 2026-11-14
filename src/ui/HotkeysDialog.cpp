@@ -56,7 +56,7 @@ protected:
     void hideEvent(QHideEvent* event) override { stop(); QLineEdit::hideEvent(event); }
 };
 }
-HotkeysDialog::HotkeysDialog(AppController* controller,QWidget* parent):QDialog(parent) {
+HotkeysDialog::HotkeysDialog(AppController* controller,QWidget* parent):TaskDialog(parent) {
     setAttribute(Qt::WA_DeleteOnClose); setObjectName("hotkeysDialog"); setWindowTitle("全局快捷键"); resize(620,440); setMinimumSize(480,340);
     const auto expected=controller->settings().hotkeys; auto* layout=new QVBoxLayout(this);
     layout->addWidget(contextNote("录制组合键，或留空停用。","留空关闭，支持手填或录制单组合。至少包含Ctrl或Alt，可加Shift和字母、数字、F键（F12/Win保留）。网络动作须空闲且状态允许；不自动接管外部代理或安装TUN服务。重载只使用运行版，模式按该版配置初始化。"));

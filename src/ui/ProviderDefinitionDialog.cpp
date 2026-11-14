@@ -12,7 +12,7 @@
 #include <QVBoxLayout>
 
 namespace mlash {
-ProviderDefinitionDialog::ProviderDefinitionDialog(const QString& name,const QJsonObject& initial,const QSet<QString>& occupied,const QStringList& targets,bool canAddRule,QWidget* parent):QDialog(parent),occupied_(occupied),adding_(name.isEmpty()) {
+ProviderDefinitionDialog::ProviderDefinitionDialog(const QString& name,const QJsonObject& initial,const QSet<QString>& occupied,const QStringList& targets,bool canAddRule,QWidget* parent):TaskDialog(parent),occupied_(occupied),adding_(name.isEmpty()) {
     setAttribute(Qt::WA_DeleteOnClose); setObjectName("providerDefinitionDialog"); setWindowTitle(adding_?"添加远程规则集":"编辑规则集声明"); resize(530,340); auto* box=new QVBoxLayout(this); auto* form=new QFormLayout;
     name_=new QLineEdit(name); name_->setObjectName("ruleProviderName"); name_->setMaxLength(qMax(128,name.size())); name_->setReadOnly(!adding_); name_->setPlaceholderText("例如 CustomSites"); form->addRow("名称",name_);
     url_=new QLineEdit(initial.value("url").toString()); url_->setObjectName("ruleProviderUrl"); url_->setMaxLength(qMax(2048,initial.value("url").toString().size())); url_->setEchoMode(QLineEdit::Password); url_->setPlaceholderText("https://example.com/rules.yaml"); form->addRow("HTTPS地址",url_);

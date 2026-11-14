@@ -9,7 +9,7 @@
 #include <QVBoxLayout>
 
 namespace mlash {
-WebsiteTargetsDialog::WebsiteTargetsDialog(AppController* controller, QWidget* parent) : QDialog(parent), controller_(controller) {
+WebsiteTargetsDialog::WebsiteTargetsDialog(AppController* controller, QWidget* parent) : TaskDialog(parent), controller_(controller) {
     setAttribute(Qt::WA_DeleteOnClose); setObjectName("websiteTargetsDialog"); setWindowTitle("测速目标"); resize(600,410);
     auto* layout = new QVBoxLayout(this); auto* note = new QLabel("填写 HTTPS 测试地址。"); note->setWordWrap(true); layout->addWidget(note);
     table_ = new QTableWidget(0,2); table_->setObjectName("websiteTargetsTable"); table_->setHorizontalHeaderLabels({"名称","HTTPS 目标地址"}); table_->verticalHeader()->hide(); table_->setSelectionBehavior(QAbstractItemView::SelectRows); table_->setSelectionMode(QAbstractItemView::SingleSelection); table_->horizontalHeader()->setSectionResizeMode(1,QHeaderView::Stretch); table_->setColumnWidth(0,155); layout->addWidget(table_,1);

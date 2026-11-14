@@ -1,10 +1,10 @@
 #pragma once
-#include <QDialog>
+#include "TaskDialog.h"
 #include <QJsonObject>
 #include <QSet>
 class QLineEdit; class QComboBox; class QCheckBox; class QLabel; class QPushButton;
 namespace mlash {
-class ProviderDefinitionDialog final : public QDialog {
+class ProviderDefinitionDialog final : public TaskDialog {
 public:
     ProviderDefinitionDialog(const QString& name,const QJsonObject& definition,const QSet<QString>& occupied,const QStringList& targets,bool canAddRule,QWidget* parent=nullptr);
     QString providerName() const;

@@ -23,6 +23,7 @@ namespace mlash { class ConnectionOptions; }
 namespace mlash {
 // 顶栏与抽屉用的小部件（K 版）。定义在 MainWindowParts.h 的 WindowParts 里，头文件只前向声明。
 namespace WindowParts { class DetailsDrawer; }
+class TaskWorkspace;
 class MainWindow : public QMainWindow {
     Q_OBJECT
 public:
@@ -39,6 +40,7 @@ public:
     int memberView() const;
     void setMemberView(int mode);
     bool confirmDiscardEdits();
+    void presentTask(QDialog* editor, const QString& key={}, const QString& title={});
     QJsonObject nodeBookmark() const;
     void restoreNodeBookmark(const QJsonObject& value);
 signals:
@@ -81,6 +83,15 @@ private:
     PageRouter pageRouter_;
     // 工具窗口（S2）：按「工具+对象」复用并 raise，杜绝同一对象开出两个窗口。
     ToolWindowRegistry toolWindows_;
+    QStackedWidget* contentStack_=nullptr;
+    QHash<int,TaskWorkspace*> workspaces_;
+    QHash<QString,TaskWorkspace*> taskFamilies_;
+    TaskWorkspace* taskWorkspace();
+    TaskWorkspace* taskWorkspaceFor(const QString& family);
+    void showWorkspace(TaskWorkspace* workspace);
+    void returnFromWorkspace();
+    void openBackupTask(const QString& task);
+    void openProfileTask(const QString& id,const QString& task);
     // 打开工具窗口的唯一次入口；对象键为空表示单例工具。
     QWidget* showTool(const QString& tool, const QString& objectKey, const std::function<QWidget*()>& factory);
     static int stackIndex(int view);
@@ -125,7 +136,7 @@ private:
     QStackedWidget* profileStack_ = nullptr;
     QPointer<QWidget> profileDetailsPage_;
     QString profileDetailId_;
-    void selectGroup(const QString& group, bool nested = false); void enterSelectedGroup();
+    void selectGroup(QString group, bool nested = false); void enterSelectedGroup();
     AppController* controller_;
     bool trayAvailable_ = false, updating_ = false;
     bool hasDisplayedSettings_ = false;
@@ -199,6 +210,8 @@ private:
     QComboBox* logLevel_;
     QString selectedGroup_;
     QStringList groupHistory_;
+    QPointer<QDialog> groupEditor_;
+    QJsonObject revealedNodeFilters_;
     QListView* nodeList_ = nullptr;
     NodeRowModel* nodeRows_ = nullptr;   // 行列表模型（H3），由 nodeSection() 创建，父对象是窗口
     QListView* nodeCards_;

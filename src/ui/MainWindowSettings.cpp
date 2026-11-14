@@ -1,3 +1,5 @@
+#include "TaskDialog.h"
+#include "TaskWorkspace.h"
 #include "MainWindowParts.h"
 #include "ViewIds.h"
 
@@ -94,7 +96,7 @@ QWidget* MainWindow::settingsPage() {
 
     // —— 网络：TUN、系统代理排除、本地端口、连通测试地址 ——
     auto* tun=new QPushButton("管理…"); tun->setObjectName("manageTunService"); settingRow(networkRows,"TUN 虚拟网卡","权限服务、协议栈与严格路由",tun,false,QStringLiteral("未启用"),UiIcons::Glyph::Layers); connect(tun,&QPushButton::clicked,this,[this] { showTool("tun", {}, [this] { return new TunDialog(controller_,this); }); });
-    auto* bypass=new QPushButton("编辑…"); bypass->setObjectName("configureProxyBypass"); settingRow(networkRows,"系统代理排除","主机、IP与本地地址",bypass,false,{},UiIcons::Glyph::Globe); connect(bypass,&QPushButton::clicked,this,[this] { (new ProxyBypassDialog(controller_,this))->show(); });
+    auto* bypass=new QPushButton("编辑…"); bypass->setObjectName("configureProxyBypass"); settingRow(networkRows,"系统代理排除","主机、IP与本地地址",bypass,false,{},UiIcons::Glyph::Globe); connect(bypass,&QPushButton::clicked,this,[this] { showTool("bypass",{},[this] { return new ProxyBypassDialog(controller_,this); }); });
     mixedPort_ = new CompactSpinBox; mixedPort_->setObjectName("mixedPort"); mixedPort_->setFixedWidth(88); mixedPort_->setButtonSymbols(QAbstractSpinBox::NoButtons); mixedPort_->setToolTip("1024–65535；修改后重新校验和安全重启"); mixedPort_->setRange(1024,65535); settingRow(networkRows,"本地端口","HTTP / SOCKS5 共用，仅本机",mixedPort_,false,{},UiIcons::Glyph::Route);
     testUrl_ = new QLineEdit; testUrl_->setObjectName("connectivityTestUrl"); testUrl_->setToolTip("手动 HTTP 连通测试，5 秒超时，不表示所有目的地址可用"); settingRow(networkRows,"节点延迟测试地址","仅用于手动延迟测试",testUrl_,true,{},UiIcons::Glyph::Gauge);
 
@@ -114,7 +116,7 @@ QWidget* MainWindow::settingsPage() {
     for (const auto& format:QStringList{"PowerShell","CMD","sh"}) { auto* action=environment->addAction(format); action->setObjectName("copyProxyEnvironment"+format); connect(action,&QAction::triggered,this,[this,format] { const auto http=QString("http://127.0.0.1:%1").arg(controller_->settings().mixedPort), socks=QString("socks5://127.0.0.1:%1").arg(controller_->settings().mixedPort); QStringList lines; for (const auto& pair:QList<QPair<QString,QString>>{{"HTTP_PROXY",http},{"HTTPS_PROXY",http},{"ALL_PROXY",socks},{"NO_PROXY","localhost,127.0.0.1,::1"}}) lines.append(format=="PowerShell"?QString("$env:%1=\"%2\"").arg(pair.first,pair.second):format=="CMD"?QString("set \"%1=%2\"").arg(pair.first,pair.second):QString("export %1='%2'").arg(pair.first,pair.second)); QApplication::clipboard()->setText(lines.join('\n')); }); }
     auto* geo=toolsMenu->addAction("Geo 数据…"); geo->setObjectName("importGeoData"); geo->setToolTip("管理默认快照与运行文件，按需下载或本地导入"); connect(geo,&QAction::triggered,this,[this] { showTool("geo", {}, [this] { return new GeoDataDialog(controller_,this); }); });
     auto* preview=toolsMenu->addAction("当前激活配置（脱敏）…"); preview->setObjectName("previewActiveConfig"); connect(toolsMenu,&QMenu::aboutToShow,this,[this,preview] { preview->setEnabled(!controller_->settings().activeProfile.isEmpty()); });
-    connect(preview,&QAction::triggered,this,[this] { const QPointer<MainWindow> window(this); controller_->previewActiveConfig([window](Result result,QString text) { if (!window || !window->isVisible()) return; if (window->configPreview_) window->configPreview_->close(); auto* dialog=new QDialog(window); window->configPreview_=dialog; dialog->setObjectName("configPreview"); dialog->setWindowTitle("当前激活配置（脱敏，只读快照）"); dialog->setAttribute(Qt::WA_DeleteOnClose); dialog->resize(620,420); auto* layout=new QVBoxLayout(dialog); auto* content=new QPlainTextEdit(result.ok?text:result.error); content->setReadOnly(true); layout->addWidget(content); auto* buttons=new QDialogButtonBox(QDialogButtonBox::Close); layout->addWidget(buttons); connect(buttons,&QDialogButtonBox::rejected,dialog,&QDialog::reject); dialog->show(); }); });
+    connect(preview,&QAction::triggered,this,[this] { const QPointer<MainWindow> window(this); controller_->previewActiveConfig([window](Result result,QString text) { if (!window || !window->isVisible()) return; if (window->configPreview_) window->configPreview_->close(); auto* dialog=new TaskDialog(window); window->configPreview_=dialog; dialog->setObjectName("configPreview"); dialog->setWindowTitle("当前激活配置（脱敏，只读快照）"); dialog->setAttribute(Qt::WA_DeleteOnClose); dialog->resize(620,420); auto* layout=new QVBoxLayout(dialog); auto* content=new QPlainTextEdit(result.ok?text:result.error); content->setReadOnly(true); layout->addWidget(content); auto* buttons=new QDialogButtonBox(QDialogButtonBox::Close); layout->addWidget(buttons); connect(buttons,&QDialogButtonBox::rejected,dialog,&QDialog::reject); window->presentTask(dialog); }); });
     auto* coreDirectory=toolsMenu->addAction("内核目录"); connect(coreDirectory,&QAction::triggered,this,[this] { openDirectory(QFileInfo(controller_->settings().corePath).absolutePath()); });
     for (const auto& pair:QList<QPair<QAction*,QString>>{{geo,"IP 与域名分类库"},{preview,"当前运行配置"},{coreDirectory,"内核目录"}}) { auto* control=new QPushButton(pair.first==coreDirectory?"打开目录":pair.first==geo?"管理…":"查看…"); connect(control,&QPushButton::clicked,pair.first,&QAction::trigger); connect(pair.first,&QAction::changed,control,[control,action=pair.first] { control->setEnabled(action->isEnabled()); }); settingRow(coreRows,pair.second,pair.first==geo?"默认快照、来源及在线更新":pair.first==preview?"脱敏的只读快照":"当前配置的 mihomo 文件位置",control,false,{},pair.first==geo?UiIcons::Glyph::Globe:pair.first==preview?UiIcons::Glyph::Info:UiIcons::Glyph::Folder); }
     auto* logDirectory=new QPushButton("打开目录"); connect(logDirectory,&QPushButton::clicked,this,[this] { openDirectory(controller_->dataRoot()+"/logs"); }); settingRow(coreRows,"日志目录","有界运行记录",logDirectory,false,{},UiIcons::Glyph::Folder);
@@ -136,7 +138,7 @@ QWidget* MainWindow::settingsPage() {
 
     auto* scroll = new QScrollArea; scroll->setObjectName("settingsScroll"); scroll->setWidgetResizable(true); scroll->setFrameShape(QFrame::NoFrame); scroll->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
     auto* canvas=new QWidget; canvas->setObjectName("settingsCanvas"); auto* centering=new QHBoxLayout(canvas); centering->setContentsMargins(0,0,0,0); centering->addWidget(page,1,Qt::AlignTop); scroll->setWidget(canvas);
-    auto* surface=new QWidget; surface->setObjectName("settingsSurface"); auto* outer=new QVBoxLayout(surface); outer->setContentsMargins(0,0,0,0); outer->setSpacing(14);
+    auto* surface=new QWidget; surface->setObjectName("settingsSurface"); auto* outer=new QVBoxLayout(surface); outer->setContentsMargins(0,0,0,0); outer->setSpacing(8);
     // 只有检索：分类不再是页签，命中的行直接滚进视野。
     auto* header=new QHBoxLayout; header->setSpacing(12); header->addStretch(1);
     auto* locator=new SettingsSearch(page,scroll,surface); locator->setObjectName("settingsLocator"); locator->setMaximumWidth(470); header->addWidget(locator,0,Qt::AlignRight);
@@ -161,7 +163,7 @@ QWidget* MainWindow::settingsPage() {
     for (auto* combo:{logLevel_,ipv6Mode_,unifiedDelayMode_}) connect(combo,&QComboBox::currentIndexChanged,this,&MainWindow::updateActions);
     connect(mixedPort_,&QSpinBox::valueChanged,this,&MainWindow::updateActions); connect(corePath_,&QLineEdit::textChanged,this,&MainWindow::updateActions); connect(testUrl_,&QLineEdit::textChanged,this,&MainWindow::updateActions);
     settingsStack_=new QStackedWidget; settingsStack_->setObjectName("settingsTaskStack");
-    settingsDirectory_=new QWidget; settingsDirectory_->setObjectName("settingsDirectory"); auto* directory=new QVBoxLayout(settingsDirectory_); directory->setContentsMargins(0,0,0,18); directory->setSpacing(8);
+    settingsDirectory_=new QWidget; settingsDirectory_->setObjectName("settingsDirectory"); auto* directory=new QVBoxLayout(settingsDirectory_); directory->setContentsMargins(0,0,0,12); directory->setSpacing(6);
     using namespace PrototypeUi; using G=UiIcons::Glyph;
     auto* appearanceRows=group(directory);
     const auto choice=[this](QVBoxLayout* rows,const QString& name,const QString& title,G glyph,QComboBox* combo) {
@@ -182,12 +184,13 @@ QWidget* MainWindow::settingsPage() {
     auto* tunRow=row(network,"settingsTunRow","TUN 虚拟网卡",G::Layers); connect(tunRow,&QPushButton::clicked,tun,&QPushButton::click);
     connect(controller_,&AppController::stateChanged,tunRow,[this,tunRow] { tunRow->setValue(controller_->state().tunObserved?"已启用":"未启用"); }); tunRow->setValue(controller_->state().tunObserved?"已启用":"未启用");
     auto* bypassRow=row(network,"settingsBypassRow","系统代理排除",G::Globe); connect(bypassRow,&QPushButton::clicked,bypass,&QPushButton::click);
-    auto* dnsRow=row(network,"settingsDnsRow","DNS 设置",G::Globe,{},"当前使用的配置"); connect(dnsRow,&QPushButton::clicked,this,[this] { const auto id=controller_->state().activeProfile; if (id.isEmpty()) { navigate(Route{ViewIds::Profiles}); return; } showTool("dns",id,[this,id] { return new DnsDialog(controller_,id,this); }); });
-    auto* maintain=group(directory,"维护与数据"); taskRow(maintain,"settingsCoreRow","内核管理",G::Layers,"core"); taskRow(maintain,"settingsBackupRow","备份与恢复",G::Folder,"backup");
+    auto* dnsRow=row(network,"settingsDnsRow","DNS 设置",G::Globe,{},"当前使用的配置"); connect(dnsRow,&QPushButton::clicked,this,[this] { const auto id=controller_->state().activeProfile; if (id.isEmpty()) { navigate(Route{ViewIds::Profiles}); return; } navigate(Route{ViewIds::Profiles}); showProfileDetails(id); openProfileTask(id,"dns"); });
+    auto* maintain=group(directory,"维护与数据"); auto* coreTask=row(maintain,"settingsCoreRow","内核管理",G::Layers); connect(coreTask,&QPushButton::clicked,this,[this] { showTool("core-update",{},[this] { return new CoreUpdateDialog(controller_,this); }); });
+    auto* backupTask=row(maintain,"settingsBackupRow","备份与恢复",G::Folder); connect(backupTask,&QPushButton::clicked,this,[this] { openBackupTask("create"); });
     auto* geoRow=row(maintain,"settingsGeoRow","Geo 数据",G::Globe); connect(geoRow,&QPushButton::clicked,geo,&QAction::trigger);
     auto* diagnostics=row(maintain,"settingsDiagnosticsRow","诊断",G::Gauge); connect(diagnostics,&QPushButton::clicked,this,&MainWindow::showOutboundDiagnostics);
     taskRow(maintain,"settingsToolsRow","文件与其他工具",G::Folder,"tools");
-    auto* aboutRows=group(directory,"关于"); auto* about=row(aboutRows,"settingsAboutRow","Mlash",G::Info,MLASH_VERSION); connect(about,&QPushButton::clicked,this,[this] { QMessageBox::about(this,"关于 Mlash","Mlash " MLASH_VERSION "\nQt " QT_VERSION_STR "\nMihomo 内核的 Windows 图形客户端。"); }); directory->addStretch(1);
+    auto* aboutRows=group(directory,"关于"); auto* about=row(aboutRows,"settingsAboutRow","Mlash",G::Info,MLASH_VERSION); connect(about,&QPushButton::clicked,this,[this] { auto* task=new TaskDialog(this); task->setWindowTitle("关于 Mlash"); task->setObjectName("aboutTask"); auto* box=new QVBoxLayout(task); auto* text=new QLabel("Mlash " MLASH_VERSION "\nQt " QT_VERSION_STR "\nMihomo 图形客户端"); text->setWordWrap(true); box->addWidget(text); box->addStretch(); presentTask(task,"about"); }); directory->addStretch(1);
     auto* directoryScroll=new QScrollArea; directoryScroll->setObjectName("settingsDirectoryScroll"); directoryScroll->setFrameShape(QFrame::NoFrame); directoryScroll->setWidgetResizable(true); directoryScroll->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff); directoryScroll->setWidget(settingsDirectory_);
     settingsStack_->addWidget(directoryScroll); settingsStack_->addWidget(surface);
     // Reuse the original single edit session; only its presentation moves behind directory tasks.
@@ -204,8 +207,20 @@ QWidget* MainWindow::settingsPage() {
     settingsStack_->setCurrentIndex(0);
     return settingsStack_;
 }
+void MainWindow::openBackupTask(const QString& task) {
+    auto* workspace=taskWorkspaceFor("backup");
+    const QList<TaskWorkspace::Task> tasks{
+        {"backup:create","创建备份",[this] { showTool("backup","create",[this] { return new BackupDialog(controller_,false,this); }); }},
+        {"backup:restore","恢复备份",[this] { showTool("backup","restore",[this] { return new BackupDialog(controller_,true,this); }); }},
+        {"backup:plan","自动备份",[this] { showTool("local-backup",{},[this] { return new LocalBackupDialog(controller_,this); }); }},
+        {"backup:webdav","WebDAV",[this] { showTool("remote-backup",{},[this] { return new RemoteBackupDialog(controller_,this); }); }}
+    };
+    if (workspace->configure("settings","备份与恢复",tasks,[this] { returnFromWorkspace(); })) workspace->select("backup:"+task);
+}
 void MainWindow::openSettingsTask(const QString& task) {
     if (!settingsStack_) return;
+    if (task=="core") { showTool("core-update",{},[this] { return new CoreUpdateDialog(controller_,this); }); return; }
+    if (task=="backup") { openBackupTask("create"); return; }
     if (!settingsTask_.isEmpty()&&settingsTask_!=task&&task!="all"&&settingsDirty()) {
         if (QMessageBox::question(this,"未保存的修改","放弃尚未应用的网络设置，进入其他设置？",QMessageBox::Yes|QMessageBox::No,QMessageBox::No)!=QMessageBox::Yes) return;
         resetSettingsDraft();

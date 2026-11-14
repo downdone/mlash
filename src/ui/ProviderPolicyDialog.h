@@ -1,8 +1,8 @@
 #pragma once
-#include <QDialog>
+#include "TaskDialog.h"
 #include "app/AppController.h"
 namespace mlash {
-class ProviderPolicyDialog final : public QDialog {
+class ProviderPolicyDialog final : public TaskDialog {
 public:
     ProviderPolicyDialog(AppController* controller,const QString& profileId,const QJsonObject& provider,QWidget* parent=nullptr);
     void reject() override;

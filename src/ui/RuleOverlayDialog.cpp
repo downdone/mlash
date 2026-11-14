@@ -1,3 +1,5 @@
+#include "TaskWorkspace.h"
+#include "TaskDialog.h"
 #include "DialogDraftGuard.h"
 #include "RuleOverlayDialog.h"
 #include "RuleCellDelegate.h"
@@ -18,7 +20,7 @@
 #include <QVBoxLayout>
 
 namespace mlash {
-RuleOverlayDialog::RuleOverlayDialog(AppController* controller, const QString& profileId, QWidget* parent,const QJsonObject& draft) : QDialog(parent), controller_(controller), id_(profileId) {
+RuleOverlayDialog::RuleOverlayDialog(AppController* controller, const QString& profileId, QWidget* parent,const QJsonObject& draft) : TaskDialog(parent), controller_(controller), id_(profileId) {
     setAttribute(Qt::WA_DeleteOnClose); setObjectName("ruleOverlayDialog"); setWindowTitle("完整规则编辑"); resize(720,440);
     Profile profile; for (const auto& item : controller_->profiles()) if (item.id == id_) profile = item; savedDisabled_ = profile.disabledRules;
     savedPrepend_=profile.customRules; savedAppend_=profile.appendRules; expected_=RuleDraft::snapshot(profile); setWindowTitle("完整规则编辑 · "+profile.name);
@@ -78,7 +80,7 @@ void RuleOverlayDialog::editProviderDefinition(bool adding) {
     if (!loaded_||saving_||controller_->state().busy) return; QString name; QJsonObject initial;
     if (!adding) { const auto* item=providerDefinitions_->item(providerDefinitions_->currentRow(),0); if (!item) return; name=item->data(Qt::UserRole).toString(); initial=providerEdits_.value(name).isObject()?providerEdits_.value(name).toObject():sourceProviderDefinitions_.value(name).toObject(); }
     QSet<QString> occupied; for (auto it=sourceProviderDefinitions_.begin();it!=sourceProviderDefinitions_.end();++it) occupied.insert(it.key()); for (auto it=providerEdits_.begin();it!=providerEdits_.end();++it) occupied.insert(it.key());
-    auto* dialog=new ProviderDefinitionDialog(name,initial,occupied,targets_,prepend_->rowCount()+append_->rowCount()<256,this); connect(dialog,&QDialog::accepted,this,[this,dialog] { auto next=providerEdits_; next[dialog->providerName()]=dialog->definition(); const auto valid=validateRuleProviderEdits(next); if (!valid.ok) { operationError_=valid.error; updateSave(); return; } providerEdits_=next; operationError_.clear(); if (dialog->addReference()) appendRule(prepend_,"RULE-SET,"+dialog->providerName()+','+dialog->target()); rebuildProviderDefinitions(); updateSave(); }); dialog->open();
+    auto* dialog=new ProviderDefinitionDialog(name,initial,occupied,targets_,prepend_->rowCount()+append_->rowCount()<256,this); connect(dialog,&QDialog::accepted,this,[this,dialog] { auto next=providerEdits_; next[dialog->providerName()]=dialog->definition(); const auto valid=validateRuleProviderEdits(next); if (!valid.ok) { operationError_=valid.error; updateSave(); return; } providerEdits_=next; operationError_.clear(); if (dialog->addReference()) appendRule(prepend_,"RULE-SET,"+dialog->providerName()+','+dialog->target()); rebuildProviderDefinitions(); updateSave(); }); presentTaskDialog(dialog);
 }
 QTableWidget* RuleOverlayDialog::editableTable(const QString& name, const QStringList& definitions) {
     auto* table=new QTableWidget(0,4); table->setObjectName(name); table->setHorizontalHeaderLabels({"类型","匹配内容","目标策略","选项"}); table->verticalHeader()->hide(); table->setSelectionBehavior(QAbstractItemView::SelectRows); table->setSelectionMode(QAbstractItemView::SingleSelection); table->horizontalHeader()->setSectionResizeMode(1,QHeaderView::Stretch); table->setColumnWidth(0,145); table->setColumnWidth(2,120); table->setColumnWidth(3,95); for (const auto& rule : definitions) appendRule(table,rule); return table;

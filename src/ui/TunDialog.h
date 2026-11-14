@@ -1,9 +1,9 @@
 #pragma once
 #include "app/AppController.h"
-#include <QDialog>
+#include "TaskDialog.h"
 class QLabel; class QPushButton; class QComboBox; class QCheckBox; class QPlainTextEdit; class QSpinBox;
 namespace mlash {
-class TunDialog final : public QDialog {
+class TunDialog final : public TaskDialog {
     Q_OBJECT
 public:
     explicit TunDialog(AppController* controller,QWidget* parent=nullptr);

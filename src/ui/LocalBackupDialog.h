@@ -1,9 +1,9 @@
 #pragma once
 #include "app/AppController.h"
-#include <QDialog>
+#include "TaskDialog.h"
 class QCheckBox; class QSpinBox; class QLineEdit; class QPushButton; class QLabel; class QTableWidget;
 namespace mlash {
-class LocalBackupDialog final : public QDialog {
+class LocalBackupDialog final : public TaskDialog {
     Q_OBJECT
 public:
     explicit LocalBackupDialog(AppController* controller,QWidget* parent=nullptr);

@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.24)
-project(Mlash VERSION 1.18.0 LANGUAGES C CXX)
+project(Mlash VERSION 1.19.0 LANGUAGES C CXX)
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_AUTOMOC ON)
@@ -91,6 +91,7 @@ endif()
 add_library(mlash_ui STATIC src/ui/Route.h src/ui/Route.cpp src/ui/ViewIds.h src/ui/ViewIds.cpp src/ui/StatusSentence.h src/ui/StatusSentence.cpp src/ui/FeedbackSync.h src/ui/FeedbackSync.cpp src/ui/PageLifecycle.h src/ui/PageLifecycle.cpp src/ui/ToolWindowRegistry.h src/ui/ToolWindowRegistry.cpp src/ui/StatusShape.h src/ui/StatusShape.cpp src/ui/SkeletonBlock.h src/ui/SkeletonBlock.cpp src/ui/UsageDelegate.h src/ui/UsageDelegate.cpp src/ui/MenuSection.h src/ui/ContextNote.h src/ui/SettingsSearch.h src/ui/SettingsSearch.cpp src/ui/CompactSpinBox.h src/ui/MainWindow.h src/ui/MainWindow.cpp src/ui/MainWindowHome.cpp src/ui/MainWindowSettings.cpp src/ui/MainWindowProxy.cpp src/ui/MainWindowProfiles.cpp src/ui/MainWindowParts.h src/ui/NodeFilter.cpp
     src/ui/ProviderDefinitionDialog.h src/ui/YamlFormEditor.h src/ui/YamlFormEditor.cpp
     src/ui/ConnectionDetailsDialog.h src/ui/ConnectionDetailsDialog.cpp src/ui/ProviderDefinitionDialog.cpp src/ui/ProviderPolicyDialog.cpp
+    src/ui/TaskWorkspace.h src/ui/TaskWorkspace.cpp
     src/ui/DialogDraftGuard.h src/ui/DialogDraftGuard.cpp
     src/ui/ProfileChangesDialog.h src/ui/ProfileChangesDialog.cpp
     src/ui/TunDialog.h src/ui/TunDialog.cpp
@@ -165,6 +166,10 @@ if(BUILD_TESTING)
     set_tests_properties(engine PROPERTIES TIMEOUT 90 ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
     add_test(NAME gui_smoke COMMAND Mlash --smoke-test --data-dir "${CMAKE_BINARY_DIR}/smoke-data")
     set_tests_properties(gui_smoke PROPERTIES TIMEOUT 15 ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
+    add_executable(mlash_flat_workspace_tests tests/FlatWorkspaceTests.cpp)
+    target_link_libraries(mlash_flat_workspace_tests PRIVATE mlash_ui Qt6::Test)
+    add_test(NAME flat_workspace_tests COMMAND mlash_flat_workspace_tests -o "${CMAKE_BINARY_DIR}/flat-workspace-tests.xml,xml")
+    set_tests_properties(flat_workspace_tests PROPERTIES TIMEOUT 45 ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
     add_executable(mlash_ui_tests tests/UiTests.cpp tests/MockHttp.cpp)
     add_executable(mlash_workflow_depth_tests tests/WorkflowDepthTests.cpp tests/MockHttp.cpp)
     target_link_libraries(mlash_workflow_depth_tests PRIVATE mlash_ui Qt6::Test)

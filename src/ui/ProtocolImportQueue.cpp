@@ -8,6 +8,6 @@ void ProtocolImportQueue::process() {
     if (!initialized_||dialog_||pending_.isEmpty()||controller_->state().busy||controller_->state().exiting||controller_->state().readOnly) return;
     gui_->show(1); if (!gui_->window()) return; const auto next=pending_.dequeue(); dialog_=new ImportDialog(gui_->window()); auto* dialog=dialog_.data(); dialog->setAttribute(Qt::WA_DeleteOnClose); dialog->setProtocolSource(next.value("url").toString(),next.value("name").toString());
     dialog->bindController(controller_);
-    connect(dialog,&QObject::destroyed,this,[this] { dialog_=nullptr; QTimer::singleShot(0,this,[this] { process(); }); }); dialog->open();
+    connect(dialog,&QObject::destroyed,this,[this] { dialog_=nullptr; QTimer::singleShot(0,this,[this] { process(); }); }); gui_->window()->presentTask(dialog,"protocol-import","确认导入");
 }
 }

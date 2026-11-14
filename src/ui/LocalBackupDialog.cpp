@@ -1,3 +1,5 @@
+#include "TaskWorkspace.h"
+#include "TaskDialog.h"
 #include "LocalBackupDialog.h"
 #include "ContextNote.h"
 #include "BackupDialog.h"
@@ -22,7 +24,7 @@
 
 namespace mlash {
 LocalBackupDialog::LocalBackupDialog(AppController* controller,QWidget* parent)
-    :QDialog(parent),controller_(controller),saved_(controller->settings().localBackup) {
+    :TaskDialog(parent),controller_(controller),saved_(controller->settings().localBackup) {
     setAttribute(Qt::WA_DeleteOnClose); setObjectName("localBackupDialog");
     setWindowTitle("本地备份与保护"); resize(660,540);
     auto* outer=new QVBoxLayout(this); auto* scroll=new QScrollArea; scroll->setFrameShape(QFrame::NoFrame); scroll->setWidgetResizable(true); auto* surface=new QWidget; auto* layout=new QVBoxLayout(surface); layout->setContentsMargins(0,0,0,0); scroll->setWidget(surface); outer->addWidget(scroll,1);
@@ -66,7 +68,7 @@ LocalBackupDialog::LocalBackupDialog(AppController* controller,QWidget* parent)
     connect(directory,&QPushButton::clicked,this,[this] { QDesktopServices::openUrl(QUrl::fromLocalFile(controller_->dataRoot()+"/backups/local")); });
     connect(restore_,&QPushButton::clicked,this,[this] {
         const auto row=files_->currentRow(); if (row<0) return;
-        auto* dialog=new BackupDialog(controller_,true,this); dialog->setBackupPath(files_->item(row,0)->data(Qt::UserRole).toString()); dialog->show();
+        auto* dialog=new BackupDialog(controller_,true,this); dialog->setBackupPath(files_->item(row,0)->data(Qt::UserRole).toString()); presentTaskDialog(dialog);
     });
     connect(controller_,&AppController::operationFinished,this,[this](bool ok,const QString& message) {
         if (!saving_&&!working_) return;

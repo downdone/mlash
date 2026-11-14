@@ -1,9 +1,9 @@
 #pragma once
 #include "app/AppController.h"
-#include <QDialog>
+#include "TaskDialog.h"
 class QLineEdit; class QComboBox; class QSpinBox; class QCheckBox; class QPushButton; class QLabel; class QTableWidget;
 namespace mlash {
-class RemoteBackupDialog final:public QDialog {
+class RemoteBackupDialog final:public TaskDialog {
     Q_OBJECT
 public:
     RemoteBackupDialog(AppController* controller,QWidget* parent=nullptr);

@@ -10,7 +10,7 @@
 #include <QDialogButtonBox>
 #include <QDateTime>
 namespace mlash {
-GeoDataDialog::GeoDataDialog(AppController* controller,QWidget* parent) : QDialog(parent),controller_(controller) {
+GeoDataDialog::GeoDataDialog(AppController* controller,QWidget* parent) : TaskDialog(parent),controller_(controller) {
     setObjectName("geoDataDialog"); setAttribute(Qt::WA_DeleteOnClose); setWindowTitle("Geo 数据"); resize(720,420); auto* layout=new QVBoxLayout(this);
     layout->addWidget(contextNote("更新后重新加载订阅生效。","在线更新从 MetaCubeX GitHub 发布资产直连下载，经内核校验后保存为默认快照。当前运行文件保持不变；重新加载订阅后使用，来源自定义 Geo 地址优先。"));
     auto* toolbar=new QHBoxLayout; file_=new CompactComboBox; file_->setObjectName("geoUpdateFile"); file_->addItems({"country.mmdb","geoip.dat","geosite.dat","asn.mmdb"}); toolbar->addWidget(file_); update_=new QPushButton("下载更新"); update_->setObjectName("updateGeoData"); toolbar->addWidget(update_); import_=new QPushButton("导入本地…"); toolbar->addWidget(import_); toolbar->addStretch(); refresh_=new QPushButton("刷新列表"); toolbar->addWidget(refresh_); layout->addLayout(toolbar);
