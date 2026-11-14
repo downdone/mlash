@@ -90,4 +90,3 @@
 - 截图复核（`mlash_appearance_tests allPagesAndDialogsAcrossAppearances`，light/dark × 三个尺寸）：订阅、规则、连接、日志、网站测试的页签行位置一致；首页从控制区首行开始、无页签；设置页分类页签仍在内容区首行。
 
 **未验**：真实 Windows 实机的 Alt+Tab/任务栏标题、人工读屏、页签行的键盘焦点顺序（R9 焦点环统一时复核）。
-

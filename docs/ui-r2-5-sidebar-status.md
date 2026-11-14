@@ -114,4 +114,3 @@ Mlash · <line1>
 **偏差说明**：设计稿曾写 `StatusSentence` 携带 `QColor`，实现改为 `QString accent` 角色名，由 `MainWindow` 映射到 `UiTheme::Success/Warning/Error/Secondary`——保持 `statusSentence` 不依赖 Qt 绘制、便于托盘复用与测试比较。
 
 **未验**：真实 Windows 实机的托盘 tooltip 显示、人工读屏、120% 文字下的实际换行（自动测试仅覆盖 840×560 默认字号）。
-

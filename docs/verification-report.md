@@ -2,6 +2,15 @@
 
 本文只记录实际结果，区分本轮执行、历史匿名汇总与尚未验证的资格。原始配置、私人环境、真实订阅及原始诊断不进入公开文档。
 
+## R18 GitHub 发布与远端核验（2026-11-14）
+
+- 当前 UI 与 1.18.0 经 [PR #4](https://github.com/downdone/mlash/pull/4) 合入 main，合入提交 `0fa2eb79e5f47acb1e59b24fef10d3d6c92ca7cd`。发布标签 `v1.18.0` 绑定 `d6cfc9c48a85c3fac20346178e614ead97f38812`，是 main 的祖先，代码树与合入结果一致；不移动已发布标签。
+- [PR 验证](https://github.com/downdone/mlash/actions/runs/43559478390)、[正式预发布链](https://github.com/downdone/mlash/actions/runs/43560411319) 和 [main 推送验证](https://github.com/downdone/mlash/actions/runs/43560939108) 均成功。公共 Qt/MinGW 构建、默认隔离回归、便携包、原生启动/TLS、图标、源码归档及上传均通过。PR 回归 469.18 秒，发布回归 418.46 秒；两者均为 44 组、43 通过、0 失败、1 系统门禁跳过。
+- [GitHub v1.18.0](https://github.com/downdone/mlash/releases/tag/v1.18.0) 已确认 `draft=false`、`prerelease=true`；八个附件均为 uploaded。通过 GitHub API 再核对标签与构建提交。
+- 发布后重新下载便携 ZIP、两份源码 ZIP、三个 SHA256 侧车、source.json、package-verification.json。网络连接中断经断点续传完成；最终各 ZIP 字节摘要与侧车、GitHub 存储摘要、来源清单及 CI 验证 JSON 一致。便携 ZIP SHA256：`efbe19469f4818f224b5cad1695a2009cdf88dd7f26553217ef63ca5a57dd2c8`，34 文件清单/完整性通过；源码文档隐私检查零命中，来源提交与固定内核一致。
+- 初次登录的授权不足以修改工作流文件，因此将字体目录设置放入现有测试脚本，在没有显式覆盖时选择系统字体，退出恢复环境；工作流文件未改，未扩大账户权限。测试入口已本地验证，三个线上运行均实际使用同一入口。
+- 本机商业 SDK 的旧包没有上传；公开附件来自公共工具链的发布流水线。`release_qualified=false`、未签名，真实 Windows 10/11 系统代理/TUN/登录恢复、干净部署、长期稳定性与完整第三方材料验收仍按发布门禁保留。本次成功仅声明上述预发布范围。
+
 ## R18：1.18.0 提交与预发布准备（2026-11-14）
 
 - 更新 CMake、产品入口说明、CHANGELOG 和版本发布说明为 1.18.0；保留历史验证事实。现有 Windows 工作流调用的测试脚本补上系统字体目录，再执行原默认隔离测试，不增加系统写入或放宽超时。

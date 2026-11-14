@@ -99,5 +99,3 @@ void operationFinished(bool ok, const QString& message, OperationId id = Operati
 - 真实 Windows 托盘气泡与页面提示同时出现时的观感；
 - 读屏对两段状态栏的播报顺序；
 - 21 个对话框内部 hint 是否还有重复（它们保持 `Unspecified`，本次未逐个复核）。
-
-
