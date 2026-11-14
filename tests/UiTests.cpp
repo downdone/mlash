@@ -576,7 +576,9 @@ private slots:
             MainWindow window(&controller); window.resize(840,560); window.show(); window.setPage(2); window.setMemberView(1); QCoreApplication::processEvents(); QCoreApplication::sendPostedEvents(nullptr,QEvent::LayoutRequest); QCoreApplication::processEvents();
             QCOMPARE(window.size(),QSize(840,560));
             QList<QPair<QString,QRect>> rectangles;
-            // H3 的标题行：订阅、搜索、测速与「更多」在同一行里横向排开（WrapLayout 窄屏会换行），
+            // U12：搜索默认收起，明确展开后检查紧凑工具排。
+            auto* searchToggle=window.findChild<QToolButton*>("nodeSearchToggle"); QVERIFY(searchToggle&&searchToggle->isVisible()); searchToggle->click(); QCoreApplication::processEvents();
+            // 分组、搜索、测速与更多仍须处于容器内且互不压叠。
             // 约束是「都在标题行容器内、彼此不压叠」——窗口坐标受首页滚动影响，不是稳定判据。
             auto* heading=window.findChild<QWidget*>("nodeHeading"); QVERIFY(heading);
             for (const auto& name:{"browseGroup","nodeSearch","nodeTestButton","nodeToolsButton"}) {
@@ -587,7 +589,9 @@ private slots:
             }
             for (const auto& name:{"nodeRegion","nodeProtocol","nodeHealth","nodeMaximumDelay","nodeFavoritesOnly"} ) QVERIFY2(window.findChild<QWidget*>(name),qPrintable(QString("missing %1").arg(name)));
             for (int i=0;i<rectangles.size();++i) for (int j=i+1;j<rectangles.size();++j) QVERIFY2(!rectangles[i].second.intersects(rectangles[j].second),qPrintable(rectangles[i].first+" intersects "+rectangles[j].first));
-            QVERIFY(window.findChild<QListView*>("nodeCards")->viewport()->height()>=108);
+            auto* cards=window.findChild<QListView*>("nodeCards"); QVERIFY(cards);
+            QVERIFY(cards->viewport()->height()>=cards->gridSize().height());
+            for (int row=0;row<cards->model()->rowCount();++row) QVERIFY(cards->viewport()->rect().contains(cards->visualRect(cards->model()->index(row,0))));
             const auto output=qEnvironmentVariable("MLASH_UI_SCREENSHOTS"); if (!output.isEmpty()) { QDir().mkpath(output); QVERIFY(window.grab().save(output+"/refined-automatic-long-120.png")); }
         }
         state.ready=false;
@@ -637,7 +641,7 @@ private slots:
         QTRY_VERIFY_WITH_TIMEOUT(target->findData("GLOBAL")>=0, 5000); QVERIFY(!window.findChild<QPushButton*>("saveCustomRules")->isEnabled()); QCOMPARE(finished.size(),0); QVERIFY(!editor->isReadOnly()); QVERIFY(editor->toPlainText().contains("自定义组"));
         window.setPage(6); window.findChild<QPushButton*>("settingsNetworkRow")->click(); auto* apply=window.findChild<QPushButton*>("applySettings"); QVERIFY(apply->isVisible()); QVERIFY(!apply->isEnabled()); auto* port=window.findChild<QSpinBox*>("mixedPort"); port->setValue(port->value()+1); QVERIFY(apply->isEnabled()); auto* reset=window.findChild<QPushButton*>("discardNetworkSettings"); QVERIFY(reset&&reset->isVisible()); reset->click(); QCOMPARE(port->value(),settings.mixedPort); QVERIFY(!apply->isVisible()); QCOMPARE(finished.size(),0);
         window.findChild<QPushButton*>("settingsNetworkRow")->click(); port->setValue(port->value()+1); QVERIFY(apply->isVisible()); QVERIFY(window.rect().contains(apply->mapTo(&window,apply->rect().bottomRight())));
-        window.setPage(4); QVERIFY(window.findChild<QToolButton*>("closeAllConnectionsButton")->isVisible()); QVERIFY(window.findChild<QToolButton*>("connectionDetailsButton")->isVisible()); QVERIFY(!window.findChild<QToolButton*>("connectionDetailsButton")->isEnabled()); QVERIFY(!window.findChild<QAction*>("defaultConnectionOrder")->isEnabled());
+        window.setPage(4); QVERIFY(window.findChild<QToolButton*>("closeAllConnectionsButton")->isVisible()); QVERIFY(!window.findChild<QToolButton*>("connectionDetailsButton")->isVisible()); auto* detailsAction=window.findChild<QAction*>("connectionDetailsAction"); QVERIFY(detailsAction); QVERIFY(!detailsAction->isEnabled()); QVERIFY(!window.findChild<QAction*>("defaultConnectionOrder")->isEnabled());
         const auto output=qEnvironmentVariable("MLASH_UI_SCREENSHOTS"); if (!output.isEmpty()) { window.setPage(3); QVERIFY(window.grab().save(output+"/rules-bilingual.png")); window.setPage(6); QVERIFY(window.grab().save(output+"/settings-footer.png")); }
         QSignalSpy exited(&controller,&AppController::exitReady); controller.requestExit(); QTRY_COMPARE(exited.size(),1);
     }

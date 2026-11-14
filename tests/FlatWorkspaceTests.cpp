@@ -194,6 +194,12 @@ private slots:
         QJsonArray shortMembers; for (int i=0;i<6;++i) shortMembers.append(members[i]);
         proxies["示例组"]=QJsonObject{{"type","Selector"},{"all",shortMembers},{"now","JP 日本"}}; controller.proxiesChanged(); QTest::qWait(30);
         QVERIFY(densityNodes->viewport()->mapTo(&window,QPoint()).y()<=220); snapshot(&window,"home-short");
+        proxies["示例组"]=QJsonObject{{"type","URLTest"},{"all",QJsonArray{members[0],members[1]}},{"now","JP 日本"}}; controller.proxiesChanged();
+        UiTheme::setPreferences("light",120); window.resize(840,560); window.setMemberView(1);
+        auto* searchToggle=window.findChild<QToolButton*>("nodeSearchToggle"); searchToggle->click(); QTest::qWait(30);
+        auto* cards=window.findChild<QListView*>("nodeCards"); QVERIFY(cards->viewport()->height()>=cards->gridSize().height());
+        for (int i=0;i<cards->model()->rowCount();++i) QVERIFY(cards->viewport()->rect().contains(cards->visualRect(cards->model()->index(i,0))));
+        snapshot(&window,"compact-card-search"); searchToggle->click(); window.setMemberView(0); UiTheme::setPreferences("dark",100); window.resize(1040,720);
         proxies["示例组"]=QJsonObject{{"type","Selector"},{"all",members},{"now","JP 日本"}}; controller.proxiesChanged();
         window.setPage(1);
         auto* list=window.findChild<QListView*>("localProfileList"); const auto index=list->model()->index(0,0); QVERIFY(index.isValid());
