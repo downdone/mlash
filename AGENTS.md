@@ -50,3 +50,7 @@ Never claim Windows 10, clean-machine deployment, 72-hour stability or performan
 Use `scripts/build.ps1`, `scripts/test.ps1`, `scripts/package.ps1`.
 No tests may change the user's system proxy by default. Explicit `--system-proxy-test` is reserved for a controlled test VM.
 Prefer meaningful failure/rollback/cancellation tests to implementation-mirroring tests.
+
+## Platform-scoped publication
+
+User-authorized policy: on a Windows development machine require Windows checks only; on macOS require macOS checks only. Push directly without waiting for PR or cross-platform CI approval. Release records must distinguish checks actually run from skipped platform checks. Windows distributable builds, package smoke checks and asset integrity validation still run to produce verified artifacts.

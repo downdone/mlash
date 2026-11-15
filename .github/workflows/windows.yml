@@ -11,6 +11,11 @@ on:
         description: '发布预发布版本，例如 v1.17.1；必须匹配 CMake 版本'
         required: true
         type: string
+      run_windows_regression:
+        description: '执行 Windows 完整回归；macOS 开发且本机检查已通过时可关闭，发布记录必须注明平台'
+        required: true
+        default: true
+        type: boolean
 
 permissions:
   contents: read
@@ -51,6 +56,7 @@ jobs:
       - name: Build
         run: ./scripts/build.ps1 -Preset windows-ci
       - name: Default isolated regression tests
+        if: github.event_name != 'workflow_dispatch' || inputs.run_windows_regression
         run: ./scripts/test.ps1 -Preset windows-ci
       - name: Package and isolated native smoke
         run: |
