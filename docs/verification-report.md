@@ -2,6 +2,18 @@
 
 本文只记录实际结果，区分本轮执行、历史匿名汇总与尚未验证的资格。原始配置、私人环境、真实订阅及原始诊断不进入公开文档。
 
+## R19：GitHub 1.19.0 发布与附件复核（2026-11-15）
+
+按用户明确授权的平台验收规则，直接将提交推送 main，不等待 PR/跨平台审批。[PR #5](https://github.com/downdone/mlash/pull/5) 因提交进入主分支标为 merged。发布标签 v1.19.0 固定到 `8b838c0c509dfeb9f8b99ee68fd217f1d88d5a6f`，后续文档提交不移动标签。
+
+此前[第三轮 PR 检查](https://github.com/downdone/mlash/actions/runs/43616168211) 实际通过：45 组为 44 通过、0 失败、1 系统门禁跳过（474.47 秒），Windows 编译、34 文件便携部署、八页原生冒烟/Schannel、图标与源码附件检查通过。取得原始 XML 与八页截图，未将自动化当成人工/系统写入验收。
+
+[实际发布链](https://github.com/downdone/mlash/actions/runs/43670447421) 使用 main 的上述提交，以 run_windows_regression=false 手动触发；Windows 全量步骤明确 skipped，Windows 编译、package.ps1 部署、包内冒烟、图标与来源/完整性检查全部成功，build/publish 两 job 通过。此发布链不声明 Windows 全量回归通过；该证据属于上一条 PR 检查。
+
+[GitHub v1.19.0](https://github.com/downdone/mlash/releases/tag/v1.19.0) 已公开（draft=false、prerelease=true、latest=false），八个附件均 uploaded。重新下载全部附件至忽略的 `dist/Mlash-1.19.0-release-assets/`；逐项检查字节大小、GitHub digest、三份 ZIP 的 CRC/SHA256 及侧车。源码清单、Mlash 归档内版本/实际实现、固定内核提交与哈希、34 文件白名单与包内逐文件完整性、运行指纹及 package-verification.json 一致。标签 API 回读为同一来源提交。便携 ZIP SHA256 为 `5c010b8d28b9eba38854dce098f72f830bd02a895a4232f4925c190010ceb881`；下载源码/便携包共 125 份文档隐私检查零命中。
+
+原始发布日志与复核报告在 `build/r19-release.log`、`build/r19-asset-verification.json`，不随源码分发。发布来自公共 Windows 工具链，本机旧 macOS 预览包未上传。保留 prerelease、release_qualified=false 和未签名边界；真实 Windows 系统代理/TUN/登录恢复、干净部署、人工读屏及长期资格仍未完成。
+
 ## R19：1.19.0 发布准备（2026-11-14）
 
 用户授权发布到 GitHub Releases。汇总 U12/U13，更新 CMake、入口版本、变更记录和 1.19.0 发布说明；依赖、固定内核及发行工作流保持不变。Inspector 关闭后边距的旧测试同步使用当前 ContentTop，保留几何恢复断言。版本/发布标签检查、文档导航/隐私/UI token、四项文档工具和十七项发布工具检查通过。
