@@ -11,6 +11,15 @@
 #include <QWidget>
 #include <QFontDatabase>
 
+static QString bundledFontFamily() {
+    static const QString family=[] {
+        Q_INIT_RESOURCE(fonts);
+        const int id=QFontDatabase::addApplicationFont(":/fonts/NotoSansSC-variable.ttf");
+        return id>=0 ? QFontDatabase::applicationFontFamilies(id).value(0) : QString{};
+    }();
+    return family;
+}
+
 namespace mlash::UiTheme {
 namespace { QPointer<AppearanceNotifier> changes; bool dark=false,installed=false; QString preferred="system"; int percent=100;
 void updatePreferred() { const auto* hints=qApp->styleHints(); const bool high=hints->accessibility()->contrastPreference()==Qt::ContrastPreference::HighContrast; const auto scheme=high||preferred=="system"?hints->colorScheme():preferred=="dark"?Qt::ColorScheme::Dark:Qt::ColorScheme::Light; applyAppearance(scheme,high); }
@@ -20,10 +29,11 @@ bool isDark() { return dark; }
 int textScale() { return percent; }
 QFont bodyFont() {
     auto font=QFontDatabase::systemFont(QFontDatabase::GeneralFont);
+    const auto bundled=bundledFontFamily();
 #ifdef Q_OS_MACOS
-    font.setFamilies({".AppleSystemUIFont","Helvetica Neue","PingFang SC"});
+    font.setFamilies({bundled,".AppleSystemUIFont","Helvetica Neue","PingFang SC"});
 #else
-    font.setFamilies({"Microsoft YaHei UI","Segoe UI","Noto Sans CJK SC"});
+    font.setFamilies({bundled,"Microsoft YaHei UI","Segoe UI","Noto Sans CJK SC"});
 #endif
     font.setPointSizeF(BodyPoints*percent/100.0); font.setStyleHint(QFont::SansSerif); return font;
 }
@@ -62,9 +72,9 @@ void install() {
     if (installed) return;
     installed=true;
 #ifdef Q_OS_MACOS
-    QFontDatabase::setApplicationFallbackFontFamilies(QChar::Script_Han,{"PingFang SC","Heiti SC"});
+    QFontDatabase::setApplicationFallbackFontFamilies(QChar::Script_Han,{bundledFontFamily(),"PingFang SC","Heiti SC"});
 #else
-    QFontDatabase::setApplicationFallbackFontFamilies(QChar::Script_Han,{"Microsoft YaHei UI","Microsoft YaHei","Noto Sans CJK SC"});
+    QFontDatabase::setApplicationFallbackFontFamilies(QChar::Script_Han,{bundledFontFamily(),"Microsoft YaHei UI","Microsoft YaHei","Noto Sans CJK SC"});
 #endif
     qApp->setFont(bodyFont());
     const auto update=[] { updatePreferred(); };
@@ -94,7 +104,8 @@ QPalette palette() {
 }
 QString styleSheet() {
     QString sheet=R"(
-        QWidget { font-family: @UiFamily; font-size: @BodyPoints; color: @Ink; }
+        /* The application font owns the fallback list; a global QSS family would discard it. */
+        QWidget { color: @Ink; }
         QWidget#websiteSurface, QWidget#pageSurface, QWidget#mainSurface, QWidget#settingsSurface, QWidget#settingsCanvas, QWidget#profilesSurface, QStackedWidget, QScrollArea { background: @Window; }
         QStackedWidget#nodeViews { background: @Surface; border-radius: 8px; }
         QDialog#importDialog, QDialog#profilePolicyDialog { background: @Window; }
@@ -111,7 +122,7 @@ QString styleSheet() {
         QPushButton[prototypeRow="true"]:hover { background: @Hover; }
         QPushButton[prototypeRow="true"][keyboardFocus="true"]:focus { border: 1px solid @Focus; }
         QPushButton[backLink="true"] { background: transparent; border: none; color: @Brand; padding: 3px 0; }
-        QLabel[caption="true"] { font-size: 9pt; }
+        QLabel[caption="true"] { font-size: 8.5pt; }
         QToolButton[prototypeIcon="true"] { background: transparent; border: none; padding: 5px; color: @Brand; }
         QToolButton#browseGroup { color: @Ink; padding: 5px; }
         QToolButton[prototypeIcon="true"]:hover { background: @Hover; }
@@ -155,7 +166,7 @@ QString styleSheet() {
         QWidget#homeInlineStat { border: none; }
         QToolButton#homeStatDetails { color: @Brand; }
         QLabel#currentMember { font-size: @BodyPoints; font-weight: 600; }
-        QLabel#secondaryText, QLabel[secondary="true"] { color: @Secondary; font-size: 9pt; }
+        QLabel#secondaryText, QLabel[secondary="true"] { color: @Secondary; font-size: 8.5pt; }
         QLabel#statusDot[state="success"] { color: @Success; }
         QLabel#statusDot[state="warning"] { color: @Warning; }
         QLabel#statusDot[state="error"] { color: @Error; }
@@ -166,6 +177,7 @@ QString styleSheet() {
         QLabel#websiteDelay[state="ok"] { color: @Success; font-weight: 600; }
         QLabel#websiteDelay[state="failed"] { color: @Error; font-weight: 600; }
         QLabel#websiteDelay[state="cancelled"] { color: @Secondary; font-weight: 600; }
+        QLabel#websiteDelay[state="untested"] { color: @Secondary; font-weight: 600; }
         QLabel#websiteDelay[state="pending"] { color: @Brand; font-weight: 600; }
         QLabel#sidebarStatusDot[state="success"] { color: @Success; }
         QLabel#sidebarStatusDot[state="warning"] { color: @Warning; }
@@ -193,7 +205,7 @@ QString styleSheet() {
         QLabel#statValue[tier="secondary"] { font-size: @BodyPoints; font-weight: 600; }
         QListWidget#proxyGroups { border: none; background: transparent; outline: none; }
         QLabel#statValue { font-size: @BodyPoints; font-weight: 600; }
-        QListWidget#navigation { border: none; background: transparent; outline: none; }
+        QListWidget#navigation { border: none; background: transparent; outline: none; font-size: @SectionPoints; }
         QListWidget#navigation::item { padding: 5px 8px; margin: 0px; border-radius: 7px; }
         QListWidget#navigation::item:hover { background: @Hover; }
         QListWidget#navigation::item:selected { background: @Primary; color: @OnPrimary; }
@@ -229,7 +241,7 @@ QString styleSheet() {
         QTableView::item:selected { background: @Selection; color: @Ink; }
         QTableView::item { padding: 0px 4px; border-bottom: 1px solid @Separator; }
         QPlainTextEdit { background: @Surface; border: 1px solid @Separator; border-radius: 7px; padding: 10px; font-family: @MonoFamily; }
-        QPlainTextEdit[formField="true"] { background: @Surface; border: 1px solid @Border; border-radius: 7px; padding: 6px; font-family: @UiFamily; }
+        QPlainTextEdit[formField="true"] { background: @Surface; border: 1px solid @Border; border-radius: 7px; padding: 6px; }
         QPlainTextEdit[keyboardFocus="true"]:focus { border: 1px solid @Focus; border-radius: 7px; padding: 10px; }
         QScrollBar:vertical { background: transparent; width: 8px; margin: 0; }
         QScrollBar::handle:vertical { background: @Track; border-radius: 4px; min-height: 24px; }
@@ -280,7 +292,7 @@ QString styleSheet() {
         QDialog#nodeDetailsDrawer { background: @Surface; border-left: 1px solid @Border; }
         QLabel#drawerTitle { font-size: @SectionPoints; font-weight: 700; }
         QLabel#drawerSub { color: @Secondary; }
-        QWidget#drawerKeyValue { border-bottom: 1px solid @Separator; min-height: 47px; }
+        QWidget#drawerKeyValue { border-bottom: 1px solid @Separator; min-height: 38px; }
         QLabel#drawerKey { color: @Secondary; }
     )";
     sheet.replace("@UiFamily",QString('"')+bodyFont().family()+QString('"'));

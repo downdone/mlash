@@ -14,19 +14,21 @@ inline const char *Primary="#0068D9", *OnPrimary="#FFFFFF", *Hover="#F2F5FA", *F
 inline const char *Control="#F0F1F3", *Pressed="#E2E5EA", *PrimaryPressed="#0057B8";
 inline const char *Success="#08745B", *Warning="#965A00", *Error="#BF303C", *Track="#B8BEC7";
 inline constexpr const char* ArtworkSurface="#F2F2F7";
-inline constexpr int ControlHeight = 30, TableRow = 30, PanelGap = 8, PopupRadius = 8;
+inline constexpr int ControlHeight = 30, TableRow = 28, PanelGap = 6, PopupRadius = 8;
 inline constexpr int ContentInset = 12, ContentTop = 12, PanelInset = 12, SidebarWidth = 188;
-// U13 density baseline; actual font metrics expand rows at larger text scales.
-inline constexpr int TopbarHeight = 44, SidebarItemHeight = 32, RowHeight = 38, NodeRowHeight = 38;
-inline constexpr int SettingRowHeight = 38, ProfileRowHeight = 40, DrawerWidth = 350;
+// U14 compact content density. Font metrics still expand two-line rows at larger text scales.
+inline constexpr int TopbarHeight = 42, SidebarItemHeight = 32, RowHeight = 36, NodeRowHeight = 36;
+inline constexpr int SettingRowHeight = 36, ProfileRowHeight = 38, NodeCardHeight = 44, DrawerWidth = 350;
 #ifdef Q_OS_MACOS
-inline constexpr int BodyPoints=11, DialogPoints=18, SectionPoints=12, ValuePoints=20, TitlePoints=14;
+inline constexpr double BodyPoints=10.5;
+inline constexpr int DialogPoints=17, SectionPoints=11, ValuePoints=16, TitlePoints=13;
 #else
-inline constexpr int BodyPoints=11, DialogPoints=18, SectionPoints=11, ValuePoints=20, TitlePoints=13;
+inline constexpr double BodyPoints=10.0;
+inline constexpr int DialogPoints=17, SectionPoints=11, ValuePoints=16, TitlePoints=13;
 #endif
-inline QFont rowCaptionFont(QFont font) { font.setPointSizeF(font.pointSizeF()*0.82); return font; }
+inline QFont rowCaptionFont(QFont font) { font.setPointSizeF(qMax(8.5,font.pointSizeF()*0.85)); return font; }
 inline int twoLineRowHeight(const QFont& font,int minimum=NodeRowHeight) {
-    return qMax(minimum,QFontMetrics(font).height()+QFontMetrics(rowCaptionFont(font)).height()+6);
+    return qMax(minimum,QFontMetrics(font).height()+QFontMetrics(rowCaptionFont(font)).height()+4);
 }
 class AppearanceNotifier final : public QObject {
     Q_OBJECT

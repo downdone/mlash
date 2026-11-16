@@ -199,19 +199,19 @@ inline void settingRow(QVBoxLayout* section, const QString& name, const QString&
     row->setProperty("settingKind",stacked?"stacked":explain?"explained":"single");
     auto* icon = new QLabel; icon->setObjectName("settingIcon"); icon->setFixedSize(21,21); icon->setPixmap(UiIcons::icon(glyph,UiTheme::Brand).pixmap(16,16)); icon->setAlignment(Qt::AlignCenter);
     if (stacked) {
-        auto* layout=new QVBoxLayout(row); layout->setContentsMargins(0,10,0,10); layout->setSpacing(8);
+        auto* layout=new QVBoxLayout(row); layout->setContentsMargins(0,7,0,7); layout->setSpacing(6);
         auto* head=new QHBoxLayout; head->setSpacing(13); head->addWidget(icon,0,Qt::AlignVCenter); head->addLayout(labels,1);
         layout->addLayout(head); layout->addWidget(control);
     }
     else {
-        auto* layout=new QHBoxLayout(row); layout->setContentsMargins(0,9,0,9); layout->setSpacing(13);
+        auto* layout=new QHBoxLayout(row); layout->setContentsMargins(0,5,0,5); layout->setSpacing(10);
         layout->addWidget(icon,0,Qt::AlignVCenter); layout->addLayout(labels,1);
         // 右侧「行尾」：值（若有）+ 控件 + ›。
         auto* trail=new QHBoxLayout; trail->setSpacing(8); if (current) { labels->removeWidget(current); trail->addWidget(current,0,Qt::AlignVCenter); }
         trail->addWidget(control,0,Qt::AlignVCenter);
         // Form editors use their controls directly; directory chevrons belong to ActionRow only.
         layout->addLayout(trail);
-        row->setMinimumHeight(qMax(UiTheme::SettingRowHeight,2*title->fontMetrics().height()+18));
+        row->setMinimumHeight(qMax(UiTheme::SettingRowHeight,title->fontMetrics().height()+14));
     }
     section->addWidget(row);
 }
@@ -286,7 +286,7 @@ private:
 class NodeCardDelegate final : public NodeNameDelegate {
 public:
     using NodeNameDelegate::NodeNameDelegate;
-    QSize sizeHint(const QStyleOptionViewItem&,const QModelIndex&) const override { const auto* view=qobject_cast<QListView*>(parent()); return view?view->gridSize():QSize(220,54); }
+    QSize sizeHint(const QStyleOptionViewItem&,const QModelIndex&) const override { const auto* view=qobject_cast<QListView*>(parent()); return view?view->gridSize():QSize(220,UiTheme::NodeCardHeight); }
     void paint(QPainter* p,const QStyleOptionViewItem& option,const QModelIndex& index) const override {
         p->save(); p->setRenderHint(QPainter::Antialiasing); const auto rect=option.rect.adjusted(3,3,-5,-5); const bool selected=option.state.testFlag(QStyle::State_Selected); const bool current=index.data(Qt::FontRole).value<QFont>().bold();
         const bool hover=option.state.testFlag(QStyle::State_MouseOver);
@@ -329,7 +329,7 @@ private:
         // QListView reserves scrollbar space even before its handle becomes visible.
         const int extent=style()->pixelMetric(QStyle::PM_ScrollBarExtent,nullptr,verticalScrollBar());
         const int width=qMax(1,maximumViewportSize().width()-extent-3),columns=qMax(1,width/220);
-        const QSize size(qMax(1,width/columns-1),54);
+        const QSize size(qMax(1,width/columns-1),UiTheme::NodeCardHeight);
         if (gridSize()!=size) { setGridSize(size); if (model() && model()->rowCount()>0) itemDelegate()->sizeHintChanged(model()->index(0,0)); }
     }
 };
@@ -362,7 +362,7 @@ class DetailsDrawer final : public QFrame {
 public:
     explicit DetailsDrawer(QWidget* host) : QFrame(host), host_(host) {
         setObjectName("nodeDetailsDrawer"); setFrameShape(QFrame::NoFrame); pageHost_=host->findChild<QStackedWidget*>("mainPages"); setFocusPolicy(Qt::StrongFocus);
-        auto* outer = new QVBoxLayout(this); outer->setContentsMargins(20,18,20,18); outer->setSpacing(0);
+        auto* outer = new QVBoxLayout(this); outer->setContentsMargins(14,12,14,12); outer->setSpacing(0);
         auto* header = new QHBoxLayout; header->setSpacing(10); auto* titles = new QVBoxLayout; titles->setSpacing(3);
         title_ = new QLabel; title_->setObjectName("drawerTitle"); title_->setWordWrap(true);
         subtitle_ = new QLabel; subtitle_->setObjectName("drawerSub"); subtitle_->setWordWrap(true); subtitle_->hide();
@@ -370,7 +370,7 @@ public:
         auto* close = new QToolButton; close->setObjectName("drawerClose"); close->setIcon(UiIcons::icon(UiIcons::Glyph::Close)); close->setToolTip(QStringLiteral("关闭")); close->setAutoRaise(true);
         connect(close, &QToolButton::clicked, this, &DetailsDrawer::closeDrawer);
         header->addWidget(close, 0, Qt::AlignTop);
-        outer->addLayout(header); outer->addSpacing(16);
+        outer->addLayout(header); outer->addSpacing(10);
         auto* scroll=new QScrollArea; scroll->setWidgetResizable(true); scroll->setFrameShape(QFrame::NoFrame); scroll->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
         auto* body=new QWidget; body_=new QVBoxLayout(body); body_->setContentsMargins(0,0,0,0); body_->setSpacing(0); body_->addStretch(1); scroll->setWidget(body); outer->addWidget(scroll,1);
         actions_ = new QHBoxLayout; actions_->setSpacing(8); actions_->addStretch(1); outer->addSpacing(22); outer->addLayout(actions_);
@@ -379,7 +379,7 @@ public:
     void setHeader(const QString& title, const QString& subtitle = QString()) { title_->setText(title); subtitle_->setText(subtitle); subtitle_->setVisible(!subtitle.isEmpty()); }
     QLabel* addKeyValue(const QString& key, const QString& value) {
         auto* row = new QWidget; row->setObjectName("drawerKeyValue");
-        auto* layout = new QHBoxLayout(row); layout->setContentsMargins(0, 11, 0, 11); layout->setSpacing(12);
+        auto* layout = new QHBoxLayout(row); layout->setContentsMargins(0, 6, 0, 6); layout->setSpacing(10);
         auto* keyLabel = new QLabel(key); keyLabel->setObjectName("drawerKey"); layout->addWidget(keyLabel);
         auto* valueLabel = new QLabel(value.isEmpty() ? QStringLiteral("—") : value); valueLabel->setObjectName("drawerValue");
         valueLabel->setTextFormat(Qt::PlainText); valueLabel->setWordWrap(true); valueLabel->setAlignment(Qt::AlignRight | Qt::AlignVCenter); layout->addWidget(valueLabel, 1);

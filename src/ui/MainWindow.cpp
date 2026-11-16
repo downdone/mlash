@@ -271,7 +271,7 @@ MainWindow::~MainWindow() {
 QWidget* MainWindow::dataPage() {
     // K6（原型 · 数据页）：一条页签行 + 一个面板栈。四个页签各自持有自己的面板，
     // 可见性由 updateDataPanelVisibility 按「当前页签」合成——不可见的面板不再接收采样。
-    auto* page = new QWidget; auto* layout = new QVBoxLayout(page); layout->setContentsMargins(0,0,0,0); layout->setSpacing(10);
+    auto* page = new QWidget; auto* layout = new QVBoxLayout(page); layout->setContentsMargins(0,0,0,0); layout->setSpacing(UiTheme::PanelGap);
     auto* heading = new QHBoxLayout; heading->setSpacing(10); heading->addStretch();
     dataTabs_ = new QTabBar; dataTabs_->setObjectName("dataTabs"); dataTabs_->setExpanding(false); dataTabs_->setDrawBase(false);
     for (int i = 0; i < ViewIds::DataTabCount; ++i) dataTabs_->addTab(ViewIds::dataTabName(ViewIds::dataTabFromIndex(i)));
@@ -322,10 +322,10 @@ void MainWindow::updateDataPanelVisibility() {
 }
 QWidget* MainWindow::trafficPanel() {
     // 流量：三个统计块 + 60 秒曲线 + 出站摘要（原型 data 页）。
-    auto* panel = new QWidget; panel->setObjectName("trafficPanel"); auto* layout = new QVBoxLayout(panel); layout->setContentsMargins(0,0,0,0); layout->setSpacing(14);
+    auto* panel = new QWidget; panel->setObjectName("trafficPanel"); auto* layout = new QVBoxLayout(panel); layout->setContentsMargins(0,0,0,0); layout->setSpacing(8);
     auto* tiles = new QHBoxLayout; tiles->setSpacing(1);
     for (const auto& pair : QList<QPair<QString,QString>>{{"trafficUpload","上传"},{"trafficDownload","下载"},{"trafficActive","活动连接"}}) {
-        auto* tile = WindowParts::panel(); tile->setObjectName(pair.first); auto* tileLayout = new QVBoxLayout(tile); tileLayout->setContentsMargins(16,12,16,12); tileLayout->setSpacing(4);
+        auto* tile = WindowParts::panel(); tile->setObjectName(pair.first); auto* tileLayout = new QVBoxLayout(tile); tileLayout->setContentsMargins(12,9,12,9); tileLayout->setSpacing(3);
         auto* caption = new QLabel(pair.second); caption->setProperty("secondary", true); tileLayout->addWidget(caption);
         auto* value = new QLabel("—"); value->setObjectName(pair.first + "Value"); value->setProperty("role", "value"); value->setProperty("metricValue",true); tileLayout->addWidget(value);
         tiles->addWidget(tile, 1);
@@ -352,9 +352,9 @@ void MainWindow::copyDiagnosticsSummary() {
     message_->setText("诊断摘要已复制到剪贴板"); message_->setToolTip(text);
 }
 QWidget* MainWindow::diagnosticsPanel() {
-    auto* page = new QWidget; auto* layout = new QVBoxLayout(page); layout->setContentsMargins(0, 0, 0, 0); layout->setSpacing(10);
+    auto* page = new QWidget; auto* layout = new QVBoxLayout(page); layout->setContentsMargins(0, 0, 0, 0); layout->setSpacing(UiTheme::PanelGap);
     auto* logHeading=new QHBoxLayout; logHeading->addStretch(); layout->addLayout(logHeading); auto* toolbar=new QWidget; toolbar->setObjectName("logToolbar"); auto* actions = new WrapLayout(toolbar);
-    auto* logPanel = panel(); auto* logLayout = new QVBoxLayout(logPanel); logLayout->setContentsMargins(12, 10, 12, 10); logLayout->setSpacing(8); layout->addWidget(logPanel, 1);
+    auto* logPanel = panel(); auto* logLayout = new QVBoxLayout(logPanel); logLayout->setContentsMargins(10, 8, 10, 8); logLayout->setSpacing(6); layout->addWidget(logPanel, 1);
     logSearch_ = new QLineEdit; logSearch_->setObjectName("logSearch"); logSearch_->setPlaceholderText("搜索日志…"); logSearch_->setAccessibleName("搜索日志"); logSearch_->setClearButtonEnabled(true); actions->addWidget(logSearch_);
     logFilter_ = new CompactComboBox; logFilter_->setObjectName("logLevelFilter"); for (const auto& pair : QList<QPair<QString,QString>>{{"全部","all"},{"调试","debug"},{"信息","info"},{"警告","warning"},{"错误","error"},{"应用","app"}}) logFilter_->addItem(pair.first,pair.second); actions->addWidget(logFilter_);
     auto* pause = new QPushButton("暂停显示"); actions->addWidget(pause); pause->setObjectName("pauseLogs"); pause->setCheckable(true); auto* copy = new QPushButton("复制选中"); actions->addWidget(copy);
@@ -380,7 +380,7 @@ QWidget* MainWindow::diagnosticsPanel() {
     return page;
 }
 QWidget* MainWindow::rulesPage() {
-    auto* page = new QWidget; auto* layout = new QVBoxLayout(page); layout->setContentsMargins(0, 0, 0, 0); layout->setSpacing(10);
+    auto* page = new QWidget; auto* layout = new QVBoxLayout(page); layout->setContentsMargins(0, 0, 0, 0); layout->setSpacing(UiTheme::PanelGap);
     auto* back=PrototypeUi::back(layout,"rulesBack","返回配置详情"); connect(back,&QPushButton::clicked,this,[this] {
         if (rulesSaving_) return;
         if (rulesDirty_) { if (QMessageBox::question(this,"未保存的规则","放弃当前规则修改并返回？",QMessageBox::Yes|QMessageBox::No,QMessageBox::No)!=QMessageBox::Yes) return; rulesDirty_=false; loadRuleDraft(); }
@@ -454,8 +454,8 @@ void MainWindow::loadRuleDraft() {
     if (isVisible() && route_.view == ViewIds::Rules && !rulesDraftProfile_.isEmpty()) controller_->inspectRuleSource(rulesDraftProfile_,[guard=QPointer<MainWindow>(this),id=rulesDraftProfile_,reference](Result result) { if (!guard||guard->rulesDraftProfile_!=id||guard->rulesReferenceGeneration_!=reference||!result.ok) return; guard->ruleTargets_.clear(); guard->ruleProviders_.clear(); const auto current=ruleTargetValue(guard->ruleTarget_); const QSignalBlocker block(guard->ruleTarget_); guard->ruleTarget_->clear(); for (const auto& value:result.data.value("targets").toArray()) { const auto code=value.toString(); guard->ruleTargets_.insert(code); guard->ruleTarget_->addItem(code=="DIRECT"?QString("直连 · DIRECT"):code=="REJECT"?QString("阻断 · REJECT"):code,code); } for (const auto& value:result.data.value("rule_providers").toArray()) guard->ruleProviders_.insert(value.toString()); const auto index=guard->ruleTarget_->findData(current); if (index>=0) guard->ruleTarget_->setCurrentIndex(index); else guard->ruleTarget_->setEditText(current); guard->ruleReferencesKnown_=true; if (guard->rulesDirty_) guard->rulesHint_->setText(guard->ruleDraftError().isEmpty()?QString("有未保存修改"):guard->ruleDraftError()); guard->updateActions(); });
 }
 QWidget* MainWindow::connectionsPanel() {
-    auto* page = new QWidget; auto* layout = new QVBoxLayout(page); layout->setContentsMargins(0, 0, 0, 0); layout->setSpacing(10);
-    auto* box = panel(); auto* content = new QVBoxLayout(box); content->setContentsMargins(12, 10, 12, 10); layout->addWidget(box, 1);
+    auto* page = new QWidget; auto* layout = new QVBoxLayout(page); layout->setContentsMargins(0, 0, 0, 0); layout->setSpacing(UiTheme::PanelGap);
+    auto* box = panel(); auto* content = new QVBoxLayout(box); content->setContentsMargins(10, 8, 10, 8); layout->addWidget(box, 1);
     auto* summary=new QHBoxLayout; connectionStats_=new QLabel("流量 —"); connectionStats_->setObjectName("connectionStats"); connectionStats_->setSizePolicy(QSizePolicy::Ignored,QSizePolicy::Preferred); summary->addWidget(connectionStats_,1);
     auto* next=new QPushButton("前往首页启动"); next->setObjectName("connectionNextStep"); summary->addWidget(next); connect(next,&QPushButton::clicked,this,[this] { setPage(0); });
     connectionPause_=new QPushButton("暂停刷新"); connectionPause_->setObjectName("pauseConnections"); connectionPause_->setCheckable(true); connectionPause_->setToolTip("暂停采样并保留阅读快照；恢复后先建立新基线"); summary->addWidget(connectionPause_); connect(connectionPause_,&QPushButton::clicked,controller_,&AppController::setConnectionsPaused);

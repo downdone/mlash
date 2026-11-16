@@ -127,7 +127,7 @@ private slots:
         if (QGuiApplication::platformName()=="windows") {
             QTextLayout text(QStringLiteral("设置中文 YouTube"),font); text.beginLayout(); text.createLine(); text.endLayout();
             for (const auto& run:text.glyphRuns()) { const auto raw=run.rawFont(); if (raw.isValid() && !families.contains(raw.familyName())) families.append(raw.familyName()); }
-            QVERIFY2(families.join(',').contains("YaHei",Qt::CaseInsensitive) || families.join(',').contains(QStringLiteral("微软雅黑")),qUtf8Printable(families.join(',')));
+            QVERIFY2(families.join(',').contains("Noto Sans SC",Qt::CaseInsensitive),qUtf8Printable(families.join(',')));
         }
         const auto output=qEnvironmentVariable("MLASH_UI_SCREENSHOTS"); if (!output.isEmpty()) { QDir().mkpath(output); QVERIFY(writeAtomic(output+"/appearance-context.json",QJsonDocument(QJsonObject{{"device_pixel_ratio",window.devicePixelRatioF()},{"platform",QGuiApplication::platformName()},{"font_requested",font.family()},{"font_resolved",QFontInfo(font).family()},{"glyph_families",QJsonArray::fromStringList(families)}}).toJson()).ok); }
         for (const auto scheme:{Qt::ColorScheme::Light,Qt::ColorScheme::Dark}) for (const auto size:{QSize(840,560),QSize(940,620),QSize(1180,810)}) {
@@ -149,7 +149,8 @@ private slots:
         Profile profile; profile.id=newId(); profile.name="日常网络"; profile.sourceType="file"; profile.candidate=newId(); profile.active=profile.candidate; profile.updated="2026-10-28T00:00:00Z";
         const_cast<QVector<Profile>&>(controller.profiles()).append(profile);
         auto& state=const_cast<AppState&>(controller.state()); state.activeProfile=profile.id; state.core=CoreState::Running; state.ready=true; state.mode="rule"; state.proxy=ProxyState::Disabled;
-        const QJsonArray members{"香港 · 日常","日本 · 备用","新加坡 · 工作","美国 · 长名称节点用于检查省略与完整提示","DIRECT"};
+        QJsonArray members{"香港 · 日常","日本 · 备用","新加坡 · 工作","美国 · 长名称节点用于检查省略与完整提示","DIRECT"};
+        for (int i=0;i<36;++i) members.append(QString("日本 · 测试节点 %1").arg(i,2,10,QChar('0')));
         QJsonObject proxies{{"日常选择",QJsonObject{{"type","Selector"},{"all",members},{"now",members[0]}}},{"DIRECT",QJsonObject{{"type","Direct"}}}};
         for (const auto& member:members) if (member!="DIRECT") proxies[member.toString()]=QJsonObject{{"type","Shadowsocks"}};
         const_cast<QJsonObject&>(controller.proxies())=proxies;
@@ -162,6 +163,15 @@ private slots:
         };
         controller.findChild<MihomoClient*>()->configure(api.serverPort(),"UI fixture");
         MainWindow window(&controller); window.show();
+        TrayController tray(&controller); tray.measureMenuPreparation();
+        auto* trayRoot=tray.findChild<QSystemTrayIcon*>()->contextMenu();
+        auto* quickGroup=trayRoot->findChild<QMenu*>();
+        for (auto* menu:trayRoot->findChildren<QMenu*>()) if (menu->property("groupName").toString()=="日常选择") quickGroup=menu;
+        QVERIFY(quickGroup && quickGroup->property("groupName").toString()=="日常选择");
+        trayRoot->findChild<QAction*>("trayAutoTestGroups")->setChecked(false);
+        quickGroup->popup(QPoint(100,100)); QTRY_VERIFY(quickGroup->isVisible());
+        QVERIFY2(quickGroup->actions().size()<=20,"A large group must not expand into a screen-sized tray menu");
+        quickGroup->hide();
         auto* port=window.findChild<QSpinBox*>("mixedPort"); const int original=port->value();
         auto& settings=const_cast<Settings&>(controller.settings());
         for (int scale:{100,120}) for (const auto scheme:{Qt::ColorScheme::Light,Qt::ColorScheme::Dark}) {
@@ -176,6 +186,7 @@ private slots:
                     if (page==2) {
                         // H3：显示方式收进「更多 › 显示方式」；这里直接用公开入口切换。
                         window.setMemberView(1); QCoreApplication::processEvents();
+                        if (scale==100) QCOMPARE(window.findChild<QListView*>("nodeCards")->gridSize().height(),UiTheme::NodeCardHeight);
                         save(&window,QString("cards-%1-%2-%3").arg(settings.appearance).arg(scale).arg(size.width())); window.setMemberView(0);
                     }
                     for (auto* scroll:window.findChildren<QScrollArea*>()) QCOMPARE(scroll->horizontalScrollBar()->maximum(),0);

@@ -2,6 +2,7 @@
 #include "UiTheme.h"
 #include <QPainter>
 #include <QPainterPath>
+#include <QHash>
 
 static void initializeServices() { Q_INIT_RESOURCE(services); }
 namespace mlash::UiIcons {
@@ -10,9 +11,18 @@ QIcon service(const QString& id) {
     const QIcon result(":/services/"+id+".png"); return result.isNull() ? icon(Glyph::Globe) : result;
 }
 QIcon icon(Glyph glyph,const QString& color) {
+    // Delegates request these icons while scrolling; keep each theme variant
+    // once instead of repainting six raster sizes per visible row.
+    static QHash<QString,QIcon> cache;
+    const QString key=QString::number(int(glyph))+QChar::Null+(color.isEmpty()?QString(UiTheme::Secondary):color)
+        +QChar::Null+QString(UiTheme::Disabled)+QChar::Null+QString(UiTheme::Surface);
+    if (const auto it=cache.constFind(key); it!=cache.cend()) return *it;
     QIcon result;
-    for (const auto mode:{QIcon::Normal,QIcon::Disabled}) {
-        QPixmap image(48,48); image.setDevicePixelRatio(2); image.fill(Qt::transparent);
+    for (const auto mode:{QIcon::Normal,QIcon::Disabled}) for (const qreal dpr:{1.0,2.0,3.0}) {
+        // Keep strokes in logical 24-DIP coordinates and rasterize for the
+        // actual screen scale instead of scaling a single bitmap everywhere.
+        const int side=qRound(24*dpr);
+        QPixmap image(side,side); image.setDevicePixelRatio(dpr); image.fill(Qt::transparent);
         QPainter p(&image); p.setRenderHint(QPainter::Antialiasing); p.setPen(QPen(QColor(mode==QIcon::Disabled?UiTheme::Disabled:color.isEmpty()?QString(UiTheme::Secondary):color),1.7,Qt::SolidLine,Qt::RoundCap,Qt::RoundJoin));
         QPainterPath path;
         switch(glyph) {
@@ -49,6 +59,7 @@ QIcon icon(Glyph glyph,const QString& color) {
         }
         p.drawPath(path); result.addPixmap(image,mode);
     }
+    cache.insert(key,result);
     return result;
 }
 }

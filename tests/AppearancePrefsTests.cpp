@@ -88,7 +88,7 @@ private slots:
         };
         const auto output=qEnvironmentVariable("MLASH_UI_SCREENSHOTS"); if (!output.isEmpty()) QDir().mkpath(output);
         QStringList faces;
-        if (QGuiApplication::platformName()=="windows") { QTextLayout text(QStringLiteral("设置中文 YouTube"),window.font()); text.beginLayout(); text.createLine(); text.endLayout(); for (const auto& run:text.glyphRuns()) if (run.rawFont().isValid()&&!faces.contains(run.rawFont().familyName())) faces.append(run.rawFont().familyName()); QVERIFY2(faces.join(',').contains("YaHei",Qt::CaseInsensitive)||faces.join(',').contains(QStringLiteral("微软雅黑")),qUtf8Printable(faces.join(','))); }
+        if (QGuiApplication::platformName()=="windows") { QTextLayout text(QStringLiteral("设置中文 YouTube"),window.font()); text.beginLayout(); text.createLine(); text.endLayout(); for (const auto& run:text.glyphRuns()) if (run.rawFont().isValid()&&!faces.contains(run.rawFont().familyName())) faces.append(run.rawFont().familyName()); QVERIFY2(faces.join(',').contains("Noto Sans SC",Qt::CaseInsensitive),qUtf8Printable(faces.join(','))); }
         if (!output.isEmpty()) QVERIFY(writeAtomic(output+"/context.json",QJsonDocument(QJsonObject{{"dpr",window.devicePixelRatioF()},{"platform",QGuiApplication::platformName()},{"font",QFontInfo(window.font()).family()},{"glyph_families",QJsonArray::fromStringList(faces)}}).toJson()).ok);
         for (const auto& theme:QStringList{"light","dark","contrast"}) for (const int scale:{100,120}) {
             UiTheme::setPreferences(theme=="contrast"?"light":theme,scale); if (theme=="contrast") UiTheme::applyAppearance(Qt::ColorScheme::Light,true);

@@ -118,7 +118,7 @@ add_library(mlash_ui STATIC src/ui/Route.h src/ui/Route.cpp src/ui/ViewIds.h src
     src/ui/ImportDialog.h src/ui/ImportDialog.cpp src/ui/ProxyTableModel.h src/ui/ProxyTableModel.cpp
     src/ui/NodePresentation.h src/ui/NodePresentation.cpp
     src/ui/WidgetStyle.h src/ui/WidgetStyle.cpp
-    src/ui/UiTheme.h src/ui/UiTheme.cpp
+    src/ui/UiTheme.h src/ui/UiTheme.cpp resources/fonts.qrc
     src/ui/UiIcons.h src/ui/UiIcons.cpp resources/services.qrc
     src/ui/TrayController.h src/ui/TrayController.cpp)
 target_link_libraries(mlash_ui PUBLIC mlash_engine Qt6::Widgets mlash_qrcode)

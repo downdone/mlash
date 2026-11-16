@@ -13,7 +13,7 @@ using namespace WindowParts;
 // K7 · 配置页（原型 viewProfiles）：标题行三个按钮 + 「远程订阅 / 本地配置」两张 76px 列表。
 // 行本身没有动作条：点击行（或行尾 ›）打开右侧抽屉，抽屉里是「设为当前配置 / 更多操作」。
 QWidget* MainWindow::profilesPage() {
-    auto* page = new QWidget; page->setObjectName("profilesSurface"); auto* layout = new QVBoxLayout(page); layout->setContentsMargins(0, 0, 0, 0); layout->setSpacing(8);
+    auto* page = new QWidget; page->setObjectName("profilesSurface"); auto* layout = new QVBoxLayout(page); layout->setContentsMargins(0, 0, 0, 0); layout->setSpacing(UiTheme::PanelGap);
     // 标题行：添加订阅（primary）/ 导入文件 / 更新全部。
     using namespace PrototypeUi;
     auto* imports=group(layout);
@@ -228,7 +228,7 @@ void MainWindow::showProfileDetails(const QString& id) {
     if (!found||!profileStack_) return;
     selectProfile(id); profileDetailId_=id;
     if (profileDetailsPage_) { auto* previous=profileDetailsPage_.data(); profileStack_->removeWidget(previous); previous->deleteLater(); }
-    auto* page=new QWidget; page->setObjectName("profileDetailsPage"); auto* outer=new QVBoxLayout(page); outer->setContentsMargins(0,0,0,16); outer->setSpacing(12);
+    auto* page=new QWidget; page->setObjectName("profileDetailsPage"); auto* outer=new QVBoxLayout(page); outer->setContentsMargins(0,0,0,12); outer->setSpacing(8);
     auto* content=new QWidget; content->setMaximumWidth(760); auto* column=new QVBoxLayout(content); column->setContentsMargins(0,0,0,0); column->setSpacing(8); auto* centered=new QHBoxLayout; centered->setContentsMargins(0,0,0,0); centered->addWidget(content,1); outer->addLayout(centered,1);
     using namespace PrototypeUi; using G=UiIcons::Glyph;
     auto* returnButton=back(column,"profileDetailsBack","返回配置"); connect(returnButton,&QPushButton::clicked,this,[this] { profileStack_->setCurrentIndex(0); profileDetailId_.clear(); });

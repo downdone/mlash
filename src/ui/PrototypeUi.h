@@ -18,7 +18,7 @@ public:
     ActionRow(const QString& title, UiIcons::Glyph glyph, const QString& value={}, const QString& subtitle={}, QWidget* parent=nullptr)
         : QPushButton(parent) {
         setProperty("prototypeRow",true); setCursor(Qt::PointingHandCursor); setAccessibleName(title); setAutoDefault(false);
-        auto* layout=new QHBoxLayout(this); layout->setContentsMargins(12,4,10,4); layout->setSpacing(12);
+        auto* layout=new QHBoxLayout(this); layout->setContentsMargins(12,3,10,3); layout->setSpacing(9);
         icon_=new QLabel; icon_->setFixedSize(22,22); icon_->setPixmap(UiIcons::icon(glyph,UiTheme::Brand).pixmap(22,22));
         icon_->setAttribute(Qt::WA_TransparentForMouseEvents); layout->addWidget(icon_);
         auto* text=new QVBoxLayout; text->setSpacing(1); title_=new ElidedLabel(title); title_->setObjectName("directoryTitle");
@@ -62,7 +62,7 @@ private:
 };
 
 inline QVBoxLayout* group(QVBoxLayout* page,const QString& title={}) {
-    if (!title.isEmpty()) { page->addSpacing(4); auto* label=new QLabel(title); label->setObjectName("prototypeSection"); label->setProperty("secondary",true); page->addWidget(label); }
+    if (!title.isEmpty()) { page->addSpacing(2); auto* label=new QLabel(title); label->setObjectName("prototypeSection"); label->setProperty("secondary",true); page->addWidget(label); }
     auto* frame=new QFrame; frame->setObjectName("prototypeGroup"); auto* rows=new QVBoxLayout(frame);
     rows->setContentsMargins(0,0,0,0); rows->setSpacing(0); page->addWidget(frame); return rows;
 }

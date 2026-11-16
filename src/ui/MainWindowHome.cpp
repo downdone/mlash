@@ -16,7 +16,7 @@ void syncHomeChoices(QComboBox* combo, const QJsonArray& choices) {
 }
 
 QWidget* MainWindow::homePage() {
-    auto* page = new QWidget; auto* layout = new QVBoxLayout(page); layout->setContentsMargins(0, 0, 0, 0); layout->setSpacing(6);
+    auto* page = new QWidget; auto* layout = new QVBoxLayout(page); layout->setContentsMargins(0, 0, 0, 0); layout->setSpacing(4);
     // 控制区（H1 / ADR 0048）：一张卡片、三行——当前代理 / 路由方式 / 连通性。
     // 行尾动作即主控件，标题行不再单独占位（原型 01）。
     auto* control = panel(); control->setObjectName("homeControlCard"); control->setSizePolicy(QSizePolicy::Preferred,QSizePolicy::Maximum);
@@ -24,9 +24,9 @@ QWidget* MainWindow::homePage() {
 
     // ① 当前代理：当前成员名 + 「订阅 · 选择方式」 + 状态句，行尾为系统代理开关。
     auto* currentRow = new QWidget; currentRow->setObjectName("homeControlRow"); currentRow->setProperty("first", true); currentRow->setMinimumHeight(UiTheme::RowHeight);
-    auto* currentLayout = new QHBoxLayout(currentRow); currentLayout->setContentsMargins(0, 4, 0, 4); currentLayout->setSpacing(12);
+    auto* currentLayout = new QHBoxLayout(currentRow); currentLayout->setContentsMargins(0, 3, 0, 3); currentLayout->setSpacing(10);
     statusDot_ = new QLabel; statusDot_->setObjectName("statusDot"); statusDot_->setFixedSize(0,0); statusDot_->hide(); auto* currentIcon=new QLabel; currentIcon->setPixmap(UiIcons::icon(UiIcons::Glyph::Rocket,UiTheme::Brand).pixmap(22,22)); currentIcon->setFixedSize(22,22); currentLayout->addWidget(currentIcon,0,Qt::AlignVCenter);
-    auto* currentText = new QVBoxLayout; currentText->setSpacing(3);
+    auto* currentText = new QVBoxLayout; currentText->setSpacing(2);
     overviewTitle_ = new QLabel("尚未连接"); overviewTitle_->setObjectName("overviewTitle"); overviewTitle_->setTextFormat(Qt::PlainText);
     homeCurrentMeta_ = new QLabel; homeCurrentMeta_->setObjectName("homeControlMeta"); homeCurrentMeta_->setProperty("secondary", true); homeCurrentMeta_->setTextFormat(Qt::PlainText); homeCurrentMeta_->hide();
     homeStateLine_ = new QLabel; homeStateLine_->setObjectName("homeStateLine"); homeStateLine_->setProperty("secondary", true); homeStateLine_->setTextFormat(Qt::PlainText); homeStateLine_->setWordWrap(true);
@@ -52,9 +52,9 @@ QWidget* MainWindow::homePage() {
 
     // ② 路由方式：整行可点，行下方弹出浮层菜单（原型 03）；当前项带勾。
     homeRouteRow_ = new DashboardCardButton; homeRouteRow_->setObjectName("homeRouteRow"); homeRouteRow_->setProperty("controlRow", true); homeRouteRow_->setMinimumHeight(UiTheme::RowHeight);
-    auto* routeLayout = new QHBoxLayout(homeRouteRow_); routeLayout->setContentsMargins(0, 4, 0, 4); routeLayout->setSpacing(12);
+    auto* routeLayout = new QHBoxLayout(homeRouteRow_); routeLayout->setContentsMargins(0, 3, 0, 3); routeLayout->setSpacing(10);
     auto* routeIcon=new QLabel; routeIcon->setFixedSize(22,22); routeIcon->setPixmap(UiIcons::icon(UiIcons::Glyph::Route,UiTheme::Brand).pixmap(22,22)); routeLayout->addWidget(routeIcon);
-    auto* routeText = new QVBoxLayout; routeText->setSpacing(3);
+    auto* routeText = new QVBoxLayout; routeText->setSpacing(2);
     auto* routeTitle = new QLabel("全局路由"); routeTitle->setObjectName("homeControlTitle"); routeTitle->setTextFormat(Qt::PlainText);
     connect(UiTheme::notifier(),&UiTheme::AppearanceNotifier::changed,routeIcon,[routeIcon] { routeIcon->setPixmap(UiIcons::icon(UiIcons::Glyph::Route,UiTheme::Brand).pixmap(22,22)); });
     routeText->addWidget(routeTitle); homeRouteRow_->setToolTip("控制代理请求的分流行为");
@@ -80,10 +80,10 @@ QWidget* MainWindow::homePage() {
 
     // ③ 连通性测试：结果/测试目标 + 「开始测试」，行尾箭头进网站测试页。
     auto* connectivityRow = new QWidget; connectivityRow->setObjectName("homeControlRow"); connectivityRow->setMinimumHeight(UiTheme::RowHeight);
-    auto* connectivityLayout = new QHBoxLayout(connectivityRow); connectivityLayout->setContentsMargins(0, 4, 0, 4); connectivityLayout->setSpacing(12);
+    auto* connectivityLayout = new QHBoxLayout(connectivityRow); connectivityLayout->setContentsMargins(0, 3, 0, 3); connectivityLayout->setSpacing(10);
     auto* probeIcon=new QLabel; probeIcon->setFixedSize(22,22); probeIcon->setPixmap(UiIcons::icon(UiIcons::Glyph::Gauge,UiTheme::Brand).pixmap(22,22)); connectivityLayout->addWidget(probeIcon);
     connect(UiTheme::notifier(),&UiTheme::AppearanceNotifier::changed,probeIcon,[probeIcon] { probeIcon->setPixmap(UiIcons::icon(UiIcons::Glyph::Gauge,UiTheme::Brand).pixmap(22,22)); });
-    auto* connectivityText = new QVBoxLayout; connectivityText->setSpacing(3);
+    auto* connectivityText = new QVBoxLayout; connectivityText->setSpacing(2);
     auto* connectivityLabel = new QLabel("连通性测试"); connectivityLabel->setObjectName("homeControlTitle"); connectivityLabel->setTextFormat(Qt::PlainText);
     homeConnectivityCaption_ = new ElidedLabel("尚未测试", this); homeConnectivityCaption_->setObjectName("homeControlMeta"); homeConnectivityCaption_->setProperty("secondary", true); homeConnectivityCaption_->setTextFormat(Qt::PlainText); homeConnectivityCaption_->setSizePolicy(QSizePolicy::Ignored, QSizePolicy::Preferred);
     connectivityText->addWidget(connectivityLabel); connectivityText->addWidget(homeConnectivityCaption_);
@@ -107,7 +107,7 @@ QWidget* MainWindow::homePage() {
 
     // 节点区（原型 01）：标题行 + 策略组上下文，全部来自 nodeSection()。
     nodeSection_ = nodeSection(); layout->addWidget(nodeSection_,1);
-    auto* empty=new QWidget; empty->setObjectName("prototypeHomeEmpty"); empty->setMaximumHeight(150); auto* emptyLayout=new QVBoxLayout(empty); emptyLayout->setContentsMargins(20,28,20,28);
+    auto* empty=new QWidget; empty->setObjectName("prototypeHomeEmpty"); empty->setMaximumHeight(130); auto* emptyLayout=new QVBoxLayout(empty); emptyLayout->setContentsMargins(16,20,16,20);
     auto* emptyTitle=new QLabel("还没有配置"); emptyTitle->setAlignment(Qt::AlignCenter); emptyLayout->addWidget(emptyTitle);
     auto* emptyText=new QLabel("导入订阅或本地配置后，选择节点并连接。"); emptyText->setAlignment(Qt::AlignCenter); emptyText->setProperty("secondary",true); emptyLayout->addWidget(emptyText);
     auto* import=new QPushButton("导入配置"); import->setProperty("primary",true); emptyLayout->addWidget(import,0,Qt::AlignHCenter); connect(import,&QPushButton::clicked,this,&MainWindow::addUrl); layout->addWidget(empty);

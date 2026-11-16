@@ -12,5 +12,6 @@ Mlash 自有代码采用 GPL-3.0-or-later，完整文本见包根目录 LICENSE�
 | mihomo @CORE_VERSION@ | 独立进程，含半关闭回收补丁 | mihomo-GPL-3.0.txt；[上游](https://github.com/MetaCubeX/mihomo)，实际提交与SHA见 cores/manifest.json |
 | Twemoji 14.0.2 国旗 | 内置 PNG | CC BY 4.0，twemoji-graphics.txt、twemoji-NOTICE.md |
 | 服务标记 | 内置 PNG | Simple Icons CC0 及各自商标，simple-icons-CC0.txt、services-NOTICE.md |
+| Noto Sans SC 可变字体 | 内置于 Mlash.exe | SIL Open Font License 1.1，NotoSansSC-OFL.txt；[Google Fonts 源码](https://github.com/google/fonts/tree/main/ofl/notosanssc) |
 
 许可文本与声明不是完整对应源码分发的替代品。公开发布需一并提供对应版本源码、构建材料及第三方完整声明；详见对应源码包的 licenses/README.md 与发布说明。

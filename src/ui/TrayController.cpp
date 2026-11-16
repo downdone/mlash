@@ -166,31 +166,47 @@ void TrayController::rebuildMenu() {
         auto* action = mode->addAction(entry.first); action->setCheckable(true); action->setChecked(entry.second == state.mode);
         connect(action, &QAction::triggered, this, [this, entry] { controller_->setMode(entry.second); });
     }
-    auto* groups = menu_.addMenu("策略组"); groups->setEnabled(enabled && state.ready);
+    auto* groups = menu_.addMenu("策略组 · 快速选择"); groups->setEnabled(enabled && state.ready);
     auto* automatic=groups->addAction("展开时测延迟"); automatic->setObjectName("trayAutoTestGroups"); automatic->setCheckable(true); automatic->setChecked(autoTestGroups_); automatic->setToolTip("本次启动有效；复用 60 秒结果");
     connect(automatic,&QAction::toggled,this,[this](bool checked) { autoTestGroups_=checked; if (!checked) { groupDwell_.stop(); controller_->cancelTrayTests(); } }); groups->addSeparator();
     const auto& proxies = controller_->proxies();
-    auto names=proxies.keys(); const auto common=controller_->nodePreferences().value("common_groups").toArray();
-    std::stable_sort(names.begin(),names.end(),[common](const QString& a,const QString& b) { return common.contains(a) && !common.contains(b); });
+    const auto preferences=controller_->nodePreferences();
+    const auto common=preferences.value("common_groups").toArray();
+    const auto allNames=proxies.keys();
+    QStringList names;
+    const auto appendGroup=[&](const QString& name) { if (!name.isEmpty() && !names.contains(name) && proxies.value(name).toObject().value("all").isArray()) names.append(name); };
+    appendGroup(preferences.value("last_group").toString());
+    for (const auto& value:common) { if (names.size()>=8) break; appendGroup(value.toString()); }
+    for (const auto& name:allNames) { if (names.size()>=8) break; appendGroup(name); }
     for (const auto& name:names) {
         const auto group=proxies.value(name).toObject(); if (!group.value("all").isArray()) continue;
         auto* sub = groups->addMenu((common.contains(name)?QString("★ "):QString())+name); sub->setProperty("groupName",name); sub->setToolTipsVisible(true); sub->installEventFilter(this);
         connect(sub, &QMenu::aboutToShow, sub, [this, sub, name] {
             groupDwell_.stop(); controller_->cancelTrayTests(); activeGroupMenu_=sub;
             sub->clear(); const auto group = controller_->proxies().value(name).toObject();
-            for (const auto& member : group.value("all").toArray()) {
-                const auto value = member.toString(); auto* action = sub->addAction(value); action->setCheckable(true); action->setChecked(value == group.value("now").toString());
+            const auto members=group.value("all").toArray();
+            const auto current=group.value("now").toString();
+            const auto favorites=controller_->nodePreferences().value("favorites").toArray();
+            QStringList quick;
+            const auto appendMember=[&](const QString& value) { if (!value.isEmpty() && members.contains(value) && !quick.contains(value)) quick.append(value); };
+            appendMember(current);
+            for (const auto& value:favorites) { if (quick.size()>=16) break; appendMember(value.toString()); }
+            for (const auto& member:members) { if (quick.size()>=16) break; appendMember(member.toString()); }
+            for (const auto& value:quick) {
+                auto* action = sub->addAction(value); action->setCheckable(true); action->setChecked(value == current);
                 action->setProperty("memberName",value); const bool nested=controller_->proxies().value(value).toObject().value("all").isArray();
                 const auto iconKey=NodePresentation::iconKey(value,nested);
                 if (!menuIcons_.contains(iconKey)) menuIcons_.insert(iconKey,NodePresentation::icon(value,nested)); action->setIcon(menuIcons_.value(iconKey));
                 connect(action, &QAction::triggered, this, [this, name, value] { controller_->selectMember(name, value); });
             }
-            sub->addSeparator(); auto* retest=sub->addAction("重测本组延迟"); retest->setObjectName("trayRetestGroup"); connect(retest,&QAction::triggered,this,[this,sub,name] { groupDwell_.stop(); if (activeGroupMenu_==sub && sub->isVisible()) controller_->testTrayGroup(name,true); });
+            sub->addSeparator();
+            if (members.size()>quick.size()) connect(sub->addAction(QString("在主窗口查看全部 %1 个节点…").arg(members.size())),&QAction::triggered,this,[this] { emit showRoute(Route{0, -1, HomeAnchor::Nodes}); });
+            auto* retest=sub->addAction("重测本组延迟"); retest->setObjectName("trayRetestGroup"); connect(retest,&QAction::triggered,this,[this,sub,name] { groupDwell_.stop(); if (activeGroupMenu_==sub && sub->isVisible()) controller_->testTrayGroup(name,true); });
             updateGroupMenu(); if (autoTestGroups_) groupDwell_.start();
         });
         connect(sub,&QMenu::aboutToHide,this,[this,sub] { if (activeGroupMenu_!=sub) return; groupDwell_.stop(); activeGroupMenu_=nullptr; controller_->cancelTrayTests(); });
     }
-    groups->addSeparator(); auto* browse=groups->addAction("打开节点页…"); connect(browse,&QAction::triggered,this,[this] { emit showRoute(Route{0, -1, HomeAnchor::Nodes}); });
+    groups->addSeparator(); auto* browse=groups->addAction("打开完整节点页…"); connect(browse,&QAction::triggered,this,[this] { emit showRoute(Route{0, -1, HomeAnchor::Nodes}); });
     auto* core = menu_.addAction(state.core == CoreState::Running ? "停止内核" : "启动内核"); core->setEnabled(enabled);
     connect(core, &QAction::triggered, this, [this] { if (controller_->state().core == CoreState::Running) controller_->stopCore(); else controller_->startCore(); });
     menu_.addSeparator();

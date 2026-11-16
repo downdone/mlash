@@ -2,6 +2,20 @@
 
 本文只记录实际结果，区分本轮执行、历史匿名汇总与尚未验证的资格。原始配置、私人环境、真实订阅及原始诊断不进入公开文档。
 
+## U14：原生全页精修与统一字体（2026-11-16）
+
+按 [U14 设计](design/u14-shadowrocket-all-pages.md) 和 [ADR 0054](adr/0054-shadowrocket-all-pages-refinement.md) 收紧正文、次要文字、行高、间距与网站测试卡；移除全局 QSS 对应用字体族的二次覆盖。图标按设备像素比生成缓存变体。托盘快捷节点限制为 16 个，自动悬停测速优先当前节点并只测快捷范围；显式测试仍保留原上限与取消能力。未改变配置/系统代理写入路径。
+
+追加内置 Google Fonts Noto Sans SC 可变字体，随 Qt 资源编入可执行文件；原始 SIL OFL 1.1 声明随便携包放置于 `licenses/NotoSansSC-OFL.txt`。导入字体 SHA-256 为 `a3041811a78c361b1de50f953c805e0244951c21c5bd412f7232ef0d899af0da`。Windows 原生 QtTest 的字形回读为 `font_requested=Noto Sans SC`、`font_resolved=Noto Sans SC`、`glyph_families=[Noto Sans SC]`；主页面样片有效 DPR 1.5，设置弹窗样片有效 DPR 1.25。对首页窄/宽窗、配置、设置和测速深色页面的原尺寸截图做了视觉复核，未见中文缺字或布局溢出。此为本机样片检查，不等于所有显示器 DPI、人工读屏或 Windows 10 验收。
+
+`scripts/build.ps1 -Preset windows-mingw` 完整构建通过；原生 `appearance_tests` 两个指定场景和 `appearance_prefs_tests` 通过。`scripts/test.ps1 -Preset windows-mingw` 全量运行 45 组，**44 通过、0 失败、1 个系统写入门禁跳过**，耗时 485.96 秒；未在真实系统代理或 TUN 上执行写入。`scripts/package.ps1 -Preset windows-mingw -OutputName Mlash-1.19.0-u14-font-review` 生成本地候选，35 文件白名单及逐文件完整性通过，ZIP SHA-256 为 `97581abfe3f1d964f176dfbab8f3c46ec7abb0947d509554816632a77447a2ef`。包内文档隐私扫描 0 命中，源码文档链接检查 0 问题。本地候选不是正式发行资格，未发布。
+
+## U14：Shadowrocket 原则驱动的全页设计（2026-11-16）
+
+先对照 1.19.0 原生隔离冒烟截图、UiTheme/UiIcons/节点委托/网站卡片几何以及 U09–U13 当前设计，记录[全页精修规范](design/u14-shadowrocket-all-pages.md)，并制作[可切换原型](design/u14-all-pages.html)。设计覆盖首页、配置列表/详情与七类对象任务、数据四页签、设置目录与十三类任务，以及托盘和运行/空/异常状态。原型只使用虚构配置与节点，不访问网络、文件、内核或系统代理。
+
+实际检查：HTML 解析成功；脚本经 Node `--check` 通过；在最小模拟 DOM 中渲染 29 个页面/任务路由均产生内容；`git diff --check`、文档链接/导航检查（115 份 Markdown、0 问题）、隐私检查（122 项、0 问题）通过。未执行浏览器视觉检查、Windows 原生 DPI/字体链路测试或产品构建/回归；这些结果不能证明锯齿、密度及布局已在 Mlash.exe 中修复。产品源代码与发布包未修改。
+
 ## R19：GitHub 1.19.0 发布与附件复核（2026-11-15）
 
 按用户明确授权的平台验收规则，直接将提交推送 main，不等待 PR/跨平台审批。[PR #5](https://github.com/downdone/mlash/pull/5) 因提交进入主分支标为 merged。发布标签 v1.19.0 固定到 `8b838c0c509dfeb9f8b99ee68fd217f1d88d5a6f`，后续文档提交不移动标签。

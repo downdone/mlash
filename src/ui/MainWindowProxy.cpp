@@ -191,7 +191,7 @@ void MainWindow::updateNodeCount() {
     if (!nodeCount_) return;
     if (nodeViews_) {
         const int rows=memberView()==1?(filter_.rowCount()+qMax(1,nodeCards_->viewport()->width()/220)-1)/qMax(1,nodeCards_->viewport()->width()/220):nodeRows_->rowCount();
-        nodeViews_->setMaximumHeight(rows>0?qMax(64,rows*(memberView()==1?54:UiTheme::twoLineRowHeight(nodeList_->font()))+4):QWIDGETSIZE_MAX);
+        nodeViews_->setMaximumHeight(rows>0?qMax(64,rows*(memberView()==1?UiTheme::NodeCardHeight:UiTheme::twoLineRowHeight(nodeList_->font()))+4):QWIDGETSIZE_MAX);
     }
     nodeCount_->setText(filter_.rowCount() == model_.rowCount() ? QString("%1 个").arg(model_.rowCount())
                                                                 : QString("%1 / %2 个").arg(filter_.rowCount()).arg(model_.rowCount()));

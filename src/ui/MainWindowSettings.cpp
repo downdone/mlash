@@ -58,15 +58,14 @@ void MainWindow::applySettings() {
     auto s = controller_->settings(); s.mixedPort = mixedPort_->value(); s.logLevel = logLevel_->currentData().toString(); s.corePath = corePath_->text().trimmed(); s.ipv6Mode=ipv6Mode_->currentData().toString(); s.unifiedDelayMode=unifiedDelayMode_->currentData().toString(); s.testUrl=testUrl_->text().trimmed(); controller_->updateSettings(s);
 }
 QWidget* MainWindow::settingsPage() {
-    // K8 · 设置页（原型 viewSettings）：三组平铺卡片，没有分类页签、没有左右两栏。
-    // 每组是一张 12px 圆角卡片，行高 52px，行间只用分隔线；首行图标 21px，行尾是值 + 控件 + ›。
+    // U14 · 设置目录通向具体任务；任务内用紧凑的连续分组行。
     // 「应用网络设置 / 放弃修改」仍固定在组末（ADR 0044 的显式提交）。
     auto* page = new QWidget; page->setObjectName("settingsPage"); page->setAttribute(Qt::WA_StyledBackground, true);
-    auto* column = new QVBoxLayout(page); column->setContentsMargins(0, 0, 0, 0); column->setSpacing(14);
+    auto* column = new QVBoxLayout(page); column->setContentsMargins(0, 0, 0, 0); column->setSpacing(8);
     // group() 建一张卡片并把「行容器」交回调用方。
     const auto editorGroup=[&column](const QString& title, const QString& name, QVBoxLayout*& rows) {
         auto* card = new QFrame; card->setObjectName("settingsGroup"); card->setProperty("settingsGroup", name); card->setAccessibleName(title);
-        auto* layout = new QVBoxLayout(card); layout->setContentsMargins(16, 14, 16, 6); layout->setSpacing(8);
+        auto* layout = new QVBoxLayout(card); layout->setContentsMargins(12, 10, 12, 5); layout->setSpacing(6);
         auto* heading = new QLabel(title); heading->setObjectName("sectionTitle"); layout->addWidget(heading);
         rows = new QVBoxLayout; rows->setContentsMargins(0, 0, 0, 0); rows->setSpacing(0); layout->addLayout(rows);
         column->addWidget(card); return card;
@@ -163,7 +162,7 @@ QWidget* MainWindow::settingsPage() {
     for (auto* combo:{logLevel_,ipv6Mode_,unifiedDelayMode_}) connect(combo,&QComboBox::currentIndexChanged,this,&MainWindow::updateActions);
     connect(mixedPort_,&QSpinBox::valueChanged,this,&MainWindow::updateActions); connect(corePath_,&QLineEdit::textChanged,this,&MainWindow::updateActions); connect(testUrl_,&QLineEdit::textChanged,this,&MainWindow::updateActions);
     settingsStack_=new QStackedWidget; settingsStack_->setObjectName("settingsTaskStack");
-    settingsDirectory_=new QWidget; settingsDirectory_->setObjectName("settingsDirectory"); auto* directory=new QVBoxLayout(settingsDirectory_); directory->setContentsMargins(0,0,0,12); directory->setSpacing(6);
+    settingsDirectory_=new QWidget; settingsDirectory_->setObjectName("settingsDirectory"); auto* directory=new QVBoxLayout(settingsDirectory_); directory->setContentsMargins(0,0,0,10); directory->setSpacing(UiTheme::PanelGap);
     using namespace PrototypeUi; using G=UiIcons::Glyph;
     auto* appearanceRows=group(directory);
     const auto choice=[this](QVBoxLayout* rows,const QString& name,const QString& title,G glyph,QComboBox* combo) {

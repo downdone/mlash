@@ -1,0 +1,5 @@
+<RCC>
+  <qresource prefix="/fonts">
+    <file alias="NotoSansSC-variable.ttf">fonts/NotoSansSC-variable.ttf</file>
+  </qresource>
+</RCC>

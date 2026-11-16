@@ -14,6 +14,8 @@
 
 ## 开发与当前契约
 
+[U14 全页精修设计](design/u14-shadowrocket-all-pages.md)：以 Shadowrocket 的内容优先、直接操作和渐进展开为原则，重审首页、配置、数据、设置、托盘与任务状态；[可切换原型](design/u14-all-pages.html)用于设计对照，尚非原生实现。
+
 [U13 紧凑密度](design/u13-compact-density.md)：修订共享尺寸、双行高度和首页留白，实际几何及截图验收。
 
 [U12 页面内工作区](design/u12-flat-workspaces.md)：减少独立弹窗与中间层级，统一编辑任务与稳定正文宿主；本轮实施以此补充 U11。

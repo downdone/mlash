@@ -932,12 +932,17 @@ void AppController::testTrayGroup(const QString& name,bool force) {
     trayTestUrl_=groupTestUrl(name);
     if (trayCacheGeneration_!=state_.generation) { trayDelays_.clear(); trayCacheGeneration_=state_.generation; }
     QSet<QString> seen;
-    for (const auto& member:group.value("all").toArray()) {
-        const auto node=member.toString(); const auto proxy=proxies_.value(node).toObject();
+    QStringList candidates;
+    if (!force && group.value("all").toArray().contains(group.value("now"))) candidates.append(group.value("now").toString());
+    for (const auto& member:group.value("all").toArray()) candidates.append(member.toString());
+    for (const auto& node:candidates) {
+        const auto proxy=proxies_.value(node).toObject();
         if (node.isEmpty() || node.size()>512 || proxy.isEmpty() || seen.contains(node) || QStringList{"Direct","Reject","RejectDrop","Pass"}.contains(proxy.value("type").toString())) continue;
         seen.insert(node); if (force) trayDelays_.remove(node+QChar::Null+trayTestUrl_);
         if (!trayNodeDelay(node,name).value("known").toBool()) trayQueue_.append(node);
-        if (seen.size()>=500) break;
+        // Hover sampling is quick and bounded; the explicit full-group action
+        // retains the existing 500-node ceiling and cancellation behavior.
+        if (seen.size()>=(force?500:16)) break;
     }
     trayRunGeneration_=state_.generation; emit trayDelaysChanged(); runTrayDelayBatch();
 }
