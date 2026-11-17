@@ -6,7 +6,9 @@
 
 审视 1.20.0 发布链发现：纯文档记录曾触发完整 Windows 构建/回归和打包；普通代码 CI 也准备发布专用内核源码、打包并上传未发布附件；测试筛选为空时 CTest 可返回成功；重复预发布使用 `--clobber` 会覆盖同名附件。对应调整为常规 main/PR 独立文档轻检、代码 Windows 构建与完整隔离回归、仅标签/显式发布准备源码及打包冒烟，并禁止不同摘要的同名附件覆盖。发布文档中的包文件数按实际清单修正为 35。
 
-本机对 Windows 侧车直接运行 GNU `sha256sum -c` 失败，原因为 CRLF 被读入文件名；发布脚本改为读取时规范化换行，三个 1.20.0 本地 ZIP/侧车均通过。`scripts/test.ps1` 对不存在的测试名现在按预期失败；六项 unit 层和 `release_tools` 一项均通过。`scripts/build.ps1 -Preset windows-mingw-open` 完整构建通过；文档导航、隐私检查、四项文档工具测试、工作流 YAML 解析及发布 Bash 语法检查通过。更新后 GitHub 工作流结果在完成后补记；本轮未生成新发行版本。
+本机对 Windows 侧车直接运行 GNU `sha256sum -c` 失败，原因为 CRLF 被读入文件名；发布脚本改为读取时规范化换行，三个 1.20.0 本地 ZIP/侧车均通过。`scripts/test.ps1` 对不存在的测试名现在按预期失败；六项 unit 层和 `release_tools` 一项均通过。`scripts/build.ps1 -Preset windows-mingw-open` 完整构建通过；文档导航、隐私检查、四项文档工具测试、工作流 YAML 解析及发布 Bash 语法检查通过。
+
+提交 `05bab6b6a92e63a07d207e5ca505f339c39a56ea` 已推送 main。[文档工作流](https://github.com/downdone/mlash/actions/runs/43996640520)成功；[Windows 工作流](https://github.com/downdone/mlash/actions/runs/43996640734)完成构建及完整隔离回归：51 项、50 通过、0 失败、1 项 `system_test_guard` 跳过，456.23 秒。准备步骤成功且仅拉取二进制固定内核，打包/原生冒烟、发行附件上传与发布 job 均按普通代码提交规则跳过。本轮未运行新的标签发布流程，也未生成新发行版本；发布重跑的“不覆盖已有不同摘要附件”逻辑只完成 Bash 语法与本地侧车校验，待下次真实发布验证。
 
 ## U18：1.20.0 Windows 候选与发布前验收（2026-11-17）
 
