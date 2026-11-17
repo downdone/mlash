@@ -1,4 +1,5 @@
 """Prepare pinned public inputs on a clean Windows runner; no user/system state."""
+import argparse
 import json
 import os
 from pathlib import Path
@@ -6,7 +7,7 @@ import subprocess
 from prepare_open_qt import ROOT, DEST, download, main as prepare_qt
 
 
-def main():
+def main(include_source=False):
     lock = json.loads((ROOT/"dependencies.lock.json").read_text(encoding="utf-8"))
     prepare_qt()
     tools = ROOT/"build/_deps/mingw"
@@ -29,18 +30,21 @@ def main():
     core = lock["mihomo-release"]
     download(core["asset_url"], ROOT/"cores/mihomo.exe", core["executable_sha256"])
     subprocess.run(["pwsh", "-NoProfile", "-File", str(ROOT/"scripts/bootstrap.ps1")], check=True)
-    source = ROOT/"build/_deps/mihomo-source"
-    source.mkdir(parents=True, exist_ok=True)
-    subprocess.run(["git", "init", str(source)], check=True, stdout=subprocess.DEVNULL)
-    subprocess.run(["git", "-C", str(source), "fetch", "--depth=1", core["repository"], core["source_commit"]], check=True)
-    subprocess.run(["git", "-C", str(source), "checkout", "--detach", "FETCH_HEAD"], check=True)
-    if subprocess.check_output(["git", "-C", str(source), "rev-parse", "HEAD"], text=True).strip() != core["source_commit"]:
-        raise ValueError("core source commit differs from release lock")
+    if include_source:
+        source = ROOT/"build/_deps/mihomo-source"
+        source.mkdir(parents=True, exist_ok=True)
+        subprocess.run(["git", "init", str(source)], check=True, stdout=subprocess.DEVNULL)
+        subprocess.run(["git", "-C", str(source), "fetch", "--depth=1", core["repository"], core["source_commit"]], check=True)
+        subprocess.run(["git", "-C", str(source), "checkout", "--detach", "FETCH_HEAD"], check=True)
+        if subprocess.check_output(["git", "-C", str(source), "rev-parse", "HEAD"], text=True).strip() != core["source_commit"]:
+            raise ValueError("core source commit differs from release lock")
     if os.environ.get("GITHUB_ENV"):
         with open(os.environ["GITHUB_ENV"], "a", encoding="utf-8") as output:
             output.write(f"MLASH_MINGW={mingw.as_posix()}\nQT_PLUGIN_PATH={(DEST/'plugins').as_posix()}\n")
-    print("Pinned public Qt/MinGW/core and corresponding core commit prepared", flush=True)
+    print("Pinned public Qt/MinGW/core prepared" + (" with core source" if include_source else ""), flush=True)
 
 
 if __name__ == "__main__":
-    main()
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--include-source", action="store_true", help="fetch pinned core source for a release archive")
+    main(include_source=parser.parse_args().include_source)

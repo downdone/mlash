@@ -4,7 +4,23 @@ on:
   push:
     branches: [main]
     tags: ['v*']
+    paths-ignore:
+      - 'docs/**'
+      - 'README.md'
+      - 'CHANGELOG.md'
+      - 'AGENTS.md'
+      - 'tests/README.md'
+      - 'licenses/README.md'
+      - 'resources/releases/**'
   pull_request:
+    paths-ignore:
+      - 'docs/**'
+      - 'README.md'
+      - 'CHANGELOG.md'
+      - 'AGENTS.md'
+      - 'tests/README.md'
+      - 'licenses/README.md'
+      - 'resources/releases/**'
   workflow_dispatch:
     inputs:
       release_tag:
@@ -47,18 +63,25 @@ jobs:
         id: version
         run: python scripts/ci_release_check.py
       - name: Check distributable document privacy
+        if: github.event_name == 'workflow_dispatch' || startsWith(github.ref, 'refs/tags/')
         run: |
           python scripts/check_docs.py
           python scripts/check_document_privacy.py
           python -m unittest discover -s tests -p test_documentation_tools.py
-      - name: Prepare pinned public toolchain, core and source
-        run: python scripts/ci_prepare.py
+      - name: Prepare pinned public toolchain and optional source
+        env:
+          RELEASE_BUILD: ${{ github.event_name == 'workflow_dispatch' || startsWith(github.ref, 'refs/tags/') }}
+        run: |
+          $prepareArgs = @()
+          if ($env:RELEASE_BUILD -eq 'true') { $prepareArgs += '--include-source' }
+          python scripts/ci_prepare.py @prepareArgs
       - name: Build
         run: ./scripts/build.ps1 -Preset windows-ci
       - name: Default isolated regression tests
         if: github.event_name != 'workflow_dispatch' || inputs.run_windows_regression
         run: ./scripts/test.ps1 -Preset windows-ci
       - name: Package and isolated native smoke
+        if: github.event_name == 'workflow_dispatch' || startsWith(github.ref, 'refs/tags/')
         run: |
           $PSNativeCommandUseErrorActionPreference=$true
           $version='${{ steps.version.outputs.version }}'
@@ -74,6 +97,7 @@ jobs:
           Copy-Item "resources/releases/$version.md" build/release-assets/release-notes.md
           Copy-Item build/ci-evidence/package-verification.json build/release-assets
       - name: Upload verified version assets
+        if: github.event_name == 'workflow_dispatch' || startsWith(github.ref, 'refs/tags/')
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: release-assets
@@ -117,6 +141,7 @@ jobs:
         run: |
           set -euo pipefail
           test "$RELEASE_TAG" = "v${{ needs.build.outputs.version }}"
+          (cd assets && for sidecar in *.sha256; do tr -d '\r' < "$sidecar" | sha256sum -c -; done)
           if gh api "repos/$GH_REPO/git/ref/tags/$RELEASE_TAG" > tag.json 2>/dev/null; then
             type=$(jq -r '.object.type' tag.json)
             sha=$(jq -r '.object.sha' tag.json)
@@ -129,7 +154,17 @@ jobs:
           fi
           if gh release view "$RELEASE_TAG" --json isPrerelease > release.json 2>/dev/null; then
             test "$(jq -r '.isPrerelease' release.json)" = true
-            gh release upload "$RELEASE_TAG" assets/*.zip assets/*.sha256 assets/*-source.json assets/package-verification.json --clobber
+            gh api "repos/$GH_REPO/releases/tags/$RELEASE_TAG" > release-assets.json
+            for asset in assets/*.zip assets/*.sha256 assets/*-source.json assets/package-verification.json; do
+              name=$(basename "$asset")
+              expected="sha256:$(sha256sum "$asset" | cut -d' ' -f1)"
+              actual=$(jq -r --arg name "$name" '.assets[] | select(.name == $name) | .digest' release-assets.json)
+              if [ -n "$actual" ]; then
+                test "$actual" = "$expected" || { echo "Existing release asset differs: $name" >&2; exit 1; }
+              else
+                gh release upload "$RELEASE_TAG" "$asset"
+              fi
+            done
             gh release edit "$RELEASE_TAG" --prerelease --latest=false --notes-file assets/release-notes.md
           else
             gh release create "$RELEASE_TAG" assets/*.zip assets/*.sha256 assets/*-source.json assets/package-verification.json --verify-tag --title "Mlash $RELEASE_TAG · 预发布" --notes-file assets/release-notes.md --prerelease --latest=false

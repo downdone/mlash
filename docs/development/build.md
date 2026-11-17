@@ -18,7 +18,7 @@ $env:MLASH_MINGW = $compiler.Directory.Parent.FullName
 ./scripts/test.ps1 -Preset windows-ci
 ```
 
-准备脚本校验公开 Qt、MinGW 和固定补丁内核的哈希，并取得对应内核源码。CI 中脚本通过 GITHUB_ENV 设置编译器位置；交互式 PowerShell 需要按上述方式显式设置 MLASH_MINGW。不会写入工作站专属路径或修改现有 SDK。
+准备脚本校验公开 Qt、MinGW 和固定补丁内核的哈希；生成发布源码附件前再执行 `python scripts/ci_prepare.py --include-source` 取得锁定的内核源码。CI 中脚本通过 GITHUB_ENV 设置编译器位置；交互式 PowerShell 需要按上述方式显式设置 MLASH_MINGW。不会写入工作站专属路径或修改现有 SDK。
 
 ## 已安装的开发工具链
 

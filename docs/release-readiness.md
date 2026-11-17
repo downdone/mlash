@@ -4,7 +4,7 @@
 
 ## 运行包契约
 
-`scripts/package-files.json` 是运行包的唯一白名单，当前共 34 文件：两份 EXE、固定 mihomo、Qt/MinGW 与 Windows/TLS 插件、qt.conf、简短使用说明、许可/署名和完整性来源清单。缺少或混入额外文件均拒绝打包。
+`scripts/package-files.json` 是运行包的唯一白名单，当前共 35 文件：两份 EXE、固定 mihomo、Qt/MinGW 与 Windows/TLS 插件、qt.conf、简短使用说明、许可/署名和完整性来源清单。缺少或混入额外文件均拒绝打包。
 
 工程文档、开发脚本、依赖源码和测试证据不进入运行 ZIP。`package.ps1` 负责 Qt 部署、PE 版本、固定内核和资格门禁；`package_payload.py` 负责资产暂存和清单前后核对。应用、服务及 mihomo 版本/哈希必须与对应清单一致。
 
@@ -16,11 +16,17 @@ Mlash 源码归档执行文档隐私检查。第三方完整对应源码与声�
 
 ## 自动化与触发
 
-[Windows 工作流](../.github/workflows/windows.yml) 使用 Windows Server 2022、公开 Qt 6.10.2 和 MinGW 13.1 固定输入；Action 固定提交，下载核验 SHA256。步骤依次检查版本/文档、准备依赖、构建、默认隔离回归、便携部署、原生冒烟/Schannel、图标和源码附件。
+| 变更 | 本地最小验证 | CI | 产物 |
+|---|---|---|---|
+| 仅文档 | 文档链接、隐私与工具测试 | 文档轻检 | 无 |
+| 代码/构建脚本 | 受影响测试，提交前确认构建 | 文档轻检 + Windows 构建/完整隔离回归 | 测试证据，无发行 ZIP |
+| 标签/显式发布 | 核对版本、提交与已有回归 | Windows 构建/回归、便携打包、原生冒烟、来源和完整性 | 八个预发布附件 |
 
-main 推送和 PR 执行构建验证；v* 标签或 workflow_dispatch 才触发发布，版本必须匹配 CMake。写权限仅授予发布 job，PR 不执行发布。失败/取消不上传版本，不覆盖既有稳定版。
+[文档工作流](../.github/workflows/docs.yml) 对每次 main/PR 变更检查导航、隐私和检查器的失败路径，不准备 Qt/内核。[Windows 工作流](../.github/workflows/windows.yml) 使用 Windows Server 2022、公开 Qt 6.10.2 和 MinGW 13.1 固定输入；Action 固定提交，下载核验 SHA256。代码变更执行版本检查、构建与默认隔离回归；仅标签或显式发布才拉取固定内核源码，继续便携部署、原生冒烟/Schannel、图标、源码附件和上传。
 
-手动发布时在 Actions 选择 windows.yml，以目标提交或标签为 ref，release_tag 填入与 CMake 一致的版本。按开发平台验收：Windows 开发机仅要求 Windows 检查，macOS 开发机仅要求 macOS 检查，不要求跨平台回归先通过才推送或发布。macOS 本机检查已通过时，手动发布可将 run_windows_regression 关闭；Windows 构建、便携部署、包内冒烟与附件完整性仍执行，因为它们生成实际分发文件。发布记录须注明实际执行、跳过及未验平台，不把未运行测试标记为通过。成功后标签绑定该构建提交；之后的文档更新可以继续进入 main，不能把新代码覆盖到旧标签冒充原构建。
+纯文档的 main 推送和 PR 只运行文档工作流；代码变更运行 Windows 工作流。v* 标签或 workflow_dispatch 才触发发布，版本必须匹配 CMake；标签推送不受文档路径过滤影响。写权限仅授予发布 job，PR 不执行发布。失败/取消不上传版本；对已有预发布只补齐缺失附件，已有同名附件的 SHA256 必须一致，禁止静默覆盖。
+
+推荐顺序是定向测试、提交并推送代码、核对该提交的 main/PR 回归结果，再从同一提交发布。手动发布时在 Actions 选择 windows.yml，以目标提交或标签为 ref，release_tag 填入与 CMake 一致的版本。按开发平台验收：Windows 开发机仅要求 Windows 检查，macOS 开发机仅要求 macOS 检查，不要求跨平台回归先通过才推送或发布。macOS 本机检查已通过时，手动发布可将 run_windows_regression 关闭；Windows 构建、便携部署、包内冒烟与附件完整性仍执行，因为它们生成实际分发文件。发布记录须注明实际执行、跳过及未验平台，不把未运行测试标记为通过。成功后标签绑定该构建提交；之后的文档更新可以继续进入 main，不能把新代码覆盖到旧标签冒充原构建。
 
 ## 预发布核验
 

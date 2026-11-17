@@ -11,7 +11,7 @@ try {
     $env:TEMP=$testTemp
     $env:TMP=$testTemp
     if (!$env:QT_QPA_FONTDIR -and $env:OS -eq 'Windows_NT') { $env:QT_QPA_FONTDIR=Join-Path $env:SystemRoot 'Fonts' }
-    $ctestArgs = @('--preset', $Preset)
+    $ctestArgs = @('--preset', $Preset, '--no-tests=error')
     if ($TestRegex) { $ctestArgs += @('--tests-regex', $TestRegex) }
     if ($Layer) { $ctestArgs += @('--label-regex', "^$([regex]::Escape($Layer))$") }
     & ctest @ctestArgs

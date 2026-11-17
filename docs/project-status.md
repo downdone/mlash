@@ -2,6 +2,8 @@
 
 ## 当前任务
 
+**P03 进行中：验证、提交与发布流程收敛。** 验收条件：纯文档变更只运行文档/隐私检查；代码变更保留 Windows 构建与完整隔离回归；仅标签或显式发布执行便携打包、冒烟和附件上传；空测试选择必须失败；重复发布不得静默覆盖既有附件。以工作流触发检查、脚本失败路径和实际 CI 结果为证据。
+
 **U18 完成：1.20.0 已提交并预发布。** 按[U18 方案](design/u18-fast-tests-window-chrome-update.md)实现 12 并发异步整组测速、可切换应用内标题栏及固定来源在线检查/已校验便携候选。本地 Windows 全量自动回归 50 通过、1 系统门禁跳过；原生标题栏切换样片、35 文件便携包完整性和包内八页冒烟通过。U15～U18 一并提交至 main；[标签发布流水线](https://github.com/downdone/mlash/actions/runs/43989694240)及[主分支流水线](https://github.com/downdone/mlash/actions/runs/43989693858)均成功，[v1.20.0 预发布](https://github.com/downdone/mlash/releases/tag/v1.20.0)已有八个附件。实际 GitHub API 在线更新检查、真实鼠标边缘缩放、系统代理/TUN 写入、Windows 10 与长期稳定性未验；`release_qualified=false`。验证范围和附件核对见[验证报告](verification-report.md)。
 
 **U17 已实施并完成本机定向验收：全界面视觉系统重建。** 按[事前原则、根因与实施后复核](design/u17-visual-system-rebuild.md)统一字阶计算、物理像素线、色彩层级、控件与节点卡片布局；未改变业务命令和系统写入契约。Windows 构建、单元和页面定向回归、原生 150% DPI 明暗/高对比与 100/120% 文字样片通过；首次受限沙盒中内核端口身份核对失败，同机允许只读观测后复测通过。本地 35 文件便携预览包及包内隔离冒烟通过。详情和未验范围见[验证报告](verification-report.md)，不据此声称发行资格。
