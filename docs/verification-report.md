@@ -8,7 +8,7 @@
 
 本机对 Windows 侧车直接运行 GNU `sha256sum -c` 失败，原因为 CRLF 被读入文件名；发布脚本改为读取时规范化换行，三个 1.20.0 本地 ZIP/侧车均通过。`scripts/test.ps1` 对不存在的测试名现在按预期失败；六项 unit 层和 `release_tools` 一项均通过。`scripts/build.ps1 -Preset windows-mingw-open` 完整构建通过；文档导航、隐私检查、四项文档工具测试、工作流 YAML 解析及发布 Bash 语法检查通过。
 
-提交 `05bab6b6a92e63a07d207e5ca505f339c39a56ea` 已推送 main。[文档工作流](https://github.com/downdone/mlash/actions/runs/43996640520)成功；[Windows 工作流](https://github.com/downdone/mlash/actions/runs/43996640734)完成构建及完整隔离回归：51 项、50 通过、0 失败、1 项 `system_test_guard` 跳过，456.23 秒。准备步骤成功且仅拉取二进制固定内核，打包/原生冒烟、发行附件上传与发布 job 均按普通代码提交规则跳过。本轮未运行新的标签发布流程，也未生成新发行版本；发布重跑的“不覆盖已有不同摘要附件”逻辑只完成 Bash 语法与本地侧车校验，待下次真实发布验证。
+提交 `05bab6b6a92e63a07d207e5ca505f339c39a56ea` 已推送 main。[文档工作流](https://github.com/downdone/mlash/actions/runs/43996640520)成功；[Windows 工作流](https://github.com/downdone/mlash/actions/runs/43996640734)完成构建及完整隔离回归：51 项、50 通过、0 失败、1 项 `system_test_guard` 跳过，456.23 秒。准备步骤成功且仅拉取二进制固定内核，打包/原生冒烟、发行附件上传与发布 job 均按普通代码提交规则跳过。随后仅修改文档的提交 `44f3b57239f34625aa823a27f8d6a29d5fdb713f` 只触发[文档轻检](https://github.com/downdone/mlash/actions/runs/43999206584)并成功，没有启动 Windows 工作流。本轮未运行新的标签发布流程，也未生成新发行版本；发布重跑的“不覆盖已有不同摘要附件”逻辑只完成 Bash 语法与本地侧车校验，待下次真实发布验证。
 
 ## U18：1.20.0 Windows 候选与发布前验收（2026-11-17）
 
