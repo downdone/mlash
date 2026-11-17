@@ -76,3 +76,5 @@ ADR 保留决策发生时的背景和取舍；较新的已接受决策可以替�
 | 0052 | [ADR 0052：同分区工作区与减少弹窗](0052-flat-task-workspaces.md) |
 | 0053 | [ADR 0053：紧凑密度](0053-compact-density.md) |
 | 0054 | [ADR 0054：Shadowrocket 原则驱动的全页精修](0054-shadowrocket-all-pages-refinement.md) |
+| 0055 | [ADR 0055：纯契约库与按职责拆分的 UI 组件](0055-domain-contracts-and-ui-components.md) |
+| 0056 | [ADR 0056：独立设计 token 与 Shadowrocket 风格特化](0056-independent-ui-design-system.md) |

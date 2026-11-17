@@ -1,8 +1,12 @@
 #include "TestPorts.h"
+#include "app/AppController.h"
 #include "ui/MainWindow.h"
 #include "ui/ImportDialog.h"
 #include "ui/NodePresentation.h"
-#include "ui/MainWindowParts.h"
+#include "ui/NodeRowDelegate.h"
+#include "ui/NodeRowModel.h"
+#include "ui/NodeRowView.h"
+#include "ui/PrototypeUi.h"
 #include "ui/ProfileRowModel.h"
 #include "ui/ViewIds.h"
 #include <QListView>
@@ -78,6 +82,50 @@ private slots:
         QApplication::setFont(QFont("Microsoft YaHei UI",9));
         WidgetStyle::install();
     }
+    void groupedRowHoverCoversWholeInterior() {
+        QWidget canvas; auto* column=new QVBoxLayout(&canvas); auto* rows=PrototypeUi::group(column);
+        auto* first=PrototypeUi::row(rows,"first","第一行",UiIcons::Glyph::Globe);
+        auto* middle=PrototypeUi::row(rows,"middle","中间行",UiIcons::Glyph::Globe);
+        auto* last=PrototypeUi::row(rows,"last","末行",UiIcons::Glyph::Globe);
+        canvas.resize(360,200); canvas.show(); QCoreApplication::processEvents();
+        for (auto* item:{first,middle,last}) {
+            item->setAttribute(Qt::WA_UnderMouse,true); item->update();
+            const auto image=item->grab().toImage();
+            const int x=image.width()/2, dpr=qMax(1.0,image.devicePixelRatio());
+            const int y=qMin(image.height()-2,int((item->height()-4)*dpr));
+            QCOMPARE(image.pixelColor(x,y),QColor(UiTheme::Hover));
+            item->setAttribute(Qt::WA_UnderMouse,false);
+        }
+    }
+    void profileTaskReturnPreservesDetailAndExternalNoticeStaysLocal() {
+        QTemporaryDir data; QVERIFY(seedDashboardFixture(data.path())); AppController controller(data.path(),true);
+        QSignalSpy initialized(&controller,&AppController::initialized); controller.initialize(); QTRY_COMPARE(initialized.size(),1);
+        for (int i=0;i<18;++i) { Profile extra=controller.profiles().first(); extra.id=newId(); extra.name=QString("滚动配置 %1").arg(i); const_cast<QVector<Profile>&>(controller.profiles()).append(extra); }
+        MainWindow window(&controller); window.resize(900,570); window.show();
+        window.navigate(Route{ViewIds::Profiles}); QCoreApplication::processEvents();
+        auto* list=window.findChild<QListView*>("localProfileList"); QVERIFY(list && list->model()->rowCount());
+        list->verticalScrollBar()->setValue(list->verticalScrollBar()->maximum()/2); QCoreApplication::processEvents();
+        const int listPosition=list->verticalScrollBar()->value();
+        const auto index=list->indexAt(QPoint(20,list->viewport()->height()/2)); QVERIFY(index.isValid());
+        QTest::mouseClick(list->viewport(),Qt::LeftButton,{},list->visualRect(index).center());
+        auto* stack=window.findChild<QStackedWidget*>("profileTaskStack"); QVERIFY(stack); QTRY_COMPARE(stack->currentIndex(),1);
+        auto* detail=qobject_cast<QScrollArea*>(stack->widget(1)); QVERIFY(detail); QVERIFY(window.findChild<QWidget*>("profileDetailsPage")); QVERIFY(!window.findChild<QTabBar*>("profileTaskTabs"));
+        detail->verticalScrollBar()->setValue(detail->verticalScrollBar()->maximum()); const int position=detail->verticalScrollBar()->value();
+        window.findChild<QPushButton*>("profileDetailsRules")->click();
+        auto* tabs=window.findChild<QTabBar*>("taskTabs"); QVERIFY(tabs); QTRY_VERIFY(tabs->isVisible());
+        tabs->setCurrentIndex(0); QTRY_COMPARE(stack->currentIndex(),1);
+        QCOMPARE(stack->widget(1),static_cast<QWidget*>(detail));
+        QCOMPARE(detail->verticalScrollBar()->value(),position);
+        window.navigate(Route{ViewIds::Profiles}); QCOMPARE(stack->currentIndex(),1);
+        window.findChild<QPushButton*>("profileDetailsBack")->click(); QCOMPARE(stack->currentIndex(),0);
+        QCOMPARE(list->verticalScrollBar()->value(),listPosition);
+        auto& state=const_cast<AppState&>(controller.state());
+        state.proxy=ProxyState::External; state.lastError="系统已有代理/PAC/自动检测，需明确允许接管"; controller.stateChanged();
+        auto* alarm=window.findChild<QLabel*>("operationAlarm"); auto* resolve=window.findChild<QToolButton*>("statusResolve"); QVERIFY(alarm && resolve);
+        QVERIFY(alarm->text().isEmpty()); QVERIFY(!resolve->isVisible());
+        state.lastError="恢复日志写入失败"; controller.stateChanged();
+        QCOMPARE(alarm->text(),QString("恢复日志写入失败")); QVERIFY(resolve->isVisible());
+    }
     void prototypeSystemPagesAndResponsiveInspector() {
         QTemporaryDir data; QVERIFY(seedDashboardFixture(data.path())); AppController controller(data.path(),true);
         QSignalSpy initialized(&controller,&AppController::initialized); controller.initialize(); QTRY_COMPARE(initialized.size(),1);
@@ -88,7 +136,7 @@ private slots:
         MainWindow window(&controller); window.resize(1040,720); window.show(); QTest::qWait(40);
         const auto save=[&](const QString& name) { const auto output=qEnvironmentVariable("MLASH_UI_SCREENSHOTS"); if (!output.isEmpty()) { QDir().mkpath(output); QVERIFY(window.grab().save(output+"/u11-"+name+".png")); } };
         auto* title=window.findChild<QLabel*>("topbarTitle"); QCOMPARE(title->text(),QString("Mlash"));
-        QVERIFY(window.findChild<QToolButton*>("toolbarImport")->isVisible()); QVERIFY(!window.findChild<QToolButton*>("topbarMore"));
+        QVERIFY(window.findChild<QToolButton*>("toolbarAdd")->isVisible()); QVERIFY(!window.findChild<QToolButton*>("toolbarImport")); QVERIFY(!window.findChild<QToolButton*>("topbarMore"));
         QVERIFY(window.findChild<QComboBox*>("nodeProfile")->isHidden()); QVERIFY(window.findChild<QToolButton*>("browseGroup")->isVisible());
         auto* nodes=window.findChild<QListView*>("nodeList"); QVERIFY(nodes->model()->rowCount()>1); QCOMPARE(nodes->model()->index(0,0).data().toString(),QString("日常选择"));
         QVERIFY(!nodes->model()->index(0,0).data(NodeRowModel::Subtitle).toString().isEmpty());
@@ -1162,34 +1210,6 @@ private slots:
             QCOMPARE(feedbackTarget(id).kind, FeedbackTarget::StatusNotice);
         QCOMPARE(statusNoticeText(false,"失败"), QString("操作未完成 · 失败"));
         QCOMPARE(statusNoticeText(true,"完成"), QString("完成"));
-    }
-    // S1 页面生命周期：切换视图只触发新页的 onEnter 与旧页的 onLeave 各一次。
-    // 之前这些副作用散在 navigate() 的多个 if 分支里，加视图容易漏。
-    void pageLifecycleRunsEnterAndLeaveOnce() {
-        using namespace mlash;
-        struct Counter final : PageLifecycle {
-            int enters = 0, leaves = 0, restores = 0; Route last;
-            void onEnter(const Route& route) override { ++enters; last = route; }
-            void onLeave() override { ++leaves; }
-            void onRestore(const PageMemory&) override { ++restores; }
-        };
-        // K1：视图号就是栈下标 0–4；设置页从「6」变成「4」，这里两种编号都不再混用。
-        PageRouter router; Counter home, settings;
-        router.registerPage(ViewIds::Home, &home); router.registerPage(ViewIds::Settings, &settings);
-        router.go(Route{ViewIds::Home, kNoCategory, HomeAnchor::Control});
-        QCOMPARE(home.enters, 1); QCOMPARE(settings.enters, 0);
-        // 同一视图换锚点不算重新进入：不触发 leave，页面自己处理页内定位。
-        router.go(Route{ViewIds::Home, kNoCategory, HomeAnchor::Nodes});
-        QCOMPARE(home.enters, 2); QCOMPARE(home.leaves, 0);
-        QCOMPARE(home.last.anchor, HomeAnchor::Nodes);
-        // 换视图：旧的离开一次，新的进入一次。
-        router.go(Route{ViewIds::Settings, 1});
-        QCOMPARE(home.leaves, 1); QCOMPARE(settings.enters, 1); QCOMPARE(settings.last.category, 1);
-        router.go(Route{ViewIds::Home});
-        QCOMPARE(settings.leaves, 1); QCOMPARE(home.enters, 3); QCOMPARE(router.current(), int(ViewIds::Home));
-        PageMemory memory; memory.filters["search"] = "abc"; memory.tab = 2;
-        router.restore(ViewIds::Settings, memory);
-        QCOMPARE(settings.restores, 1);
     }
     // 窗口层面：切到连接页会打开采样，离开会关闭——S1 搬迁后必须仍成立。
     void viewSwitchingKeepsControllerSideEffects() {

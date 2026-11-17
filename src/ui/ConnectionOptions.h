@@ -1,5 +1,6 @@
 #pragma once
-#include "app/AppController.h"
+#include "domain/Types.h"
+namespace mlash { class AppController; }
 #include <QWidget>
 #include <QSortFilterProxyModel>
 #include <QTimer>

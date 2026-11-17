@@ -2,7 +2,7 @@
 #include <QDateTime>
 #include <QNetworkReply>
 namespace mlash {
-HomeNodeProbe::HomeNodeProbe(MihomoClient* api,QObject* parent,int unit):QObject(parent),api_(api),unit_(qMax(1,unit)) { timer_.setSingleShot(true); connect(&timer_,&QTimer::timeout,this,&HomeNodeProbe::refresh); }
+HomeNodeProbe::HomeNodeProbe(CoreApi* api,QObject* parent,int unit):QObject(parent),api_(api),unit_(qMax(1,unit)) { timer_.setSingleShot(true); connect(&timer_,&QTimer::timeout,this,&HomeNodeProbe::refresh); }
 HomeNodeProbe::~HomeNodeProbe() { ++token_; timer_.stop(); if (request_) request_->abort(); }
 void HomeNodeProbe::reset() { ++token_; timer_.stop(); const auto request=request_; request_=nullptr; if (request) request->abort(); if (!result_.isEmpty()) { result_={}; emit changed(); } }
 void HomeNodeProbe::setVisible(bool visible) { if (visible_==visible) return; visible_=visible; reset(); schedule(); }

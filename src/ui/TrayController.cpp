@@ -1,3 +1,4 @@
+#include "app/AppController.h"
 #include "TrayController.h"
 #include "StatusSentence.h"
 #include "FeedbackSync.h"

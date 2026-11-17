@@ -141,7 +141,7 @@ G08 的完整 Provider 路径和 G21 的新内核兼容性，不可只凭参考�
 
 | ID | Mlash 对照依据 |
 |---|---|
-| M1 | [Controller 公开命令](../../src/app/AppController.h)、[状态/设置/订阅字段](../../src/app/Types.h)、[Controller 实现](../../src/app/AppController.cpp) |
+| M1 | [Controller 公开命令](../../src/app/AppController.h)、[状态/设置/订阅字段（现位于 domain）](../../src/domain/Types.h)、[Controller 实现](../../src/app/AppController.cpp) |
 | M2 | [存储校验与版本](../../src/profile/ProfileStore.cpp)、[下载器](../../src/profile/SubscriptionDownloader.cpp)（10/62）、[维护策略](../../src/app/ProfileMaintenance.cpp)、[架构](../architecture.md) |
 | M3 | [配置/规则/Provider 限制与合成](../../src/profile/ConfigBuilder.cpp)（12/62/82/94/110/113） |
 | M4 | [代理快照/恢复/所有权](../../src/platform/ProxyCoordinator.cpp)、[固定代理目标](../../src/platform/windows/WindowsServices.cpp)（59） |

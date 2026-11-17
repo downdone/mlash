@@ -1,5 +1,5 @@
 #pragma once
-#include "app/Types.h"
+#include "domain/Types.h"
 #include "profile/SubscriptionInfo.h"
 #include <QAbstractListModel>
 #include <QDateTime>
@@ -8,7 +8,7 @@
 namespace mlash {
 // K7：配置页的行模型。两张列表（远程订阅 / 本地配置）共用这一份快照，
 // 各自套一个按 kind 过滤的代理模型；行内容与是否「当前使用」都在这里算，
-// 委托（MainWindowParts.h 的 ProfileRowDelegate）只负责画。
+// ProfileRowDelegate 只负责绘制，行数据由本模型持有。
 class ProfileRowModel final : public QAbstractListModel {
 public:
     // data() 的自定义角色；列固定为 1。

@@ -1,4 +1,4 @@
-#include "app/Types.h"
+#include "domain/Types.h"
 #include "diagnostics/ProcessMetrics.h"
 #include <QDir>
 #include <QFileInfo>

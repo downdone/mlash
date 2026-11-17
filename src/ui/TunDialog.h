@@ -1,5 +1,6 @@
 #pragma once
-#include "app/AppController.h"
+#include "domain/Types.h"
+namespace mlash { class AppController; }
 #include "TaskDialog.h"
 class QLabel; class QPushButton; class QComboBox; class QCheckBox; class QPlainTextEdit; class QSpinBox;
 namespace mlash {

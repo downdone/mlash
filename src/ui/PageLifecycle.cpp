@@ -7,7 +7,7 @@ void PageRouter::registerPage(int view, PageLifecycle* page) {
 }
 
 PageLifecycle* PageRouter::page(int view) const {
-    return pages_.value(view, nullptr);
+    return pages_.value(view).data();
 }
 
 void PageRouter::go(const Route& route) {

@@ -154,7 +154,7 @@ Mlash 已补齐上一轮 G01–G22 的主要实现，也新增了 TUN 服务。�
 [M03]: ../../src/ui/TrayController.cpp
 [M04]: ../../src/ui/ImportDialog.cpp
 [M05]: ../../src/ui/MainWindow.cpp
-[M06]: ../../src/app/Types.h
+[M06]: ../../src/domain/Types.h
 [M07]: ../../src/ui/MainWindow.cpp
 [M08]: ../../src/app/ProfileMaintenance.cpp
 [M09]: ../../src/app/AppController.cpp

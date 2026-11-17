@@ -1,5 +1,5 @@
 #pragma once
-#include "app/Types.h"
+#include "domain/Types.h"
 namespace mlash {
 // Internal Windows adapter; production callers pass the fixed mlash class key.
 Result readProtocolRegistry(const QString& path,const QString& executable);

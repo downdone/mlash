@@ -18,7 +18,7 @@ QIcon icon(Glyph glyph,const QString& color) {
         +QChar::Null+QString(UiTheme::Disabled)+QChar::Null+QString(UiTheme::Surface);
     if (const auto it=cache.constFind(key); it!=cache.cend()) return *it;
     QIcon result;
-    for (const auto mode:{QIcon::Normal,QIcon::Disabled}) for (const qreal dpr:{1.0,2.0,3.0}) {
+    for (const auto mode:{QIcon::Normal,QIcon::Disabled}) for (const qreal dpr:{1.0,1.25,1.5,1.75,2.0,2.5,3.0}) {
         // Keep strokes in logical 24-DIP coordinates and rasterize for the
         // actual screen scale instead of scaling a single bitmap everywhere.
         const int side=qRound(24*dpr);

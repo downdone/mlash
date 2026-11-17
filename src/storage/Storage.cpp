@@ -1,5 +1,5 @@
 #include "Storage.h"
-#include "app/ConnectionColumns.h"
+#include "domain/ConnectionColumns.h"
 #include <QDir>
 #include <QFile>
 #include <QFileInfo>
@@ -106,7 +106,7 @@ QJsonObject Settings::toJson() const {
         {"start_core_on_launch", startCore}, {"restore_proxy_on_launch", restoreProxy},
         {"desired_proxy_enabled", desiredProxy}, {"lightweight_mode", lightweight}, {"tun_enabled",tunEnabled},{"tun_stack",tunStack},{"tun_strict_route",tunStrictRoute},{"tun_mtu",tunMtu},{"tun_dns_hijack",tunDnsHijack},{"tun_exclude_routes",QJsonArray::fromStringList(tunExcludeRoutes)}, {"mixed_port", mixedPort}, {"log_level", logLevel},
         {"active_profile_id", activeProfile}, {"core_path", corePath}, {"previous_core_path",previousCorePath}, {"core_history",history}, {"test_url", testUrl}, {"startup_page",startupPage},
-        {"tray_click",trayClick},{"ipv6_mode",ipv6Mode},{"unified_delay_mode",unifiedDelayMode},{"website_targets",websiteTargets},{"hotkeys",hotkeys},{"connection_view",connectionView},{"appearance",appearance},{"text_scale",textScale},{"home_probe_seconds",homeProbeSeconds},{"proxy_bypass",proxyBypass},{"remote_backup",remoteBackup},{"local_backup",localBackup}};
+        {"tray_click",trayClick},{"ipv6_mode",ipv6Mode},{"unified_delay_mode",unifiedDelayMode},{"website_targets",websiteTargets},{"hotkeys",hotkeys},{"connection_view",connectionView},{"appearance",appearance},{"window_chrome",windowChrome},{"text_scale",textScale},{"home_probe_seconds",homeProbeSeconds},{"proxy_bypass",proxyBypass},{"remote_backup",remoteBackup},{"local_backup",localBackup}};
 }
 Settings Settings::fromJson(const QJsonObject& o) {
     Settings s;
@@ -128,6 +128,8 @@ Settings Settings::fromJson(const QJsonObject& o) {
     s.hotkeys = o.value("hotkeys").toObject();
     s.connectionView=o.value("connection_view").toObject();
     s.appearance=o.value("appearance").toString("system"); s.textScale=o.value("text_scale").toInt(100);
+    s.windowChrome=o.value("window_chrome").toString("native");
+    if (!QStringList{"native","integrated"}.contains(s.windowChrome)) s.windowChrome="native";
     // home_summary_mask 已随首页六卡一起删除（U08 H2）：旧状态文件里的这个键读入时忽略，
     // 新版本不再写出，也不做迁移。
     s.homeProbeSeconds=o.value("home_probe_seconds").toInt(0);

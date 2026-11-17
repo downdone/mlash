@@ -1,6 +1,7 @@
 #pragma once
-#include "core/MihomoClient.h"
+#include "core/CoreApi.h"
 #include <QDateTime>
+#include <QPointer>
 
 namespace mlash {
 // 首页控制区第三行「连通性」的唯一实现（R3b）。
@@ -9,7 +10,7 @@ namespace mlash {
 class ConnectivityProbe final : public QObject {
     Q_OBJECT
 public:
-    explicit ConnectivityProbe(MihomoClient* api, QObject* parent = nullptr);
+    explicit ConnectivityProbe(CoreApi* api, QObject* parent = nullptr);
     ~ConnectivityProbe() override;
 
     // 目标地址：默认沿用设置里的测试地址；为空时回退到 WebsiteTests 的首个目标。
@@ -31,7 +32,7 @@ signals:
 
 private:
     void finish(const QJsonObject& result);
-    MihomoClient* api_;
+    CoreApi* api_;
     QPointer<QNetworkReply> request_;
     QString url_, node_;
     quint64 generation_ = 0;

@@ -1,15 +1,10 @@
 #pragma once
-#include "app/Types.h"
+#include "domain/HotkeyBindings.h"
 #include <QObject>
 #include <QList>
 #include <functional>
 #include <memory>
 namespace mlash {
-struct HotkeyAction { QString id,title; bool network=false; };
-const QList<HotkeyAction>& hotkeyActions();
-int hotkeyActionIndex(const QString& action);
-struct HotkeyBinding { QString action,sequence,key; bool control=false,alt=false,shift=false; };
-Result parseHotkeys(const QJsonObject& bindings,QList<HotkeyBinding>& parsed);
 class GlobalHotkeys : public QObject {
     Q_OBJECT
 public:

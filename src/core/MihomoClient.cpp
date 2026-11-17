@@ -6,7 +6,9 @@
 #include <QTimer>
 
 namespace mlash {
-MihomoClient::MihomoClient(QObject* parent) : QObject(parent) { network_.setProxy(QNetworkProxy::NoProxy); }
+MihomoClient::MihomoClient(QObject* parent) : QObject(parent) {
+    for (auto* pool : {&network_, &delayNetworkA_, &delayNetworkB_}) pool->setProxy(QNetworkProxy::NoProxy);
+}
 QByteArray MihomoClient::segment(const QString& name) { return QUrl::toPercentEncoding(name); }
 void MihomoClient::configure(int port, const QString& secret) {
     cancelAll(); base_ = QUrl(QString("http://127.0.0.1:%1").arg(port)); secret_ = secret;
@@ -25,7 +27,12 @@ QNetworkReply* MihomoClient::request(const QByteArray& method, const QByteArray&
     request.setHeader(QNetworkRequest::ContentTypeHeader, "application/json");
     request.setAttribute(QNetworkRequest::RedirectPolicyAttribute, QNetworkRequest::ManualRedirectPolicy);
     request.setTransferTimeout(timeoutMs);
-    auto* reply = network_.sendCustomRequest(request, method, body.isEmpty() ? QByteArray{} : QJsonDocument(body).toJson(QJsonDocument::Compact));
+    auto* pool = &network_;
+    if (method == "GET" && path.startsWith("/proxies/") && path.endsWith("/delay")) {
+        pool = nextDelayPoolB_ ? &delayNetworkB_ : &delayNetworkA_;
+        nextDelayPoolB_ = !nextDelayPoolB_;
+    }
+    auto* reply = pool->sendCustomRequest(request, method, body.isEmpty() ? QByteArray{} : QJsonDocument(body).toJson(QJsonDocument::Compact));
     pending_.insert(reply);
     const auto generation = generation_;
     auto* timer = new QTimer(reply); timer->setSingleShot(true);

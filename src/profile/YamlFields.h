@@ -1,5 +1,5 @@
 #pragma once
-#include "app/Types.h"
+#include "domain/Types.h"
 #include <QStringList>
 namespace mlash {
 struct YamlField { QString key,label,kind; QStringList choices; };

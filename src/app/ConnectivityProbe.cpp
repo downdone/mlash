@@ -7,7 +7,7 @@ namespace {
 constexpr qint64 kStaleSeconds = 600;   // 10 分钟：超过即视为过期，界面需标注
 }
 
-ConnectivityProbe::ConnectivityProbe(MihomoClient* api, QObject* parent) : QObject(parent), api_(api) {}
+ConnectivityProbe::ConnectivityProbe(CoreApi* api, QObject* parent) : QObject(parent), api_(api) {}
 
 ConnectivityProbe::~ConnectivityProbe() {
     ++generation_;

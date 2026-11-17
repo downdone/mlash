@@ -1,5 +1,5 @@
 #pragma once
-#include "MihomoClient.h"
+#include "CoreApi.h"
 #include "platform/PlatformServices.h"
 #include <QProcess>
 #include <QTimer>
@@ -9,7 +9,7 @@ namespace mlash {
 class CoreManager : public QObject {
     Q_OBJECT
 public:
-    CoreManager(MihomoClient* api, std::shared_ptr<PlatformServices> platform, QObject* parent = nullptr,std::unique_ptr<TunSession> tun = {});
+    CoreManager(CoreApi* api, std::shared_ptr<PlatformServices> platform, QObject* parent = nullptr,std::unique_ptr<TunSession> tun = {});
     ~CoreManager() override;
     void start(const QString& executable, const QString& config, const QString& work, int mixedPort, int apiPort, const QString& secret, Completion done,bool tun = false);
     void stop(Completion done);
@@ -27,7 +27,7 @@ private:
     void setState(CoreState state);
     void probe(quint64 generation);
     void failStart(const QString& error);
-    MihomoClient* api_;
+    CoreApi* api_;
     std::shared_ptr<PlatformServices> platform_;
     QProcess process_;
     std::unique_ptr<TunSession> tun_;

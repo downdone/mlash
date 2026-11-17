@@ -1,3 +1,4 @@
+#include "app/AppController.h"
 #include "NodeLinksEditor.h"
 #include "ElidedLabel.h"
 #include <QHeaderView>

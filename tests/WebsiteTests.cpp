@@ -1,3 +1,4 @@
+#include "app/AppController.h"
 #include "TestPorts.h"
 #include "app/WebsiteTests.h"
 #include "core/CoreManager.h"

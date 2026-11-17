@@ -1,3 +1,4 @@
+#include "app/AppController.h"
 #include "YamlFormEditor.h"
 #include "DialogDraftGuard.h"
 #include "DnsDialog.h"

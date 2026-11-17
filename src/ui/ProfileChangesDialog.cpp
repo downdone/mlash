@@ -1,3 +1,4 @@
+#include "app/AppController.h"
 #include "ProfileChangesDialog.h"
 #include "DialogDraftGuard.h"
 #include "UiTheme.h"

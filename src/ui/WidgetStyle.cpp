@@ -91,7 +91,10 @@ protected:
     bool eventFilter(QObject* watched,QEvent* event) override {
         auto* widget=qobject_cast<QWidget*>(watched);
         if (widget && event->type()==QEvent::Paint && !qobject_cast<QMenu*>(widget)) {
-            QPainter painter(widget); painter.setRenderHint(QPainter::Antialiasing); painter.setPen(QPen(QColor(UiTheme::Border),1)); painter.setBrush(QColor(UiTheme::Surface)); painter.drawRoundedRect(QRectF(widget->rect()).adjusted(.5,.5,-.5,-.5),8,8);
+            QPainter painter(widget); painter.setRenderHint(QPainter::Antialiasing);
+            const qreal inset=0.5/widget->devicePixelRatioF();
+            painter.setPen(QPen(QColor(UiTheme::Border),0)); painter.setBrush(QColor(UiTheme::Surface));
+            painter.drawRoundedRect(QRectF(widget->rect()).adjusted(inset,inset,-inset,-inset),8,8);
         }
         if (widget && combo_ && event->type()==QEvent::Show) {
             const QFontMetrics metrics(combo_->font()); int content=120;
@@ -115,7 +118,7 @@ void preparePopup(QWidget* widget,bool menu,QComboBox* combo=nullptr) {
     widget->setProperty("mlashPopup",true); widget->setWindowFlags(widget->windowFlags()|Qt::FramelessWindowHint|Qt::NoDropShadowWindowHint); widget->setAttribute(Qt::WA_TranslucentBackground);
     new PopupSurface(widget,combo);
     if (!menu) {
-        widget->setObjectName("mlashComboPopup"); widget->setStyleSheet(QString("QAbstractItemView {background:transparent;border:none;outline:none;color:palette(text);} QScrollBar:vertical {width:8px;background:transparent;} QScrollBar::handle:vertical {background:#d0d0d7;border-radius:4px;min-height:24px;} QScrollBar::add-line:vertical,QScrollBar::sub-line:vertical {height:0;}"));
+        widget->setObjectName("mlashComboPopup"); widget->setStyleSheet(QString("QAbstractItemView {background:transparent;border:none;outline:none;color:palette(text);} QScrollBar:vertical {width:8px;background:transparent;} QScrollBar::handle:vertical {background:palette(mid);border-radius:4px;min-height:24px;} QScrollBar::add-line:vertical,QScrollBar::sub-line:vertical {height:0;}"));
     }
 }
 class ComboItemDelegate final : public QStyledItemDelegate {
@@ -179,7 +182,7 @@ public:
             painter->restore(); return;
         }
         if (element==PE_PanelMenu || element==PE_FrameMenu) {
-            if (element==PE_PanelMenu) { painter->save(); painter->setRenderHint(QPainter::Antialiasing); painter->setPen(QPen(QColor(UiTheme::Border),1)); painter->setBrush(QColor(UiTheme::Surface)); painter->drawRoundedRect(QRectF(option->rect).adjusted(.5,.5,-.5,-.5),8,8); painter->restore(); } return;
+            if (element==PE_PanelMenu) { painter->save(); painter->setRenderHint(QPainter::Antialiasing); const qreal inset=0.5/painter->device()->devicePixelRatioF(); painter->setPen(QPen(QColor(UiTheme::Border),0)); painter->setBrush(QColor(UiTheme::Surface)); painter->drawRoundedRect(QRectF(option->rect).adjusted(inset,inset,-inset,-inset),8,8); painter->restore(); } return;
         }
         QProxyStyle::drawPrimitive(element,option,painter,widget);
     }

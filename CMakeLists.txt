@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.24)
-project(Mlash VERSION 1.19.0 LANGUAGES C CXX)
+project(Mlash VERSION 1.20.0 LANGUAGES C CXX)
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_AUTOMOC ON)
@@ -39,17 +39,25 @@ FetchContent_MakeAvailable(qrcodegen)
 add_library(mlash_qrcode STATIC "${qrcodegen_SOURCE_DIR}/cpp/qrcodegen.cpp")
 target_include_directories(mlash_qrcode PUBLIC "${qrcodegen_SOURCE_DIR}/cpp")
 
+add_library(mlash_domain STATIC
+    src/domain/Types.h src/domain/ConnectionColumns.h
+    src/domain/WebsiteTargets.h src/domain/WebsiteTargets.cpp
+    src/domain/TunOptions.h src/domain/TunOptions.cpp
+    src/domain/HotkeyBindings.h src/domain/HotkeyBindings.cpp)
+target_include_directories(mlash_domain PUBLIC src)
+target_link_libraries(mlash_domain PUBLIC Qt6::Core Qt6::Network)
+
 add_library(mlash_engine STATIC
-    src/app/Types.h src/app/Async.h src/app/ConnectivityProbe.h src/app/ConnectivityProbe.cpp src/app/AppController.h src/app/AppController.cpp src/app/AppControllerBackup.cpp src/app/AppControllerCoreUpdate.cpp src/app/AppControllerProfiles.cpp src/app/AppControllerTransaction.cpp src/app/AppControllerProxySwitch.cpp
+    src/app/Async.h src/app/AppUpdateSource.h src/app/AppUpdateSource.cpp src/app/ConnectivityProbe.h src/app/ConnectivityProbe.cpp src/app/AppController.h src/app/AppController.cpp src/app/AppControllerLiveViews.cpp src/app/AppControllerRuntime.cpp src/app/AppControllerPreferences.cpp src/app/AppControllerDiagnostics.cpp src/app/AppControllerLifecycle.cpp src/app/AppControllerBackup.cpp src/app/AppControllerCoreUpdate.cpp src/app/AppControllerAppUpdate.cpp src/app/AppControllerProfiles.cpp src/app/AppControllerTransaction.cpp src/app/AppControllerProxySwitch.cpp
     src/app/ProfileMaintenance.h src/app/ProfileMaintenance.cpp
-    src/app/ConnectionColumns.h src/app/ConnectionSession.h src/app/ConnectionSession.cpp
+    src/app/ConnectionSession.h src/app/ConnectionSession.cpp
     src/app/HomeMetrics.h src/app/HomeMetrics.cpp
     src/app/HomeNodeProbe.h src/app/HomeNodeProbe.cpp
     src/app/ProtocolLink.h src/app/ProtocolLink.cpp src/app/ProtocolInbox.h src/app/ProtocolInbox.cpp
     src/app/OutboundDiagnostics.h src/app/OutboundDiagnostics.cpp
     src/app/ServiceDiagnostics.h src/app/ServiceDiagnostics.cpp
     src/app/WebsiteTests.h src/app/WebsiteTests.cpp
-    src/core/MihomoClient.h src/core/MihomoClient.cpp src/core/CoreManager.h src/core/CoreManager.cpp
+    src/core/CoreDtos.h src/core/CoreDtos.cpp src/core/CoreApi.h src/core/MihomoClient.h src/core/MihomoClient.cpp src/core/MihomoEndpoints.cpp src/core/CoreManager.h src/core/CoreManager.cpp
     src/core/CoreUpdate.h src/core/CoreUpdate.cpp src/core/OfficialCoreSource.h src/core/OfficialCoreSource.cpp
     src/core/TunPolicy.h src/core/TunPolicy.cpp src/core/TunSession.h src/core/TunSession.cpp src/core/TunApiGate.h src/core/TunApiGate.cpp
     src/profile/ConfigBuilder.h src/profile/ConfigBuilder.cpp
@@ -68,13 +76,13 @@ add_library(mlash_engine STATIC
     src/profile/RemoteBackup.h src/profile/RemoteBackup.cpp src/profile/WebDavClient.h src/profile/WebDavClient.cpp
     src/storage/Storage.h src/storage/Storage.cpp
     src/platform/PlatformServices.h src/platform/ProxyCoordinator.h src/platform/ProxyCoordinator.cpp
-    src/platform/GlobalHotkeys.h src/platform/GlobalHotkeys.cpp
+    src/platform/GlobalHotkeys.h
     src/diagnostics/Diagnostics.h src/diagnostics/Diagnostics.cpp src/diagnostics/ProcessMetrics.h)
 target_include_directories(mlash_engine PUBLIC src)
-target_link_libraries(mlash_engine PUBLIC Qt6::Core Qt6::Network yaml-cpp::yaml-cpp libzstd_static ${MLASH_ZLIB_TARGET})
+target_link_libraries(mlash_engine PUBLIC mlash_domain Qt6::Core Qt6::Network yaml-cpp::yaml-cpp libzstd_static ${MLASH_ZLIB_TARGET})
 target_compile_definitions(mlash_engine PUBLIC MLASH_VERSION="${PROJECT_VERSION}")
 if(WIN32)
-    target_sources(mlash_engine PRIVATE src/platform/windows/TunNative.h src/platform/windows/TunNative.cpp)
+    target_sources(mlash_engine PRIVATE src/platform/windows/TunNative.h src/platform/windows/TunNative.cpp src/platform/windows/WindowChromeNative.h src/platform/windows/WindowChromeNative.cpp)
     target_sources(mlash_engine PRIVATE src/platform/windows/ProtocolRegistry.cpp)
     target_sources(mlash_engine PRIVATE src/platform/windows/WindowsServices.cpp src/platform/windows/ProcessMetrics.cpp src/platform/windows/PortableCrypto.cpp src/platform/windows/GlobalHotkeys.cpp)
     target_link_libraries(mlash_engine PRIVATE wininet crypt32 advapi32 iphlpapi ws2_32 psapi bcrypt user32 shell32 ole32)
@@ -88,7 +96,7 @@ else()
     target_compile_options(mlash_engine PRIVATE -Wall -Wextra -Wpedantic)
 endif()
 
-add_library(mlash_ui STATIC src/ui/Route.h src/ui/Route.cpp src/ui/ViewIds.h src/ui/ViewIds.cpp src/ui/StatusSentence.h src/ui/StatusSentence.cpp src/ui/FeedbackSync.h src/ui/FeedbackSync.cpp src/ui/PageLifecycle.h src/ui/PageLifecycle.cpp src/ui/ToolWindowRegistry.h src/ui/ToolWindowRegistry.cpp src/ui/StatusShape.h src/ui/StatusShape.cpp src/ui/SkeletonBlock.h src/ui/SkeletonBlock.cpp src/ui/UsageDelegate.h src/ui/UsageDelegate.cpp src/ui/MenuSection.h src/ui/ContextNote.h src/ui/SettingsSearch.h src/ui/SettingsSearch.cpp src/ui/CompactSpinBox.h src/ui/MainWindow.h src/ui/MainWindow.cpp src/ui/MainWindowHome.cpp src/ui/MainWindowSettings.cpp src/ui/MainWindowProxy.cpp src/ui/MainWindowProfiles.cpp src/ui/MainWindowParts.h src/ui/NodeFilter.cpp
+add_library(mlash_ui STATIC src/ui/Route.h src/ui/Route.cpp src/ui/ViewIds.h src/ui/ViewIds.cpp src/ui/StatusSentence.h src/ui/StatusSentence.cpp src/ui/FeedbackSync.h src/ui/FeedbackSync.cpp src/ui/PageLifecycle.h src/ui/PageLifecycle.cpp src/ui/ToolWindowRegistry.h src/ui/ToolWindowRegistry.cpp src/ui/StatusShape.h src/ui/StatusShape.cpp src/ui/SkeletonBlock.h src/ui/SkeletonBlock.cpp src/ui/UsageDelegate.h src/ui/UsageDelegate.cpp src/ui/MenuSection.h src/ui/ContextNote.h src/ui/SettingsSearch.h src/ui/SettingsSearch.cpp src/ui/CompactSpinBox.h src/ui/MainWindow.h src/ui/MainWindow.cpp src/ui/MainWindowChrome.cpp src/ui/MainWindowData.cpp src/ui/MainWindowFeedback.cpp src/ui/MainWindowState.cpp src/ui/MainWindowNavigation.cpp src/ui/MainWindowHome.cpp src/ui/MainWindowSettings.cpp src/ui/MainWindowProxy.cpp src/ui/MainWindowProfiles.cpp src/ui/DashboardCardButton.h src/ui/ChevronToolButton.h src/ui/MenuPushButton.h src/ui/WindowUiFactories.h src/ui/SettingRow.h src/ui/ProfileRowDelegate.h src/ui/GroupCardDelegate.h src/ui/NodeNameDelegate.h src/ui/NodeCardDelegate.h src/ui/NodeCardView.h src/ui/ProxySwitch.h src/ui/DetailsDrawer.h src/ui/NodeRowModel.h src/ui/NodeRowDelegate.h src/ui/NodeRowView.h src/ui/WindowChrome.h src/ui/NodeFilter.cpp
     src/ui/ProviderDefinitionDialog.h src/ui/YamlFormEditor.h src/ui/YamlFormEditor.cpp
     src/ui/ConnectionDetailsDialog.h src/ui/ConnectionDetailsDialog.cpp src/ui/ProviderDefinitionDialog.cpp src/ui/ProviderPolicyDialog.cpp
     src/ui/TaskWorkspace.h src/ui/TaskWorkspace.cpp
@@ -108,6 +116,7 @@ add_library(mlash_ui STATIC src/ui/Route.h src/ui/Route.cpp src/ui/ViewIds.h src
     src/ui/ProtocolSettingsDialog.h src/ui/ProtocolSettingsDialog.cpp
     src/ui/ProxyBypassDialog.h src/ui/ProxyBypassDialog.cpp
     src/ui/CoreUpdateDialog.h src/ui/CoreUpdateDialog.cpp
+    src/ui/AppUpdateDialog.h src/ui/AppUpdateDialog.cpp
     src/ui/RemoteBackupDialog.h src/ui/RemoteBackupDialog.cpp
     src/ui/GeoDataDialog.h src/ui/GeoDataDialog.cpp
     src/ui/HomeMetricsView.h src/ui/HomeMetricsView.cpp
@@ -118,7 +127,9 @@ add_library(mlash_ui STATIC src/ui/Route.h src/ui/Route.cpp src/ui/ViewIds.h src
     src/ui/ImportDialog.h src/ui/ImportDialog.cpp src/ui/ProxyTableModel.h src/ui/ProxyTableModel.cpp
     src/ui/NodePresentation.h src/ui/NodePresentation.cpp
     src/ui/WidgetStyle.h src/ui/WidgetStyle.cpp
-    src/ui/UiTheme.h src/ui/UiTheme.cpp resources/fonts.qrc
+    src/ui/UiTheme.h src/ui/UiTheme.cpp
+    src/ui/design/UiDesignTokens.h src/ui/design/ShadowrocketStyle.h
+    src/ui/design/ShadowrocketStyleSheet.h src/ui/design/ShadowrocketStyleSheet.cpp resources/fonts.qrc
     src/ui/UiIcons.h src/ui/UiIcons.cpp resources/services.qrc
     src/ui/TrayController.h src/ui/TrayController.cpp)
 target_link_libraries(mlash_ui PUBLIC mlash_engine Qt6::Widgets mlash_qrcode)
@@ -142,14 +153,27 @@ endif()
 include(CTest)
 if(BUILD_TESTING)
     find_package(Qt6 6.10.2 EXACT REQUIRED COMPONENTS Test)
+    add_executable(mlash_domain_contract_tests tests/DomainContractTests.cpp)
+    target_link_libraries(mlash_domain_contract_tests PRIVATE mlash_domain Qt6::Test)
+    add_test(NAME domain_contract_tests COMMAND mlash_domain_contract_tests -o "${CMAKE_BINARY_DIR}/domain-contract-tests.xml,xml")
+    set_tests_properties(domain_contract_tests PROPERTIES TIMEOUT 10 LABELS "unit")
+    add_executable(mlash_core_dto_tests tests/CoreDtoTests.cpp)
+    target_link_libraries(mlash_core_dto_tests PRIVATE mlash_engine Qt6::Test)
+    add_test(NAME core_dto_tests COMMAND mlash_core_dto_tests -o "${CMAKE_BINARY_DIR}/core-dto-tests.xml,xml")
+    set_tests_properties(core_dto_tests PROPERTIES TIMEOUT 10 LABELS "unit;integration")
+    add_executable(mlash_page_router_tests tests/PageRouterTests.cpp src/ui/PageLifecycle.h src/ui/PageLifecycle.cpp)
+    target_include_directories(mlash_page_router_tests PRIVATE src)
+    target_link_libraries(mlash_page_router_tests PRIVATE Qt6::Core Qt6::Test)
+    add_test(NAME page_router_tests COMMAND mlash_page_router_tests -o "${CMAKE_BINARY_DIR}/page-router-tests.xml,xml")
+    set_tests_properties(page_router_tests PROPERTIES TIMEOUT 10 LABELS "unit;ui")
     add_executable(mlash_tun_tests tests/TunTests.cpp tests/MockHttp.cpp)
     target_link_libraries(mlash_tun_tests PRIVATE mlash_ui Qt6::Test)
     target_compile_definitions(mlash_tun_tests PRIVATE MLASH_SOURCE_DIR="${CMAKE_SOURCE_DIR}")
     add_dependencies(mlash_tun_tests fake_core)
     add_test(NAME tun_tests COMMAND mlash_tun_tests -o "${CMAKE_BINARY_DIR}/tun-tests.xml,xml")
     set_tests_properties(tun_tests PROPERTIES TIMEOUT 75 ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
-    add_executable(mlash_tests tests/EngineTests.cpp tests/MockHttp.h tests/MockHttp.cpp src/ui/ProxyTableModel.h src/ui/ProxyTableModel.cpp)
-    target_link_libraries(mlash_tests PRIVATE mlash_engine Qt6::Test Qt6::Gui)
+    add_executable(mlash_tests tests/EngineTests.cpp tests/MockHttp.h tests/MockHttp.cpp)
+    target_link_libraries(mlash_tests PRIVATE mlash_engine Qt6::Test)
     target_compile_definitions(mlash_tests PRIVATE MLASH_SOURCE_DIR="${CMAKE_SOURCE_DIR}")
     add_executable(fake_core tests/FakeCore.cpp tests/MockHttp.cpp)
     target_link_libraries(fake_core PRIVATE Qt6::Core Qt6::Network yaml-cpp::yaml-cpp)
@@ -164,6 +188,11 @@ if(BUILD_TESTING)
     set_tests_properties(core_readiness_tests PROPERTIES TIMEOUT 30)
     add_test(NAME engine COMMAND mlash_tests -o "${CMAKE_BINARY_DIR}/engine-tests.xml,xml")
     set_tests_properties(engine PROPERTIES TIMEOUT 90 ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
+    add_executable(mlash_ui_model_tests tests/UiModelTests.cpp src/ui/ProxyTableModel.h src/ui/ProxyTableModel.cpp)
+    target_link_libraries(mlash_ui_model_tests PRIVATE Qt6::Core Qt6::Gui Qt6::Test)
+    target_include_directories(mlash_ui_model_tests PRIVATE src)
+    add_test(NAME ui_model_tests COMMAND mlash_ui_model_tests -o "${CMAKE_BINARY_DIR}/ui-model-tests.xml,xml")
+    set_tests_properties(ui_model_tests PROPERTIES TIMEOUT 15 LABELS "unit;ui")
     add_test(NAME gui_smoke COMMAND Mlash --smoke-test --data-dir "${CMAKE_BINARY_DIR}/smoke-data")
     set_tests_properties(gui_smoke PROPERTIES TIMEOUT 15 ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
     add_executable(mlash_flat_workspace_tests tests/FlatWorkspaceTests.cpp)
@@ -203,7 +232,7 @@ if(BUILD_TESTING)
     add_test(NAME feedback_routing_tests COMMAND mlash_ui_tests operationResultsGoToTheirOwnPage feedbackTargetsStayExplicit -o "${CMAKE_BINARY_DIR}/feedback-routing-tests.xml,xml")
     set_tests_properties(feedback_routing_tests PROPERTIES TIMEOUT 60 ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
     # S1 页面生命周期：进入/离开各触发一次，视图 2 归一化不留双份副作用。
-    add_test(NAME page_lifecycle_tests COMMAND mlash_ui_tests pageLifecycleRunsEnterAndLeaveOnce viewSwitchingKeepsControllerSideEffects -o "${CMAKE_BINARY_DIR}/page-lifecycle-tests.xml,xml")
+    add_test(NAME page_lifecycle_tests COMMAND mlash_ui_tests viewSwitchingKeepsControllerSideEffects -o "${CMAKE_BINARY_DIR}/page-lifecycle-tests.xml,xml")
     set_tests_properties(page_lifecycle_tests PROPERTIES TIMEOUT 60 ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
     # S2 工具窗口：同键复用、对象删除关闭、失效指针不复用。
     add_test(NAME tool_window_tests COMMAND mlash_ui_tests toolWindowsAreReusedPerObject -o "${CMAKE_BINARY_DIR}/tool-window-tests.xml,xml")
@@ -256,6 +285,10 @@ if(BUILD_TESTING)
     add_executable(mlash_protocol_tests tests/ProtocolTests.cpp)
     add_executable(mlash_proxy_bypass_tests tests/ProxyBypassTests.cpp)
     add_executable(mlash_core_update_tests tests/CoreUpdateTests.cpp)
+    add_executable(mlash_app_update_tests tests/AppUpdateTests.cpp)
+    target_link_libraries(mlash_app_update_tests PRIVATE mlash_engine Qt6::Test)
+    add_test(NAME app_update_tests COMMAND mlash_app_update_tests)
+    set_tests_properties(app_update_tests PROPERTIES TIMEOUT 15 LABELS "unit")
     add_executable(mlash_remote_backup_tests tests/RemoteBackupTests.cpp tests/MockHttp.cpp)
     target_link_libraries(mlash_remote_backup_tests PRIVATE mlash_ui Qt6::Test)
     target_compile_definitions(mlash_remote_backup_tests PRIVATE MLASH_SOURCE_DIR="${CMAKE_SOURCE_DIR}")
@@ -368,7 +401,32 @@ if(BUILD_TESTING)
     endif()
     find_package(Python3 COMPONENTS Interpreter QUIET)
     if(Python3_Interpreter_FOUND)
+        add_test(NAME architecture_boundaries COMMAND "${Python3_EXECUTABLE}" "${CMAKE_SOURCE_DIR}/tests/test_architecture_boundaries.py")
         add_test(NAME release_tools COMMAND "${Python3_EXECUTABLE}" "${CMAKE_SOURCE_DIR}/tests/test_release_tools.py")
         set_tests_properties(release_tools PROPERTIES TIMEOUT 20)
+        set_tests_properties(architecture_boundaries PROPERTIES LABELS "unit")
+        set_tests_properties(release_tools PROPERTIES LABELS "integration")
     endif()
+    set_tests_properties(engine core_readiness_tests official_core_tests service_tests home_probe_tests
+        home_metrics_tests website_tests dns_tests protocol_tests mrs_tests geo_tests
+        PROPERTIES LABELS "integration")
+    set_tests_properties(tun_tests workflow_depth_tests remote_backup_tests core_update_tests
+        proxy_chain_tests proxy_edits_tests provider_edits_tests rules_tests backup_tests
+        yaml_forms_tests node_links_tests outbound_tests proxy_bypass_tests hotkey_tests
+        PROPERTIES LABELS "scenario")
+    set_tests_properties(flat_workspace_tests prototype_ui_tests navigation_contract_tests
+        ui_interactions ui_components status_bar_tests feedback_routing_tests
+        page_lifecycle_tests tool_window_tests status_shape_tests profile_usage_tests
+        settings_value_tests menu_section_tests home_control_tests appearance_tests
+        appearance_prefs_tests connection_view_tests PROPERTIES LABELS "ui")
+    if(NOT WIN32)
+        set_tests_properties(ui_refinement_tests PROPERTIES LABELS "ui")
+    endif()
+    if(WIN32)
+        set_tests_properties(system_test_guard PROPERTIES LABELS "system-gated")
+    endif()
+    set_tests_properties(gui_smoke PROPERTIES LABELS "ui")
+    # Legacy mixed suites retain both labels until their cases move to focused targets.
+    set_property(TEST engine ui_components appearance_tests APPEND PROPERTY LABELS "scenario")
+    set_property(TEST website_tests APPEND PROPERTY LABELS "ui")
 endif()

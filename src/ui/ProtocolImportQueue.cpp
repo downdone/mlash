@@ -1,3 +1,4 @@
+#include "app/AppController.h"
 #include "ProtocolImportQueue.h"
 #include "app/ProtocolLink.h"
 #include <QTimer>

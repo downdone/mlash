@@ -1,5 +1,5 @@
 #pragma once
-#include "app/Types.h"
+#include "domain/TunOptions.h"
 #include <QByteArray>
 #include <QStringList>
 
@@ -10,8 +10,5 @@ inline constexpr auto TunPipeName = "Mlash.Tun.v1";
 // Output is regenerated; no caller-supplied listener/path is preserved unchecked.
 Result prepareTunRuntime(const QByteArray& input, QByteArray& output, QStringList& files);
 Result checkTunProvider(const QByteArray& config,const QString& relative,const QByteArray& bytes);
-bool validTunOptions(const Settings& settings);
-Result normalizeTunRoutes(const QString& text);
-QJsonObject tunOptionsJson(const Settings& settings);
 bool validTunFile(const QString& relative);
 }

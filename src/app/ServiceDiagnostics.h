@@ -1,5 +1,5 @@
 #pragma once
-#include "Types.h"
+#include "domain/Types.h"
 #include <QUrl>
 namespace mlash {
 struct ServiceTarget { QString id,name; QUrl url; };

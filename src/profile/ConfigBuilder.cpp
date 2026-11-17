@@ -3,7 +3,7 @@
 #include "ProviderEdits.h"
 #include "MrsSnapshot.h"
 #include "ProxyEdits.h"
-#include "core/TunPolicy.h"
+#include "domain/TunOptions.h"
 #include "diagnostics/Diagnostics.h"
 #include <yaml-cpp/yaml.h>
 #include <QSet>

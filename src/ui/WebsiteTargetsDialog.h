@@ -1,5 +1,7 @@
 #pragma once
-#include "app/AppController.h"
+#include "domain/Types.h"
+#include "domain/WebsiteTargets.h"
+namespace mlash { class AppController; }
 #include "TaskDialog.h"
 
 class QTableWidget; class QLabel;

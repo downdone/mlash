@@ -19,7 +19,7 @@ QProcessEnvironment cleanEnvironment() {
     env.insert("SKIP_SAFE_PATH_CHECK", "false"); return env;
 }
 }
-CoreManager::CoreManager(MihomoClient* api, std::shared_ptr<PlatformServices> platform, QObject* parent,std::unique_ptr<TunSession> tun)
+CoreManager::CoreManager(CoreApi* api, std::shared_ptr<PlatformServices> platform, QObject* parent,std::unique_ptr<TunSession> tun)
     : QObject(parent), api_(api), platform_(std::move(platform)),tun_(tun?std::move(tun):std::make_unique<TunSession>(platform_)) {
     connect(tun_.get(),&TunSession::lost,this,[this](const QString& error) {
         if (!usingTun_||state_==CoreState::Stopped||state_==CoreState::Stopping) return;
@@ -85,19 +85,19 @@ void CoreManager::probe(quint64 generation) {
         probeError_ = QString("监听端口身份尚未确认 (API %1 / Mixed %2)").arg(apiPort_).arg(mixedPort_);
         QTimer::singleShot(150, this, [this, generation] { probe(generation); }); return;
     }
-    api_->version([this, generation](Result version) {
+    api_->versionInfo([this, generation](CoreObservation<CoreVersionInfo> version) {
         if (generation != generation_ || state_ != CoreState::Starting) return;
-        if (!version.ok || version.data.value("version").toString().isEmpty()) {
-            probeError_ = version.ok ? "版本字段缺失" : version.error;
+        if (!version.ok()) {
+            probeError_ = version.result.error;
             QTimer::singleShot(150, this, [this, generation] { probe(generation); }); return;
         }
-        api_->config([this, generation, version](Result config) {
+        api_->configInfo([this, generation, version](CoreObservation<CoreConfigInfo> config) {
             if (generation != generation_ || state_ != CoreState::Starting) return;
-            if (!config.ok || config.data.value("mixed-port").toInt() != mixedPort_) {
-                probeError_ = config.ok ? "Mixed 端口回读不一致" : config.error;
+            if (!config.ok() || config.value.mixedPort != mixedPort_) {
+                probeError_ = config.ok() ? "Mixed 端口回读不一致" : config.result.error;
                 QTimer::singleShot(150, this, [this, generation] { probe(generation); }); return;
             }
-            if (usingTun_&&(!config.data.value("tun").toObject().value("enable").toBool()||!tun_->ready())) {
+            if (usingTun_&&(!config.value.tunEnabled||!tun_->ready())) {
                 probeError_="TUN 配置、虚拟接口或自动路由尚未确认";
                 QTimer::singleShot(150,this,[this,generation] { probe(generation); }); return;
             }
@@ -110,7 +110,7 @@ void CoreManager::probe(quint64 generation) {
                 if (generation!=generation_||state_!=CoreState::Starting) return;
                 if (!connected) { probeError_=error; QTimer::singleShot(150,this,[this,generation] { probe(generation); }); return; }
                 deadline_.stop(); setState(CoreState::Running);
-                Result result{true,{},config.data}; result.data["version"]=version.data.value("version");
+                Result result{true,{},config.result.data}; result.data["version"]=version.value.version;
                 auto done=std::move(startDone_); if (done) done(result);
             };
             connect(timer,&QTimer::timeout,this,[complete] { complete(false,"代理入口连接超时"); });

@@ -1,6 +1,26 @@
+#include "app/AppController.h"
 #include "TaskDialog.h"
 #include "TaskWorkspace.h"
-#include "MainWindowParts.h"
+#include "MainWindow.h"
+#include "CompactComboBox.h"
+#include "DnsDialog.h"
+#include "DialogDraftGuard.h"
+#include "DownloadPolicyEditor.h"
+#include "ImportDialog.h"
+#include "ProfileChangesDialog.h"
+#include "ProfileRowDelegate.h"
+#include "ProviderPolicyDialog.h"
+#include "PrototypeUi.h"
+#include "ProxyChainDialog.h"
+#include "ProxyEditorDialog.h"
+#include "RuleOverlayDialog.h"
+#include "UiIcons.h"
+#include "UiTheme.h"
+#include "ViewIds.h"
+#include "WindowUiFactories.h"
+#include "profile/SubscriptionInfo.h"
+#include "qrcodegen.hpp"
+#include <QtWidgets>
 #include "MenuSection.h"
 #include "ProfileRowModel.h"
 #include <QFileInfo>
@@ -211,7 +231,7 @@ void MainWindow::openProfileTask(const QString& id,const QString& task) {
     if (!found) return;
     auto* workspace=taskWorkspace();
     QList<TaskWorkspace::Task> tasks{
-        {"overview","概览",[this,id] { returnFromWorkspace(); showProfileDetails(id); }},
+        {"overview","概览",[this] { returnFromWorkspace(); }},
         {"rules","规则",[this,id] { presentTask(new RuleOverlayDialog(controller_,id,this)); }},
         {"dns","DNS",[this,id] { presentTask(new DnsDialog(controller_,id,this)); }},
         {"nodes","节点与组",[this,id] { presentTask(new ProxyEditorDialog(controller_,id,this)); }},
@@ -234,10 +254,6 @@ void MainWindow::showProfileDetails(const QString& id) {
     auto* returnButton=back(column,"profileDetailsBack","返回配置"); connect(returnButton,&QPushButton::clicked,this,[this] { profileStack_->setCurrentIndex(0); profileDetailId_.clear(); });
     auto* title=new QLabel(profile.name); title->setObjectName("dialogTitle"); title->setTextFormat(Qt::PlainText); column->addWidget(title);
     const bool current=id==controller_->state().activeProfile,pending=profile.candidate!=profile.active;
-    auto* taskTabs=new QTabBar; taskTabs->setObjectName("profileTaskTabs"); taskTabs->setExpanding(false); taskTabs->setUsesScrollButtons(true);
-    const QStringList taskKeys{"overview","rules","dns","nodes","chain","source","providers"};
-    taskTabs->addTab("概览"); taskTabs->addTab("规则"); taskTabs->addTab("DNS"); taskTabs->addTab("节点与组"); taskTabs->addTab("拨号链"); taskTabs->addTab("来源与更新"); taskTabs->addTab("规则源/节点源"); column->addWidget(taskTabs);
-    connect(taskTabs,&QTabBar::currentChanged,this,[this,id,taskKeys](int index) { if (index>0) openProfileTask(id,taskKeys.value(index)); });
     auto* summary=new QLabel((profile.sourceType=="url"?QString("远程订阅"):QString("本地配置"))+" · "+(current?QString("当前使用"):QString("尚未使用"))+(pending?QString(" · 有候选待应用"):QString())); summary->setProperty("secondary",true); column->addWidget(summary);
     auto* stateRows=group(column);
     auto* use=row(stateRows,"profileDetailsActivate",pending?"查看候选变化":"使用此配置",pending?G::Refresh:G::Check,current&&!pending?"当前":"");
@@ -303,6 +319,7 @@ void MainWindow::updateProfiles() {
     for (const auto& tuple:QList<QPair<QComboBox*,QPair<QString,QString>>>{{trayClick_,{displayedSettings_.trayClick,s.trayClick}},{ipv6Mode_,{displayedSettings_.ipv6Mode,s.ipv6Mode}},{unifiedDelayMode_,{displayedSettings_.unifiedDelayMode,s.unifiedDelayMode}}}) if (!hasDisplayedSettings_ || tuple.first->currentData().toString()==tuple.second.first) tuple.first->setCurrentIndex(tuple.first->findData(tuple.second.second));
     if (!hasDisplayedSettings_||appearance_->currentData().toString()==displayedSettings_.appearance) appearance_->setCurrentIndex(appearance_->findData(s.appearance));
     if (!hasDisplayedSettings_||textScale_->currentData().toInt()==displayedSettings_.textScale) textScale_->setCurrentIndex(textScale_->findData(s.textScale));
+    if (!hasDisplayedSettings_||windowChrome_->currentData().toString()==displayedSettings_.windowChrome) windowChrome_->setCurrentIndex(windowChrome_->findData(s.windowChrome));
     settingsSyncing_ = false;
     displayedSettings_ = s; hasDisplayedSettings_ = true;
     // K7：两张列表的行模型同步（远端下拉 profilesCombo_ 只给节点页浏览用，这里只补当前项）。

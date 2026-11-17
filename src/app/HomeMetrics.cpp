@@ -5,7 +5,7 @@
 #include <QDateTime>
 #include <cmath>
 namespace mlash {
-HomeMetrics::HomeMetrics(MihomoClient* api,QObject* parent,std::function<Result(qint64)> memoryReader) : QObject(parent),api_(api),memoryReader_(memoryReader?std::move(memoryReader):processMemory) {
+HomeMetrics::HomeMetrics(CoreApi* api,QObject* parent,std::function<Result(qint64)> memoryReader) : QObject(parent),api_(api),memoryReader_(memoryReader?std::move(memoryReader):processMemory) {
     clock_.start(); timer_.setInterval(2000); connect(&timer_,&QTimer::timeout,this,&HomeMetrics::refresh);
 }
 void HomeMetrics::reset() { ++token_; timer_.stop(); snapshot_={}; history_={}; error_.clear(); previousMs_=-1; if (request_) request_->abort(); emit changed(); }
@@ -14,7 +14,7 @@ void HomeMetrics::setContext(bool ready,qint64 pid,quint64 generation) { if (rea
 void HomeMetrics::refresh() {
     if (!sampling()||pending_) return;
     pending_=true; const auto token=token_; const auto pid=pid_; const auto reader=memoryReader_;
-    request_=api_->request("GET","/connections",{},[this,token,pid,reader](Result result) {
+    request_=api_->connections([this,token,pid,reader](Result result) {
         request_=nullptr;
         if (token!=token_||!sampling()) { pending_=false; return; }
         const auto valid=[](const QJsonValue& value) { const auto n=value.toDouble(-1); return value.isDouble()&&std::isfinite(n)&&n>=0&&n<=9007199254740991.0&&std::floor(n)==n; };

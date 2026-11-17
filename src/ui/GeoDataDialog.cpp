@@ -1,3 +1,4 @@
+#include "app/AppController.h"
 #include "GeoDataDialog.h"
 #include "ContextNote.h"
 #include "CompactComboBox.h"

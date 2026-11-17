@@ -1,4 +1,4 @@
-#include "GlobalHotkeys.h"
+#include "HotkeyBindings.h"
 #include <QSet>
 #include <QRegularExpression>
 namespace mlash {

@@ -1,5 +1,5 @@
 #pragma once
-#include "Types.h"
+#include "domain/Types.h"
 #include "HomeMetrics.h"
 #include "ConnectivityProbe.h"
 #include "HomeNodeProbe.h"
@@ -12,8 +12,10 @@
 #include <QDateTime>
 #include <QDeadlineTimer>
 #include "core/CoreManager.h"
+#include "core/MihomoClient.h"
 #include "core/CoreUpdate.h"
 #include "core/OfficialCoreSource.h"
+#include "AppUpdateSource.h"
 #include "profile/ProfileStore.h"
 #include "profile/SubscriptionDownloader.h"
 #include "profile/WebDavClient.h"
@@ -84,6 +86,10 @@ public:
     void inspectUrlProtocol(Completion done);
     void setUrlProtocol(bool enabled);
     void checkOfficialCore(Completion done);
+    void checkAppUpdate(Completion done);
+    void downloadAppUpdate(Completion done);
+    void cancelAppUpdate();
+    const QJsonObject& appUpdateCandidate() const { return appUpdateCandidate_; }
     void downloadOfficialCore(Completion done);
     void previewCoreUpdate(const QString& file,Completion done,const QString& expectedVersion={},const QString& source={});
     void cancelCoreUpdatePreview();
@@ -116,7 +122,7 @@ public:
     bool capturingHotkey() const { return hotkeyCaptureToken_!=0; }
     void reloadActive();
     void updateConnectionView(const QJsonObject& preferences);
-    void updateAppearance(const QString& appearance,int scale);
+    void updateAppearance(const QString& appearance,int scale,const QString& windowChrome={});
     QString hotkeyError() const { return hotkeyError_; }
     const QJsonObject& activeHotkeys() const { return activeHotkeys_; }
     void cancelOutboundDiagnostics() { outboundDiagnostics_.cancel(); }
@@ -340,6 +346,9 @@ private:
     bool websiteTestsVisible_=false;
     CoreManager core_;
     OfficialCoreSource officialCore_{this};
+    AppUpdateSource appUpdate_{this};
+    QJsonObject appUpdateCandidate_;
+    quint64 appUpdateGeneration_=0;
     CoreVersionProbe coreVersionProbe_{this};
     QJsonObject corePreview_;
     quint64 corePreviewGeneration_=0;

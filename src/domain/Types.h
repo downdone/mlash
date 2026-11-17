@@ -72,6 +72,7 @@ struct Settings {
     QJsonObject hotkeys;
     QJsonObject connectionView;
     QString appearance="system";
+    QString windowChrome="native"; // native or integrated; presentation only
     int textScale=100;
     int homeProbeSeconds=0;
     QString proxyBypass="localhost;127.*;[::1];<local>";

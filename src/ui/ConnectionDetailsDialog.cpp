@@ -1,3 +1,4 @@
+#include "app/AppController.h"
 #include "ConnectionDetailsDialog.h"
 #include <QMessageBox>
 #include "ActivityTableModel.h"

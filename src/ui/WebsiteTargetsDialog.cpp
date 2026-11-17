@@ -1,3 +1,4 @@
+#include "app/AppController.h"
 #include "DialogDraftGuard.h"
 #include "WebsiteTargetsDialog.h"
 #include "storage/Storage.h"

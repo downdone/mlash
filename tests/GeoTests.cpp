@@ -1,3 +1,4 @@
+#include "app/AppController.h"
 #include "profile/GeoData.h"
 #include "profile/SubscriptionDownloader.h"
 #include "storage/Storage.h"

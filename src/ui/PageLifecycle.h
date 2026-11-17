@@ -4,6 +4,7 @@
 #include <QString>
 #include <QVariantMap>
 #include <QHash>
+#include <QPointer>
 
 namespace mlash {
 
@@ -42,7 +43,9 @@ public:
     int current() const { return current_; }
     PageLifecycle* page(int view) const;
 private:
-    QHash<int, PageLifecycle*> pages_;
+    // Qt parents own pages. A destroyed page must never remain callable during
+    // lightweight window teardown or a later router transition.
+    QHash<int, QPointer<PageLifecycle>> pages_;
     int current_ = -1;
 };
 

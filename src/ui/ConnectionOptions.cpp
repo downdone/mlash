@@ -1,8 +1,9 @@
+#include "app/AppController.h"
 #include "ConnectionOptions.h"
 #include "UiIcons.h"
 #include "UiTheme.h"
 #include <QWidgetAction>
-#include "app/ConnectionColumns.h"
+#include "domain/ConnectionColumns.h"
 #include "storage/Storage.h"
 #include <QTableView>
 #include <QHeaderView>

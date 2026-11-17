@@ -1,3 +1,3 @@
 #pragma once
-#include "app/Types.h"
+#include "domain/Types.h"
 mlash::Result terminateTestCore(qint64 pid,const QString& executable);

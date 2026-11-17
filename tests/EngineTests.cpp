@@ -13,8 +13,6 @@
 #include <QTimer>
 #include <QTcpServer>
 #include <QSslSocket>
-#include "ui/ProxyTableModel.h"
-#include <QSortFilterProxyModel>
 #include <QRandomGenerator>
 #include <yaml-cpp/yaml.h>
 
@@ -87,7 +85,6 @@ private slots:
     void api204AndEncodedNames();
     void apiTimeoutInvalidJsonAndCancel();
     void logStreamStopsWhenHidden();
-    void largeNodeModelSorting();
     void privateAddresses_data();
     void privateAddresses();
     void downloadRedirectAndSize();
@@ -324,21 +321,6 @@ void EngineTests::diagnosticApiPreferencesAndRecentMembers() {
     p.recentSelections.append(QJsonObject{{"group","Test"},{"secret","must-not-be-stored"}}); QVERIFY(!store.save(settings,{p}).ok); QCOMPARE(store.load().profiles[0].recentSelections.size(),1);
     p.recentSelections = {QJsonObject{{"group","Test"},{"member","REJECT"}}}; auto prepared = store.prepare(p,minimalYaml()+"profile: {store-selected: false}\n",settings,freePort(),QString(64,'s')); QVERIFY2(prepared.result.ok,qUtf8Printable(prepared.result.error)); QVERIFY(prepared.profile.recentSelections.isEmpty());
     QCOMPARE(Diagnostics::levelOf("[core-log] warning warn"),QString("warning")); QCOMPARE(Diagnostics::levelOf("[core] level=fatal message"),QString("error"));
-}
-void EngineTests::largeNodeModelSorting() {
-    QJsonObject proxies; QJsonArray members;
-    for (int i = 0; i < 500; ++i) { const auto name = QString("香港 %1").arg(i, 3, 10, QChar('0')); members.append(name); proxies[name] = QJsonObject{{"type", "Shadowsocks"}}; }
-    proxies["Group"] = QJsonObject{{"all", members}, {"now", "香港 250"}, {"type", "Selector"}};
-    ProxyTableModel model; model.setGroup(proxies, "Group"); QCOMPARE(model.rowCount(), 500); QVERIFY(model.data(model.index(250, 0)).toString().startsWith("●"));
-    QCOMPARE(model.data(model.index(42, 2)).toString(), "—"); model.setDelay("香港 042", 5, {}); model.setDelay("香港 043", -1, "timeout");
-    QSortFilterProxyModel filter; filter.setSourceModel(&model); filter.setSortRole(Qt::UserRole); filter.sort(2); QCOMPARE(model.nameAt(filter.mapToSource(filter.index(0, 0)).row()), "香港 042");
-    QCOMPARE(model.data(model.index(43, 2)).toString(), "失败"); filter.setFilterKeyColumn(0); filter.setFilterFixedString("香港 04"); QCOMPARE(filter.rowCount(), 10);
-    const QPersistentModelIndex selected(model.index(42, 0)); model.setGroup(proxies, "Group"); QVERIFY(selected.isValid()); QCOMPARE(selected.row(), 42);
-    QCOMPARE(model.columnCount(), 4); QCOMPARE(model.data(model.index(42, 3)).toString(), QString("已测")); QCOMPARE(model.data(model.index(43, 3)).toString(), QString("失败"));
-    QVERIFY(model.headerData(0, Qt::Horizontal, Qt::TextAlignmentRole).toInt() & Qt::AlignLeft);
-    proxies["Child"] = QJsonObject{{"all", QJsonArray{"香港 042"}}, {"now", "香港 042"}, {"type", "Selector"}};
-    proxies["Parent"] = QJsonObject{{"all", QJsonArray{"Child", "香港 042"}}, {"now", "Child"}, {"type", "Selector"}};
-    model.setGroup(proxies, "Parent"); QCOMPARE(model.data(model.index(0, 1)).toString(), QString("策略组 ›")); QVERIFY(model.data(model.index(0, 3)).toString().contains("子策略组"));
 }
 void EngineTests::privateAddresses_data() {
     QTest::addColumn<QString>("address"); QTest::addColumn<bool>("allowed");

@@ -2,6 +2,62 @@
 
 本文只记录实际结果，区分本轮执行、历史匿名汇总与尚未验证的资格。原始配置、私人环境、真实订阅及原始诊断不进入公开文档。
 
+## U18：1.20.0 Windows 候选与发布前验收（2026-11-17）
+
+按 [U18 事前设计](design/u18-fast-tests-window-chrome-update.md)完成整组最多 12 个有界异步延迟请求（两条本地连接池）、应用内/系统窗口标题栏设置，以及固定 GitHub 发布源的应用更新检查、校验与独立候选包。`AppUpdateSource` 的版本/地址/摘要校验、损坏包保留原候选和取消旧回包由隔离测试覆盖；实际 GitHub API 当时触及公共限流，未将在线实网检查记作通过。应用更新目前是已验证候选的人工便携升级，不作后台原地替换。
+
+`scripts/build.ps1 -Preset windows-mingw-open` 在最终 1.20.0 代码上通过。首次全量运行 49 通过、1 系统门禁跳过、1 热键用例失败；失败是旧模拟 `/configs` 仅含 mode，违反现行类型化响应的 mixed-port 契约。修正夹具并定向复测后，最终 `scripts/test.ps1 -Preset windows-mingw-open` **50 通过、0 失败、1 系统写入门禁跳过**（51 项，457.79 秒）。整组测速定向夹具验证首批 12 个回环请求、进度与取消；应用更新定向单元测试通过。`python scripts/check_docs.py`（118 份 Markdown、0 问题）、`python scripts/check_document_privacy.py`（125 项、0 问题）与架构边界检查均通过。
+
+Windows 11 原生 Qt 后端的应用内/系统标题栏可逆切换测试通过，150% DPI 样片生成并查看；早先受限沙盒中偏好保存失败不计产品失败。尚未人工逐项验证真实鼠标拖动、边缘缩放、读屏、Windows 10 或系统级代理/TUN 写入。`scripts/package.ps1 -Preset windows-mingw-open` 的 35 文件白名单与逐文件完整性通过，便携 ZIP SHA-256 为 `89a81334c227a7e5a8a3eba50320a3dde13b25c386b85d40e4b24704ee63d3e3`；包内 `scripts/ci_smoke.ps1` 通过：CLI 为 1.20.0、Qt/Schannel 可用、八页样片齐全。当前为预发布候选，`release_qualified=false`，远端发布结果另行记录。
+
+## U17：全界面视觉系统重建（2026-11-16）
+
+按[事前设计与实施后复核](design/u17-visual-system-rebuild.md)合并字体计算链：Noto Sans SC 应用字体、语义字号和文字缩放由 `UiTheme` 一次确定；移除 QSS `font-size` 正则重写及局部数值字体覆盖。Shadowrocket 特化集中给出明暗/高对比颜色、字阶与几何；常态以面色而非叠加外框分层，非交互图标改用次级色。节点、配置、设置行的自绘线对齐单个设备像素；焦点不再修改内边距。节点卡片按 300 DIP 最小宽度布局并分行显示名称/协议，修复中等窗口四列导致名称几乎不可读的问题。未修改 Controller 命令、配置格式或系统写入。
+
+`scripts/build.ps1 -Preset windows-mingw-open` 完整构建及最终增量构建通过。`scripts/test.ps1 -Preset windows-mingw-open -Layer unit` **5 通过、0 失败**，包括新增 1.5 DPR 单物理像素线条场景；`flat_workspace_tests`、`settings_value_tests` **2 通过**。受限沙盒中的 `ui_components` 与 `appearance_tests` 首次失败，失败为测试内核监听端口身份无法只读核对，连带一项候选写入次数断言；同机隔离目录允许该只读观测后，两组复测 **2 通过、0 失败**（45.65 秒）。未启用 `--system-proxy-test`。
+
+Qt Windows 原生后端的全页明暗/高对比场景 **3 个 QtTest 事件通过、0 失败**，生成 52 张样片；有配置内容的首页/配置/数据/设置与卡片视图场景亦 **3 个 QtTest 事件通过、0 失败**。原生环境报告有效 DPR 1.5，字体请求、解析及汉字字形均为 Noto Sans SC。复核 840/940/1180 DIP、100/120% 文字及明暗样片，主操作未见遮挡，节点卡片在宽窗三列、窄窗两列，设置行和节点分隔线保持单线。`check_ui_tokens.py` 为 0 命中，文档导航/隐私检查为 0 发现，`git diff --check` 无空白错误。
+
+这是本机自动交互与截图人工对照，未覆盖人工键盘全路径、读屏、Windows 10、不同显卡/显示器或正式发行完整回归；`release_qualified=false`。
+
+`scripts/package.ps1 -Preset windows-mingw-open -OutputName Mlash-1.19.0-u17-preview` 生成独立本地预览目录与 ZIP；35 文件白名单及逐文件完整性检查通过。ZIP SHA-256 为 `f8cca85e6aa4755e43b5d3b99f2157ce965227d12a137bc5aa149286746a8bd2`。`scripts/ci_smoke.ps1` 在隔离数据目录运行包内 `Mlash.exe` 通过：版本 1.19.0、Qt 6.10.2、Schannel TLS 可用，八张页面截图齐全；人工查看空配置首页样片未见启动或布局异常。该文件仅为本地预览，未上传或替换现有发行包。
+
+## P02：U16 Windows 便携预览包（2026-11-16）
+
+`scripts/package.ps1 -Preset windows-mingw-open -OutputName Mlash-1.19.0-u16-preview` 成功生成独立本地目录、ZIP 与 SHA256 侧车。包内 `Mlash.exe`/服务 PE 及 CLI 版本均为 1.19.0，固定内核与清单哈希吻合；白名单及逐文件完整性核对为 35 文件。ZIP 52,736,765 字节，SHA256 为 `2c403e76dcfa3b09538e596fa7b7cdf7419f4cdccc7d5414ab1e2f0c2a4e2e86`，侧车一致。
+
+`scripts/ci_smoke.ps1` 对包内程序在隔离数据目录运行通过：Qt 6.10.2、Schannel TLS 可用、八张页面截图齐全；人工查看首页空配置样片，未见启动失败或布局溢出。未使用真实订阅或改写宿主系统代理。此为预览包，`release_qualified=false`；没有执行完整回归、干净机安装、真实 TUN/系统代理写入或人工全页验收。
+
+## U16：模块边界与单文件组件拆分（2026-11-16）
+
+**收尾切片：类型契约、弱生命周期、兼容头清理。** 旧 `app/Types.h`、`app/ConnectionColumns.h` 和 UI 三个聚合/兼容头已移除，消费者改用 domain 类型与明确所属组件；UI 公开头只前置声明 Controller。版本、运行配置和代理组响应在 mihomo 适配端解析为类型化 DTO，拒绝字段缺失/类型错误，保留 Result 错误与现有状态快照。`PageRouter` 对页面使用 Qt 弱引用；纯路由场景从 `UiTests` 移到独立目标，协议解析另有独立目标。CTest 现有 50 项，均带层标签。没有更改配置格式、系统写入路径或页面视觉值。
+
+`scripts/build.ps1 -Preset windows-mingw-open` 使用仓库内固定的开源 Qt 与本地缓存依赖完整构建通过；默认 `windows-mingw` Qt 套件在当前环境被本机 Qt 授权服务阻断，不能把它记为产品编译失败。`scripts/test.ps1 -Preset windows-mingw-open -Layer unit` **5 通过、0 失败**（0.49 秒）；同机允许本地端口观测后，`page_router_tests`、`tun_tests`、`core_readiness_tests`、`engine`、`ui_components`、`page_lifecycle_tests`、`website_tests`、`architecture_boundaries` **8 通过、0 失败**（166.01 秒）；`flat_workspace_tests`、`settings_value_tests`、`appearance_tests` **3 通过、0 失败**（35.18 秒）。这些重叠选择组的通过数不相加冒充全量 CTest。受限沙盒内 TUN 端口 PID 观测曾被系统拒绝，随后在同机允许该只读观测的隔离测试环境通过；没有执行 `--system-proxy-test`。文档导航、隐私、UI token 和 `git diff --check` 均通过。完整 50 组、人工原生视觉/读屏、真实系统代理与 TUN 写入、干净机部署和长期稳定性未验，`release_qualified=false`。
+
+**后续切片：内核特化、UI 设计系统和测试分层。** `CoreApi` 为当前实际能力接口，`MihomoClient` 为唯一实现；进程管理与只读探测/测速消费者依赖接口，Controller 仍持有具体实例。`ui/design` 新增只读语义规格、Shadowrocket 风格取值及独立组件 QSS 模板，`UiTheme` 只负责 Qt 外观应用、token 替换与兼容桥；没有更改页面任务层级、既有视觉取值或系统代理写入路径。测试新增只链接 domain 的 `domain_contract_tests` 和只链接 Qt/节点模型的 `ui_model_tests`；旧 `EngineTests` 不再编译 UI 模型。48 个 CTest 项目均有层标签，历史混合套件保留双标签。`scripts/test.ps1` 支持 `-Layer` 并将测试 TEMP/TMP 放在忽略的 `build/test-temp`，执行后恢复原环境。
+
+`scripts/build.ps1 -Preset windows-mingw` 完整构建及最终增量配置通过。`scripts/test.ps1 -Layer unit` **3 通过、0 失败**（0.37 秒）；`navigation_contract_tests` **1 通过**；`scripts/test.ps1 -Layer system-gated` **1 跳过**，没有启动系统写入。在受限沙盒中，核心端口 PID 观测被拒，`core_readiness_tests`、`engine`、`home_metrics_tests`、`website_tests` 和 `ui_components` 失败/超时；改用同机隔离测试目录且允许 Windows 本机端口观测后，`core_readiness_tests` **1 通过**（22.84 秒），`engine`、`ui_components`、`home_metrics_tests`、`website_tests` **4 通过**（120.28 秒），`page_lifecycle_tests`、`appearance_tests` **2 通过**（33.22 秒）。这区分沙盒能力限制与产品回归，不把失败记录抹去。文档链接、隐私和架构静态检查均 0 发现；未执行本轮全量测试、原生人工视觉/DPI、真实系统代理/TUN 写入或正式发行验收。
+
+QSS 模板从运行时适配中再拆出后，最终完整构建通过；`domain_contract_tests`、`ui_model_tests`、`appearance_tests`、`architecture_boundaries` **4 通过、0 失败**（31.25 秒），确认颜色替换、主题切换、对比度和最小模型目标未受拆分影响。此项自动结果不替代原生前台视觉评审。
+
+框架几何规格补入侧栏内边距、顶栏两侧动作槽及间距后，再次完整构建通过；`domain_contract_tests`、`ui_model_tests`、`navigation_contract_tests`、`architecture_boundaries` **4 通过、0 失败**（1.89 秒）。尺寸取值与变更前一致；此次仅验证代码与导航契约，没有追加 DPI 截图比较。
+
+事前设计见 [U16 设计](design/u16-modular-architecture.md)，决策见 [ADR 0055](adr/0055-domain-contracts-and-ui-components.md)。`mlash_domain` 独立编译；存储/配置不再反向包含连接列、测速会话、TUN 运行策略和平台快捷键类。`MainWindowParts.h` 拆为控件/模型/委托/顶栏组件，`MainWindow.cpp` 和 `AppController.cpp` 按职责分编译单元；Controller 的内核 REST 调用改为具名端点。未变更 UI 布局、数据格式及 OS 恢复流程。
+
+`scripts/build.ps1 -Preset windows-mingw` 最终完整构建通过。拆分与纯契约迁移后，`tun_tests`、`flat_workspace_tests`、`workflow_depth_tests`、`ui_interactions`、`ui_components`、`page_lifecycle_tests`、`connection_view_tests`、`hotkey_tests`、`website_tests` **9 通过、0 失败**（109.46 秒）。独立 domain 库与 REST 端点迁移后，`engine`、`ui_interactions`、`page_lifecycle_tests`、`website_tests` **4 通过、0 失败**（110.41 秒）。Controller 文件拆分后，`tun_tests`、`engine`、`ui_interactions` **3 通过、0 失败**（126.80 秒）。新窗口编译单元改用所属组件头后，最终增量构建及 `ui_interactions`、`page_lifecycle_tests` **2 通过、0 失败**（18.18 秒）。`check_docs.py` 与 `check_document_privacy.py` 分别 0 发现。默认测试未启用系统代理写入门禁。
+
+另新增 `architecture_boundaries` 静态依赖门禁：domain 不得引入上层模块，配置/存储不得重新引入已解除的反向依赖，app 不得直接发送原始内核 REST 请求；CTest **1 通过、0 失败**。本轮验证只说明模块拆分在这些自动化场景中保持行为；尚未完成 Controller 公共接口收敛、全端点 DTO、逐页对象所有权或原生人工视觉复核，不宣称正式发行资格。
+
+## U15：界面细节根因修复（2026-11-16）
+
+先定位四项可复现根因，再按 [U15 事前设计与实施后对照](design/u15-precision-root-causes.md) 修改。`ActionRow` 默认奇偶填充使悬停圆角与方角重叠区域消失；样式表又绘制同一悬停及分隔线。`NodeRowView` 把 viewport 圆角转整数区域蒙版，使 150% DPI 圆弧缺少半透明边缘。配置详情任务页签与目录行重复，工作区返回概览时重建页面；顶栏左右两个动作都进入配置添加。外部代理需确认接管被错误当作持续全局故障。
+
+`scripts/build.ps1 -Preset windows-mingw` 完整构建通过。最终代码新增两个隔离 UI 场景：首/中/末设置行悬停底边像素；配置任务返回复用详情、保持详情与列表滚动，以及外部确认/真实错误告警区分，均通过。`scripts/test.ps1 -Preset windows-mingw -TestRegex '^(prototype_ui_tests|appearance_tests|flat_workspace_tests)$'` 为 **3 通过、0 失败**（34.55 秒）；随后仅删除已不再使用的详情页签样式并完成最终增量构建、两个场景复测。原生 QtTest 的 1040×720 DIP 首页、设置、配置详情样片在本机有效 DPR 1.5 下为 1560×1080 像素；复核节点列表圆角边缘可见过渡像素，顶栏只剩一个添加入口，详情无重复页签。文档链接/导航检查 118 份 Markdown 零问题，隐私检查 125 项零命中；`git diff --check` 通过。
+
+`scripts/package.ps1 -Preset windows-mingw -OutputName Mlash-1.19.0-u15-review` 生成独立本地预览目录和 ZIP；35 文件白名单及逐文件完整性通过，ZIP SHA-256 为 `f5f7cf62c1b93502189e1c4003968288b1f0e1ea496e954d2aa36f15832aabf7`。没有覆盖现用便携目录或上传远端。
+
+本轮不进行真实系统代理/TUN 写入，不宣称截图预览缩放或所有字体/显卡/DPI 环境均无锯齿；人工前台读屏和正式发行资格仍待独立验收。
+
 ## U14：原生全页精修与统一字体（2026-11-16）
 
 按 [U14 设计](design/u14-shadowrocket-all-pages.md) 和 [ADR 0054](adr/0054-shadowrocket-all-pages-refinement.md) 收紧正文、次要文字、行高、间距与网站测试卡；移除全局 QSS 对应用字体族的二次覆盖。图标按设备像素比生成缓存变体。托盘快捷节点限制为 16 个，自动悬停测速优先当前节点并只测快捷范围；显式测试仍保留原上限与取消能力。未改变配置/系统代理写入路径。

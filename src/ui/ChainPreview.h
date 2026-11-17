@@ -1,5 +1,5 @@
 #pragma once
-#include "app/Types.h"
+#include "domain/Types.h"
 #include <QSet>
 #include <QStringList>
 #include <QHash>

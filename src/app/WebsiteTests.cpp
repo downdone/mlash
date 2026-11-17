@@ -3,8 +3,6 @@
 #include <QNetworkReply>
 #include <QTimer>
 #include <utility>
-#include <QRegularExpression>
-#include <QSet>
 
 namespace mlash {
 QList<WebsiteTarget> WebsiteTests::defaults() {
@@ -21,20 +19,13 @@ QList<WebsiteTarget> WebsiteTests::defaults() {
         {"telegram","Telegram","https://web.telegram.org/","TG"},
         {"cloudflare","Cloudflare","https://www.cloudflare.com/cdn-cgi/trace","CF"}};
 }
-WebsiteTests::WebsiteTests(MihomoClient* api,QObject* parent,QList<WebsiteTarget> targets):QObject(parent),api_(api),targets_(std::move(targets)) {
+WebsiteTests::WebsiteTests(CoreApi* api,QObject* parent,QList<WebsiteTarget> targets):QObject(parent),api_(api),targets_(std::move(targets)) {
     // Definitions come from compiled-in defaults (or isolated test fixtures).
     if (targets_.size()>24) targets_=targets_.mid(0,24);
     initialTargets_ = targets_;
 }
 Result WebsiteTests::validateTargets(const QJsonArray& targets) {
-    if (targets.size() > 24) return Result::fail("测速目标最多 24 个");
-    QSet<QString> ids; static const QRegularExpression idPattern("^[a-z0-9-]{1,64}$");
-    for (int i = 0; i < targets.size(); ++i) {
-        const auto item = targets[i].toObject(); const auto id = item.value("id").toString(), name = item.value("name").toString(), address = item.value("url").toString(); const QUrl url(address,QUrl::StrictMode);
-        if (!targets[i].isObject() || !idPattern.match(id).hasMatch() || ids.contains(id) || name.trimmed().isEmpty() || name.size()>64 || name.contains(QChar::LineFeed) || name.contains(QChar::CarriageReturn) || address.size()>2048 || !url.isValid() || url.scheme()!="https" || url.host().isEmpty() || !url.userInfo().isEmpty() || url.hasFragment() || (item.contains("mark") && (!item.value("mark").isString() || item.value("mark").toString().size()>8))) return Result::fail(QString("第 %1 个目标无效：名称 1–64 字符，HTTPS 地址不得含用户凭据/片段，目标标识不得重复").arg(i+1));
-        ids.insert(id);
-    }
-    return {};
+    return validateWebsiteTargets(targets);
 }
 void WebsiteTests::configureTargets(const QJsonArray& definitions) {
     if (!validateTargets(definitions).ok) return;

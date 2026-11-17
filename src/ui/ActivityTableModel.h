@@ -2,7 +2,7 @@
 #include <QAbstractTableModel>
 #include <QJsonArray>
 #include <QJsonObject>
-#include "app/ConnectionColumns.h"
+#include "domain/ConnectionColumns.h"
 
 namespace mlash {
 class ActivityTableModel final : public QAbstractTableModel {

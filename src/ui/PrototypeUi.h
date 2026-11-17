@@ -2,6 +2,7 @@
 #include "UiTheme.h"
 #include "UiIcons.h"
 #include "ElidedLabel.h"
+#include "UiHairline.h"
 #include <QPushButton>
 #include <QLabel>
 #include <QFrame>
@@ -19,7 +20,7 @@ public:
         : QPushButton(parent) {
         setProperty("prototypeRow",true); setCursor(Qt::PointingHandCursor); setAccessibleName(title); setAutoDefault(false);
         auto* layout=new QHBoxLayout(this); layout->setContentsMargins(12,3,10,3); layout->setSpacing(9);
-        icon_=new QLabel; icon_->setFixedSize(22,22); icon_->setPixmap(UiIcons::icon(glyph,UiTheme::Brand).pixmap(22,22));
+        icon_=new QLabel; icon_->setFixedSize(22,22); icon_->setPixmap(UiIcons::icon(glyph,UiTheme::Secondary).pixmap(22,22));
         icon_->setAttribute(Qt::WA_TransparentForMouseEvents); layout->addWidget(icon_);
         auto* text=new QVBoxLayout; text->setSpacing(1); title_=new ElidedLabel(title); title_->setObjectName("directoryTitle");
         title_->setAttribute(Qt::WA_TransparentForMouseEvents); text->addWidget(title_);
@@ -29,7 +30,7 @@ public:
         chevron_=new QLabel; chevron_->setFixedSize(13,18); chevron_->setPixmap(UiIcons::icon(UiIcons::Glyph::ChevronRight,UiTheme::Secondary).pixmap(13,18));
         chevron_->setAttribute(Qt::WA_TransparentForMouseEvents); layout->addWidget(chevron_);
         connect(UiTheme::notifier(),&UiTheme::AppearanceNotifier::changed,this,[this,glyph] {
-            icon_->setPixmap(UiIcons::icon(glyph,UiTheme::Brand).pixmap(22,22));
+            icon_->setPixmap(UiIcons::icon(glyph,UiTheme::Secondary).pixmap(22,22));
             chevron_->setPixmap(UiIcons::icon(UiIcons::Glyph::ChevronRight,UiTheme::Secondary).pixmap(13,18));
         });
     }
@@ -43,12 +44,12 @@ protected:
     void paintEvent(QPaintEvent*) override {
         QPainter painter(this); painter.setRenderHint(QPainter::Antialiasing);
         if (isDown()||underMouse()) {
-            QPainterPath shape; shape.addRoundedRect(QRectF(rect()),10,10);
-            if (!property("firstRow").toBool()) shape.addRect(QRectF(0,0,width(),10));
-            if (!property("lastRow").toBool()) shape.addRect(QRectF(0,height()-10,width(),10));
+            QPainterPath shape; shape.setFillRule(Qt::WindingFill); shape.addRoundedRect(QRectF(rect()),8,8);
+            if (!property("firstRow").toBool()) shape.addRect(QRectF(0,0,width(),8));
+            if (!property("lastRow").toBool()) shape.addRect(QRectF(0,height()-8,width(),8));
             painter.fillPath(shape,QColor(isDown()?UiTheme::Pressed:UiTheme::Hover));
         }
-        if (!property("lastRow").toBool()) { painter.setPen(QColor(UiTheme::Separator)); painter.drawLine(46,height()-1,width(),height()-1); }
+        if (!property("lastRow").toBool()) UiHairline::bottom(&painter,rect(),46,QColor(UiTheme::Separator));
         if (hasFocus()&&property("keyboardFocus").toBool()) { painter.setPen(QPen(QColor(UiTheme::Focus),1)); painter.setBrush(Qt::NoBrush); painter.drawRoundedRect(rect().adjusted(1,1,-2,-2),5,5); }
     }
     bool event(QEvent* event) override {

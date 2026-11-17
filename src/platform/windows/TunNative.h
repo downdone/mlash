@@ -1,5 +1,5 @@
 #pragma once
-#include "app/Types.h"
+#include "domain/Types.h"
 #include "platform/PlatformServices.h"
 namespace mlash::tunNative {
 QString ownerSid();

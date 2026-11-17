@@ -1,6 +1,21 @@
+#include "app/AppController.h"
 #include "TaskDialog.h"
 #include "TaskWorkspace.h"
-#include "MainWindowParts.h"
+#include "MainWindow.h"
+#include "CompactComboBox.h"
+#include "DetailsDrawer.h"
+#include "DialogDraftGuard.h"
+#include "NodeCardView.h"
+#include "NodePresentation.h"
+#include "NodeRowDelegate.h"
+#include "NodeRowModel.h"
+#include "NodeRowView.h"
+#include "PrototypeUi.h"
+#include "UiIcons.h"
+#include "UiTheme.h"
+#include "WindowUiFactories.h"
+#include "WebsiteTestsPage.h"
+#include <QtWidgets>
 #include "WrapLayout.h"
 #include <QWidgetAction>
 
@@ -17,7 +32,7 @@ QWidget* MainWindow::nodeSection() {
     nodeHeadingTitle_ = new QLabel("节点选择"); nodeHeadingTitle_->setObjectName("nodeHeadingTitle"); nodeHeadingTitle_->setParent(heading); nodeHeadingTitle_->hide();
     nodeCount_ = new QLabel; nodeCount_->setObjectName("nodeHeadingCount"); nodeCount_->setProperty("secondary", true); nodeCount_->setParent(heading); nodeCount_->hide();
     profilesCombo_ = new CompactComboBox; profilesCombo_->setObjectName("nodeProfile"); profilesCombo_->setSizeAdjustPolicy(QComboBox::AdjustToMinimumContentsLengthWithIcon); profilesCombo_->setMinimumContentsLength(4); profilesCombo_->setMaximumWidth(150); profilesCombo_->setToolTip("节点来源订阅；切换只改变浏览的订阅"); profilesCombo_->setParent(heading); profilesCombo_->hide();
-    auto* groupPicker=new QToolButton; groupPicker->setFixedSize(32,32); groupPicker->setObjectName("browseGroup"); groupPicker->setProperty("prototypeIcon",true); groupPicker->setToolButtonStyle(Qt::ToolButtonIconOnly); groupPicker->setToolTip("选择节点分组"); groupPicker->setIcon(UiIcons::icon(UiIcons::Glyph::Layers,UiTheme::Brand)); groupPicker->setText("浏览策略组"); headingLayout->addWidget(groupPicker);
+    auto* groupPicker=new QToolButton; groupPicker->setFixedSize(32,32); groupPicker->setObjectName("browseGroup"); groupPicker->setProperty("prototypeIcon",true); groupPicker->setToolButtonStyle(Qt::ToolButtonIconOnly); groupPicker->setToolTip("选择节点分组"); groupPicker->setIcon(UiIcons::icon(UiIcons::Glyph::Layers,UiTheme::Secondary)); groupPicker->setText("浏览策略组"); headingLayout->addWidget(groupPicker);
     connect(groupPicker,&QToolButton::clicked,this,[this,groupPicker] {
         auto* popup=new QMenu(groupPicker); popup->setObjectName("groupPickerMenu"); popup->setAttribute(Qt::WA_DeleteOnClose);
         auto* panel=new QWidget; auto* box=new QVBoxLayout(panel); box->setContentsMargins(8,8,8,8);
@@ -32,7 +47,7 @@ QWidget* MainWindow::nodeSection() {
         connect(popup,&QMenu::aboutToHide,popup,&QObject::deleteLater); popup->popup(groupPicker->mapToGlobal(QPoint(0,groupPicker->height()))); query->setFocus();
     });
     search_ = new QLineEdit; search_->setObjectName("nodeSearch"); search_->setPlaceholderText("搜索节点"); search_->setClearButtonEnabled(true); search_->setMinimumWidth(120); search_->setMaximumWidth(280); search_->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed); headingLayout->addWidget(search_); search_->hide();
-    auto* searchToggle=new QToolButton; searchToggle->setObjectName("nodeSearchToggle"); searchToggle->setProperty("prototypeIcon",true); searchToggle->setIcon(UiIcons::icon(UiIcons::Glyph::Search,UiTheme::Brand)); searchToggle->setToolTip("搜索节点"); searchToggle->setCheckable(true);
+    auto* searchToggle=new QToolButton; searchToggle->setObjectName("nodeSearchToggle"); searchToggle->setProperty("prototypeIcon",true); searchToggle->setIcon(UiIcons::icon(UiIcons::Glyph::Search,UiTheme::Secondary)); searchToggle->setToolTip("搜索节点"); searchToggle->setCheckable(true);
     connect(searchToggle,&QToolButton::toggled,search_,[this](bool shown) { search_->setVisible(shown); if (shown) search_->setFocus(); else search_->clear(); });
     testAction_ = new QAction("测速本组", this); testAction_->setObjectName("testGroup"); testSelectedAction_ = new QAction("测速所选", this);
     // 取消测速：仍挂在测速按钮的菜单里（原来在底部状态条，随 H3 一起删除）。
@@ -40,7 +55,7 @@ QWidget* MainWindow::nodeSection() {
     auto* testMenu = new QMenu(this); testMenu->addAction(testAction_); testMenu->addAction(testSelectedAction_); testMenu->addSeparator(); testMenu->addAction(cancelTestAction_);
     connect(cancelTestAction_, &QAction::triggered, controller_, &AppController::cancelTests);
     // K4（原型 05）：测速与排序是两个图标钮，各自带一个浮层菜单。
-    testAction_->setIcon(UiIcons::icon(UiIcons::Glyph::Gauge,UiTheme::Brand));
+    testAction_->setIcon(UiIcons::icon(UiIcons::Glyph::Gauge,UiTheme::Secondary));
     auto* test = new QToolButton; test->setObjectName("nodeTestButton"); test->setProperty("prototypeIcon",true); test->setDefaultAction(testAction_);
     test->setToolButtonStyle(Qt::ToolButtonIconOnly); test->setToolTip("测试本组节点延迟；只读，不切换节点"); headingLayout->addWidget(test);
     auto* sort = new QToolButton; sort->setObjectName("nodeSortButton"); sort->setIcon(UiIcons::icon(UiIcons::Glyph::Sliders)); sort->setPopupMode(QToolButton::InstantPopup); sort->setAutoRaise(true); sort->setToolTip("排序");
@@ -124,9 +139,9 @@ QWidget* MainWindow::nodeSection() {
     enterGroup_ = more->addAction("进入所选策略组"); enterGroup_->setObjectName("enterGroup"); connect(enterGroup_, &QAction::triggered, this, &MainWindow::enterSelectedGroup);
     backGroup_ = more->addAction("返回上级组"); backGroup_->setObjectName("backGroup"); backGroup_->setVisible(false);
     connect(backGroup_, &QAction::triggered, this, [this] { if (groupHistory_.isEmpty()) return; const auto previous = groupHistory_.takeLast(); selectedGroup_ = previous; search_->clear(); updateProxies(); });
-    locateAction_ = more->addAction("定位当前成员"); locateAction_->setObjectName("locateCurrent"); locateAction_->setIcon(UiIcons::icon(UiIcons::Glyph::Locate,UiTheme::Brand)); connect(locateAction_, &QAction::triggered, this, &MainWindow::locateCurrentNode);
+    locateAction_ = more->addAction("定位当前成员"); locateAction_->setObjectName("locateCurrent"); locateAction_->setIcon(UiIcons::icon(UiIcons::Glyph::Locate,UiTheme::Secondary)); connect(locateAction_, &QAction::triggered, this, &MainWindow::locateCurrentNode);
     auto* locate = new QToolButton; locate->setObjectName("nodeLocateButton"); locate->setDefaultAction(locateAction_); locate->setProperty("prototypeIcon",true);
-    locate->setIcon(UiIcons::icon(UiIcons::Glyph::Locate,UiTheme::Brand)); locate->setToolButtonStyle(Qt::ToolButtonIconOnly); locate->setAutoRaise(true);
+    locate->setIcon(UiIcons::icon(UiIcons::Glyph::Locate,UiTheme::Secondary)); locate->setToolButtonStyle(Qt::ToolButtonIconOnly); locate->setAutoRaise(true);
     headingLayout->addWidget(locate);
     { QList<QLayoutItem*> cells; while (auto* item=headingLayout->takeAt(0)) cells.append(item);
       headingLayout->addStretch(1);

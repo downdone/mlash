@@ -1,6 +1,27 @@
+#include "app/AppController.h"
 #include "TaskDialog.h"
 #include "TaskWorkspace.h"
-#include "MainWindowParts.h"
+#include "MainWindow.h"
+#include "BackupDialog.h"
+#include "CompactComboBox.h"
+#include "CompactSpinBox.h"
+#include "CoreUpdateDialog.h"
+#include "AppUpdateDialog.h"
+#include "GeoDataDialog.h"
+#include "HotkeysDialog.h"
+#include "LocalBackupDialog.h"
+#include "ProtocolSettingsDialog.h"
+#include "PrototypeUi.h"
+#include "ProxyBypassDialog.h"
+#include "ProxySwitch.h"
+#include "RemoteBackupDialog.h"
+#include "SettingRow.h"
+#include "SettingsSearch.h"
+#include "TunDialog.h"
+#include "UiIcons.h"
+#include "UiTheme.h"
+#include "WindowUiFactories.h"
+#include <QtWidgets>
 #include "ViewIds.h"
 
 namespace mlash {
@@ -42,8 +63,8 @@ void MainWindow::commitInstantSettings() {
     next.autoStart=autoStart_->isChecked(); next.silentStart=silentStart_->isChecked(); next.startCore=startCore_->isChecked();
     next.restoreProxy=restoreProxy_->isChecked(); next.lightweight=lightweight_->isChecked();
     next.startupPage=startupPage_->currentData().toInt(); next.trayClick=trayClick_->currentData().toString();
-    next.appearance=appearance_->currentData().toString(); next.textScale=textScale_->currentData().toInt();
-    const bool unchanged=next.autoStart==current.autoStart&&next.silentStart==current.silentStart&&next.startCore==current.startCore&&next.restoreProxy==current.restoreProxy&&next.lightweight==current.lightweight&&next.startupPage==current.startupPage&&next.trayClick==current.trayClick&&next.appearance==current.appearance&&next.textScale==current.textScale&&next.testUrl==current.testUrl;
+    next.appearance=appearance_->currentData().toString(); next.textScale=textScale_->currentData().toInt(); next.windowChrome=windowChrome_->currentData().toString();
+    const bool unchanged=next.autoStart==current.autoStart&&next.silentStart==current.silentStart&&next.startCore==current.startCore&&next.restoreProxy==current.restoreProxy&&next.lightweight==current.lightweight&&next.startupPage==current.startupPage&&next.trayClick==current.trayClick&&next.appearance==current.appearance&&next.textScale==current.textScale&&next.windowChrome==current.windowChrome&&next.testUrl==current.testUrl;
     if (unchanged) return;
     // Instant preferences must not carry an unrelated pending restart value into the controller.
     next.mixedPort=current.mixedPort; next.logLevel=current.logLevel; next.corePath=current.corePath; next.ipv6Mode=current.ipv6Mode; next.unifiedDelayMode=current.unifiedDelayMode;
@@ -78,6 +99,7 @@ QWidget* MainWindow::settingsPage() {
     // —— 通用：外观、启动与托盘、快捷键与导入 ——
     appearance_=new CompactComboBox; appearance_->setObjectName("appearancePreference"); appearance_->addItem("跟随系统","system"); appearance_->addItem("浅色","light"); appearance_->addItem("深色","dark"); appearance_->setFixedWidth(120); settingRow(generalRows,"外观","系统高对比度设置优先",appearance_,false,{},UiIcons::Glyph::Moon);
     textScale_=new CompactComboBox; textScale_->setObjectName("textScalePreference"); for (const int percent:{90,100,110,120}) textScale_->addItem(QString::number(percent)+"%",percent); textScale_->setFixedWidth(96); settingRow(generalRows,"文字大小","调整文字，不放大整张界面",textScale_,false,{},UiIcons::Glyph::Sliders);
+    windowChrome_=new CompactComboBox; windowChrome_->setObjectName("windowChromePreference"); windowChrome_->addItem("系统标题栏","native"); windowChrome_->addItem("应用内标题栏","integrated"); windowChrome_->setFixedWidth(140); settingRow(generalRows,"窗口标题栏","可在两种样式之间切换",windowChrome_,false,{},UiIcons::Glyph::Layers);
     autoStart_ = new ProxySwitch; autoStart_->setObjectName("autoStart"); silentStart_=new ProxySwitch; silentStart_->setObjectName("silentStart"); startCore_=new ProxySwitch; startCore_->setObjectName("startCore"); restoreProxy_=new ProxySwitch; restoreProxy_->setObjectName("restoreProxy"); lightweight_=new ProxySwitch; lightweight_->setObjectName("lightweightMode");
     for (auto* toggle:{autoStart_,silentStart_,startCore_,restoreProxy_,lightweight_}) toggle->setFixedWidth(54);
     settingRow(generalRows,"登录启动","随 Windows 登录启动 Mlash",autoStart_,false,{},UiIcons::Glyph::Rocket);
@@ -155,7 +177,7 @@ QWidget* MainWindow::settingsPage() {
     connect(locator,&SettingsSearch::anchorRequested,surface,[this,locator](QWidget* anchor) { if (settingsScroll_&&anchor&&settingsPage_->isAncestorOf(anchor)) { if (route_.view!=ViewIds::Settings) navigate(Route{ViewIds::Settings}); openSettingsTask("all"); locator->show(); settingsScroll_->ensureWidgetVisible(anchor,8,12); } });
     settingsSections_={generalCard,networkCard,coreCard}; settingsScroll_=scroll; settingsPage_=page;
     // Preference rows commit immediately; only core-restart rows wait for the explicit action bar.
-    const QList<QComboBox*> instantCombos{startupPage_,trayClick_,appearance_,textScale_};
+    const QList<QComboBox*> instantCombos{startupPage_,trayClick_,appearance_,textScale_,windowChrome_};
     for (auto* toggle:{autoStart_,silentStart_,startCore_,restoreProxy_,lightweight_}) connect(toggle,&QCheckBox::toggled,this,&MainWindow::commitInstantSettings);
     for (auto* combo:instantCombos) connect(combo,&QComboBox::currentIndexChanged,this,&MainWindow::commitInstantSettings);
 
@@ -170,7 +192,7 @@ QWidget* MainWindow::settingsPage() {
         connect(combo,&QComboBox::currentIndexChanged,item,[item,combo] { item->setValue(combo->currentText()); });
         connect(item,&QPushButton::clicked,this,[item,combo] { auto* menu=new QMenu(item); menu->setAttribute(Qt::WA_DeleteOnClose); for (int i=0;i<combo->count();++i) { auto* action=menu->addAction(combo->itemText(i)); action->setCheckable(true); action->setChecked(i==combo->currentIndex()); QObject::connect(action,&QAction::triggered,combo,[combo,i] { combo->setCurrentIndex(i); }); } menu->popup(item->mapToGlobal(QPoint(0,item->height()))); }); return item;
     };
-    choice(appearanceRows,"settingsAppearanceRow","外观",G::Moon,appearance_); choice(appearanceRows,"settingsTextSizeRow","文字大小",G::Sliders,textScale_);
+    choice(appearanceRows,"settingsAppearanceRow","外观",G::Moon,appearance_); choice(appearanceRows,"settingsTextSizeRow","文字大小",G::Sliders,textScale_); choice(appearanceRows,"settingsWindowChromeRow","窗口标题栏",G::Layers,windowChrome_);
     const auto taskRow=[this](QVBoxLayout* rows,const QString& name,const QString& title,G glyph,const QString& task,const QString& value=QString()) {
         auto* item=row(rows,name,title,glyph,value); connect(item,&QPushButton::clicked,this,[this,task] { openSettingsTask(task); }); return item;
     };
@@ -185,6 +207,7 @@ QWidget* MainWindow::settingsPage() {
     auto* bypassRow=row(network,"settingsBypassRow","系统代理排除",G::Globe); connect(bypassRow,&QPushButton::clicked,bypass,&QPushButton::click);
     auto* dnsRow=row(network,"settingsDnsRow","DNS 设置",G::Globe,{},"当前使用的配置"); connect(dnsRow,&QPushButton::clicked,this,[this] { const auto id=controller_->state().activeProfile; if (id.isEmpty()) { navigate(Route{ViewIds::Profiles}); return; } navigate(Route{ViewIds::Profiles}); showProfileDetails(id); openProfileTask(id,"dns"); });
     auto* maintain=group(directory,"维护与数据"); auto* coreTask=row(maintain,"settingsCoreRow","内核管理",G::Layers); connect(coreTask,&QPushButton::clicked,this,[this] { showTool("core-update",{},[this] { return new CoreUpdateDialog(controller_,this); }); });
+    auto* appUpdateTask=row(maintain,"settingsAppUpdateRow","Mlash 更新",G::Refresh); connect(appUpdateTask,&QPushButton::clicked,this,[this] { showTool("app-update",{},[this] { return new AppUpdateDialog(controller_,this); }); });
     auto* backupTask=row(maintain,"settingsBackupRow","备份与恢复",G::Folder); connect(backupTask,&QPushButton::clicked,this,[this] { openBackupTask("create"); });
     auto* geoRow=row(maintain,"settingsGeoRow","Geo 数据",G::Globe); connect(geoRow,&QPushButton::clicked,geo,&QAction::trigger);
     auto* diagnostics=row(maintain,"settingsDiagnosticsRow","诊断",G::Gauge); connect(diagnostics,&QPushButton::clicked,this,&MainWindow::showOutboundDiagnostics);

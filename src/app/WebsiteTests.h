@@ -1,14 +1,11 @@
 #pragma once
-#include "core/MihomoClient.h"
+#include "core/CoreApi.h"
+#include "domain/WebsiteTargets.h"
 #include <QDateTime>
 #include <QHash>
+#include <QPointer>
 
 namespace mlash {
-struct WebsiteTarget {
-    QString id, name, url, mark;
-    bool operator==(const WebsiteTarget&) const = default;
-    QJsonObject toJson() const { return {{"id",id},{"name",name},{"url",url},{"mark",mark}}; }
-};
 struct WebsiteResult {
     enum Status { Untested, Queued, Testing, Responded, Failed, Cancelled } status=Untested;
     int delay=-1;
@@ -19,7 +16,7 @@ struct WebsiteResult {
 class WebsiteTests final : public QObject {
     Q_OBJECT
 public:
-    explicit WebsiteTests(MihomoClient* api,QObject* parent=nullptr,QList<WebsiteTarget> targets=defaults());
+    explicit WebsiteTests(CoreApi* api,QObject* parent=nullptr,QList<WebsiteTarget> targets=defaults());
     ~WebsiteTests() override;
     static QList<WebsiteTarget> defaults();
     static Result validateTargets(const QJsonArray& targets);
@@ -36,7 +33,7 @@ signals:
     void targetsChanged();
 private:
     void dispatch();
-    MihomoClient* api_;
+    CoreApi* api_;
     QList<WebsiteTarget> targets_;
     QList<WebsiteTarget> initialTargets_;
     QHash<QString,WebsiteResult> results_;

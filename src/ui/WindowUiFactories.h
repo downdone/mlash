@@ -1,0 +1,49 @@
+#pragma once
+#include "UiTheme.h"
+#include "ChevronToolButton.h"
+
+namespace mlash::WindowParts {
+inline QPushButton* button(const QString& text, QLayout* layout) { auto* b = new QPushButton(text); layout->addWidget(b); return b; }
+inline QToolButton* actionButton(QAction* action, QLayout* layout, const QString& name) {
+    auto* control = new ChevronToolButton; control->setObjectName(name); control->setToolButtonStyle(Qt::ToolButtonTextOnly); control->setDefaultAction(action); layout->addWidget(control); return control;
+}
+// 空态（R7）：保持原有「视口内一个说明标签」的结构不变，只把说明拆成
+// 「图标 + 原因」并在下方附一个可聚焦动作按钮。动作留空时隐藏，行为与旧版一致。
+inline QLabel* emptyState(QAbstractItemView* table, const QString& text) {
+    auto* label = new QLabel(text, table->viewport()); label->setObjectName("emptyState"); label->setWordWrap(true); label->setAlignment(Qt::AlignCenter); label->setAttribute(Qt::WA_TransparentForMouseEvents); label->setTextFormat(Qt::PlainText);
+    auto* action = new QPushButton(table->viewport()); action->setObjectName("emptyStateAction"); action->setProperty("quiet", true); action->setFocusPolicy(Qt::StrongFocus); action->hide();
+    auto* layout = new QVBoxLayout(table->viewport()); layout->setContentsMargins(0,0,0,0); layout->setSpacing(8); layout->addWidget(label); layout->addWidget(action, 0, Qt::AlignHCenter); label->hide();
+    return label;
+}
+// 空态动作按钮；调用方按当前原因设置文案与处理函数。文案为空即整块隐藏。
+inline QPushButton* emptyStateAction(QAbstractItemView* table) {
+    return table->viewport()->findChild<QPushButton*>("emptyStateAction");
+}
+inline void setEmptyStateAction(QAbstractItemView* table, const QString& text, const std::function<void()>& run) {
+    auto* action = emptyStateAction(table); if (!action) return;
+    action->setText(text); action->setVisible(!text.isEmpty());
+    QObject::disconnect(action, &QPushButton::clicked, nullptr, nullptr);
+    if (!text.isEmpty() && run) QObject::connect(action, &QPushButton::clicked, action, run);
+}
+inline QString ruleTargetValue(const QComboBox* box) {
+    const int index = box->currentIndex();
+    return index >= 0 && box->currentText() == box->itemText(index) ? box->itemData(index).toString() : box->currentText().trimmed();
+}
+inline void openDirectory(const QString& directory) { QDesktopServices::openUrl(QUrl::fromLocalFile(directory)); }
+inline void styleTable(QTableView* table) {
+    table->setAlternatingRowColors(false); table->setShowGrid(false); table->verticalHeader()->setDefaultSectionSize(UiTheme::TableRow);
+    table->horizontalHeader()->setDefaultAlignment(Qt::AlignLeft | Qt::AlignVCenter);
+    table->horizontalHeader()->setHighlightSections(false); const auto names=QHash<QString,QString>{{"nodesTable","代理成员列表"},{"profilesTable","订阅列表"},{"connectionsTable","实时连接列表"},{"activeRulesTable","内核规则列表"}}; table->setAccessibleName(names.value(table->objectName(),"数据列表"));
+    auto palette = table->palette(); palette.setColor(QPalette::Inactive, QPalette::HighlightedText, palette.color(QPalette::Active, QPalette::HighlightedText)); table->setPalette(palette);
+}
+inline QFrame* panel() { auto* frame = new QFrame; frame->setObjectName("panel"); return frame; }
+// K7：配置页的分组标题（原型 .section-heading / .section-title），右侧可挂工具按钮。
+inline QWidget* sectionHeading(const QString& title, QLayout* tools = nullptr, QWidget* parent = nullptr) {
+    auto* heading = new QWidget(parent); auto* layout = new QHBoxLayout(heading);
+    layout->setContentsMargins(2, 0, 2, 0); layout->setSpacing(10);
+    auto* label = new QLabel(title); label->setObjectName("sectionTitle"); layout->addWidget(label);
+    layout->addStretch(1);
+    if (tools) { auto* holder = new QWidget; holder->setLayout(tools); tools->setContentsMargins(0, 0, 0, 0); layout->addWidget(holder); }
+    return heading;
+}
+}

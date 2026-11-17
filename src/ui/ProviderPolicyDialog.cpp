@@ -1,3 +1,4 @@
+#include "app/AppController.h"
 #include "ProviderPolicyDialog.h"
 #include "ContextNote.h"
 #include "DownloadPolicyEditor.h"

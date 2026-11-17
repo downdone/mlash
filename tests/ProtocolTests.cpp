@@ -1,3 +1,4 @@
+#include "app/AppController.h"
 #include "app/ProtocolInbox.h"
 #include "ui/ProtocolImportQueue.h"
 #include "ui/ProtocolSettingsDialog.h"

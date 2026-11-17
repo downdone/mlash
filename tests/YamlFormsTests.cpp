@@ -1,3 +1,4 @@
+#include "app/AppController.h"
 #include "TestPorts.h"
 #include "profile/YamlFields.h"
 #include "profile/ProfileStore.h"

@@ -1,3 +1,4 @@
+#include "app/AppController.h"
 #include "app/OutboundDiagnostics.h"
 #include "ui/OutboundDialog.h"
 #include "ui/MainWindow.h"

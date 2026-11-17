@@ -1,3 +1,4 @@
+#include "app/AppController.h"
 #include "TaskWorkspace.h"
 #include "TaskDialog.h"
 #include "YamlFormEditor.h"

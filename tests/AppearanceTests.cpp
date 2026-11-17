@@ -1,3 +1,4 @@
+#include "app/AppController.h"
 #include "TestPorts.h"
 #include "ui/MainWindow.h"
 #include "ui/UiTheme.h"
@@ -80,6 +81,30 @@ class AppearanceTests : public QObject {
 private slots:
     void initTestCase() { WidgetStyle::install(); }
     void cleanup() { UiTheme::setPreferences("system",100); UiTheme::applyAppearance(Qt::ColorScheme::Light); }
+    void windowChromePreferenceIsReversible() {
+        QTemporaryDir dir; auto platform=std::make_shared<ReviewPlatform>();
+        AppController controller(dir.path(),true,nullptr,platform); QSignalSpy init(&controller,&AppController::initialized);
+        controller.initialize(); QTRY_COMPARE(init.size(),1);
+        MainWindow window(&controller); window.show();
+        auto* minimize=window.findChild<QToolButton*>("windowMinimize");
+        auto* maximize=window.findChild<QToolButton*>("windowMaximize");
+        auto* close=window.findChild<QToolButton*>("windowClose");
+        QVERIFY(minimize&&maximize&&close);
+        QVERIFY(!(window.windowFlags()&Qt::FramelessWindowHint)); QVERIFY(minimize->isHidden());
+        auto integrated=controller.settings(); integrated.windowChrome="integrated";
+        controller.updateSettings(integrated);
+        QTRY_VERIFY(window.windowFlags()&Qt::FramelessWindowHint);
+        QTRY_VERIFY(minimize->isVisible()&&maximize->isVisible()&&close->isVisible());
+        QTest::qWait(120);
+        save(&window,"window-chrome-integrated");
+        QTRY_VERIFY(!controller.state().busy);
+        auto native=controller.settings(); native.windowChrome="native";
+        controller.updateSettings(native);
+        QTRY_VERIFY(!(window.windowFlags()&Qt::FramelessWindowHint));
+        QVERIFY(minimize->isHidden()); QCOMPARE(platform->writes,0);
+        QTRY_VERIFY(window.isVisible()); QTest::qWait(120);
+        save(&window,"window-chrome-native");
+    }
     void semanticContrastAndArtwork() {
         for (const auto scheme:{Qt::ColorScheme::Light,Qt::ColorScheme::Dark}) for (bool high:{false,true}) {
             UiTheme::applyAppearance(scheme,high);
@@ -138,7 +163,7 @@ private slots:
             // 首页六卡已删除（U08 H2）：控制区与节点列表都不应越出窗口。
             for (auto* widget:QList<QWidget*>{window.findChild<QWidget*>("homeControlCard"),window.findChild<QWidget*>("homeInlineStat")}) if (widget && widget->isVisible()) QVERIFY(window.rect().contains(widget->mapTo(&window,widget->rect().bottomRight())));
         }
-        ImportDialog dialog(&window); dialog.show(); for (const auto scheme:{Qt::ColorScheme::Light,Qt::ColorScheme::Dark}) { UiTheme::applyAppearance(scheme); QCoreApplication::processEvents(); QCOMPARE(dialog.findChild<QLineEdit*>("subscriptionUrl")->font().pointSize(),UiTheme::BodyPoints); save(&dialog,scheme==Qt::ColorScheme::Dark?"import-dark":"import-light"); }
+        ImportDialog dialog(&window); dialog.show(); for (const auto scheme:{Qt::ColorScheme::Light,Qt::ColorScheme::Dark}) { UiTheme::applyAppearance(scheme); QCoreApplication::processEvents(); QCOMPARE(dialog.findChild<QLineEdit*>("subscriptionUrl")->font().pointSizeF(),UiTheme::BodyPoints); save(&dialog,scheme==Qt::ColorScheme::Dark?"import-dark":"import-light"); }
         UiTheme::applyAppearance(Qt::ColorScheme::Light,true); window.setPage(6); save(&window,"contrast-light"); UiTheme::applyAppearance(Qt::ColorScheme::Dark,true); save(&window,"contrast-dark");
         QSignalSpy exit(&controller,&AppController::exitReady); controller.requestExit(); QTRY_COMPARE(exit.size(),1);
     }

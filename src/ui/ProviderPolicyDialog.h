@@ -1,6 +1,7 @@
 #pragma once
 #include "TaskDialog.h"
-#include "app/AppController.h"
+#include "domain/Types.h"
+namespace mlash { class AppController; }
 namespace mlash {
 class ProviderPolicyDialog final : public TaskDialog {
 public:

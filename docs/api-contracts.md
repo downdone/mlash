@@ -1,5 +1,9 @@
 # 内核/API 契约
 
+`CoreApi` 是进程管理、首页采样和测速会话依赖的能力接口；`MihomoClient` 是当前唯一特化，持有 `/dns/query`、`/rules`、`/connections`、`/configs` 与 `/proxies/{name}` 的方法、路径和转义。Controller 持有具体实现，通过具名方法调用，不自行拼接 URL。`versionInfo`、`configInfo`、`proxyGroups` 在适配层将响应严格解析为已命名字段，同时保留原始对象供现有状态快照使用；缺字段和字段类型错误返回失败，原有传输错误不丢失。其余端点仍按有界 `Result`/JSON 处理，Controller 完成写后回读与代次判断。低层 `request` 保留协议测试入口；取消句柄目前仍是 `QNetworkReply*`，并非完全传输无关。见 [ADR 0055](adr/0055-domain-contracts-and-ui-components.md)。
+
+U18 应用更新：`checkAppUpdate(done)` 只读取 `api.github.com/repos/downdone/mlash/releases`，按语义版本大于当前版筛选非草稿发行，要求唯一的 `Mlash-<version>-windows-x64-portable.zip`、固定 `github.com/downdone/mlash/releases/download/<tag>/...` 地址、有效资产大小与 GitHub `sha256:` 摘要。`downloadAppUpdate(done)` 在限制 128 MiB/120 秒的独立网络任务后，于 worker 复核 SHA-256、大小和文件名，以 `QSaveFile` 保存到数据目录 `updates/`，只返回已验证候选路径；不覆盖当前运行包。`cancelAppUpdate()` 丢弃过期回复；UI 明确打开候选包，安装仍由用户按便携包说明完成。`window_chrome` 仅允许 `native|integrated`，旧索引缺省 `native`；切换不改变内核或系统代理。整组节点延迟最多 12 个异步客户端请求，两个连接池、总数和取消保持 Controller 约束；不可用组端点代替，以免重置非选择器的成员。
+
 F09：`previewNodeLinks(text,reserved,done)`为单在途只读worker；最多64KiB/64条/每条8192字符及20000保留名称，严格解码与受控字段转换。items只含名称/类型/端点；definitions/yaml含凭据，仅供私人编辑器内存使用，禁止日志/诊断。输入变化即丢旧预览，同名生成新名称。未知/冲突参数、坏编码、任一坏行整批拒绝，错误仅行号/固定原因。`importNodeLinks(name,text)`重新解析并生成本地快照（既有file/空source语义），走stageSource/真实内核校验/索引原子提交，不自动应用。已有编辑器先并入草稿，再走updateProxyEdits的覆盖及active/candidate期望快照；取消不写。无source的本地快照不能自动更新；元数据编辑仅允许继续保留空source且automatic=false，附加文件先校验，不允许清空已有文件来源静默解除关联。
 
 F08/S03：新增可选tun_mtu（1280–9000，默认1500）、tun_dns_hijack（默认true）、tun_exclude_routes（规范CIDR字符串数组，最多64项/4096字符，拒绝/0）。旧索引默认兼容，Settings保存/加载及权限服务prepareTunRuntime均严格复核；设备仍固定Mlash。updateTunSettings仅复制TUN字段并可核对expected旧值，未启用TUN时只存偏好，不重启普通内核。启用/修改后核对核心API的MTU、DNS和排除网段；原生观察能取得接口MTU时也必须一致。旧服务不支持高级字段则启用前拒绝，不能静默丢弃。

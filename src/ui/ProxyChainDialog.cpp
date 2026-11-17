@@ -1,3 +1,4 @@
+#include "app/AppController.h"
 #include "ChainPreview.h"
 #include "DialogDraftGuard.h"
 #include "ProxyChainDialog.h"

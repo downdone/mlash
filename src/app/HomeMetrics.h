@@ -1,12 +1,13 @@
 #pragma once
-#include "core/MihomoClient.h"
+#include "core/CoreApi.h"
+#include <QPointer>
 #include <QTimer>
 #include <QElapsedTimer>
 namespace mlash {
 class HomeMetrics final : public QObject {
     Q_OBJECT
 public:
-    explicit HomeMetrics(MihomoClient* api,QObject* parent=nullptr,std::function<Result(qint64)> memoryReader={});
+    explicit HomeMetrics(CoreApi* api,QObject* parent=nullptr,std::function<Result(qint64)> memoryReader={});
     void setVisible(bool visible);
     void setContext(bool ready,qint64 pid,quint64 generation);
     void refresh();
@@ -18,7 +19,7 @@ signals:
     void changed();
 private:
     void reset();
-    MihomoClient* api_;
+    CoreApi* api_;
     std::function<Result(qint64)> memoryReader_;
     QTimer timer_;
     QElapsedTimer clock_;

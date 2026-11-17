@@ -1,4 +1,15 @@
-#include "MainWindowParts.h"
+#include "app/AppController.h"
+#include "MainWindow.h"
+#include "DashboardCardButton.h"
+#include "ElidedLabel.h"
+#include "HomeMetricsView.h"
+#include "NodePresentation.h"
+#include "ProxySwitch.h"
+#include "UiIcons.h"
+#include "UiTheme.h"
+#include "ViewIds.h"
+#include "WindowUiFactories.h"
+#include <QtWidgets>
 
 namespace mlash {
 using namespace WindowParts;

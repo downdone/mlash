@@ -4,29 +4,29 @@
 #include <QObject>
 #include <QFont>
 #include <QFontMetrics>
+#include "design/ShadowrocketStyle.h"
 
 namespace mlash::UiTheme {
-// Semantic roles are updated together by applyAppearance, never by a page.
-inline const char *Window="#F7F8FA", *Sidebar="#EEF0F3", *Surface="#FFFFFF";
-inline const char *Ink="#1D1D1F", *Secondary="#60646C", *Muted="#686C73", *Disabled="#979BA3";
-inline const char *Border="#DDE1E7", *Separator="#ECEEF2", *Brand="#0068D9", *Selection="#E9F2FF";
-inline const char *Primary="#0068D9", *OnPrimary="#FFFFFF", *Hover="#F2F5FA", *Focus="#0068D9";
-inline const char *Control="#F0F1F3", *Pressed="#E2E5EA", *PrimaryPressed="#0057B8";
-inline const char *Success="#08745B", *Warning="#965A00", *Error="#BF303C", *Track="#B8BEC7";
-inline constexpr const char* ArtworkSurface="#F2F2F7";
-inline constexpr int ControlHeight = 30, TableRow = 28, PanelGap = 6, PopupRadius = 8;
-inline constexpr int ContentInset = 12, ContentTop = 12, PanelInset = 12, SidebarWidth = 188;
-// U14 compact content density. Font metrics still expand two-line rows at larger text scales.
-inline constexpr int TopbarHeight = 42, SidebarItemHeight = 32, RowHeight = 36, NodeRowHeight = 36;
-inline constexpr int SettingRowHeight = 36, ProfileRowHeight = 38, NodeCardHeight = 44, DrawerWidth = 350;
+// Compatibility bridge for existing components. The specialization is the
+// sole source of values; applyAppearance updates these roles as one snapshot.
+inline const char *Window=design::ShadowrocketStyle::colors(false,false).window, *Sidebar=design::ShadowrocketStyle::colors(false,false).sidebar, *Surface=design::ShadowrocketStyle::colors(false,false).surface;
+inline const char *Ink=design::ShadowrocketStyle::colors(false,false).ink, *Secondary=design::ShadowrocketStyle::colors(false,false).secondary, *Muted=design::ShadowrocketStyle::colors(false,false).muted, *Disabled=design::ShadowrocketStyle::colors(false,false).disabled;
+inline const char *Border=design::ShadowrocketStyle::colors(false,false).border, *Separator=design::ShadowrocketStyle::colors(false,false).separator, *Brand=design::ShadowrocketStyle::colors(false,false).brand, *Selection=design::ShadowrocketStyle::colors(false,false).selection;
+inline const char *Primary=design::ShadowrocketStyle::colors(false,false).primary, *OnPrimary=design::ShadowrocketStyle::colors(false,false).onPrimary, *Hover=design::ShadowrocketStyle::colors(false,false).hover, *Focus=design::ShadowrocketStyle::colors(false,false).focus;
+inline const char *Control=design::ShadowrocketStyle::colors(false,false).control, *Pressed=design::ShadowrocketStyle::colors(false,false).pressed, *PrimaryPressed=design::ShadowrocketStyle::colors(false,false).primaryPressed;
+inline const char *Success=design::ShadowrocketStyle::colors(false,false).success, *Warning=design::ShadowrocketStyle::colors(false,false).warning, *Error=design::ShadowrocketStyle::colors(false,false).error, *Track=design::ShadowrocketStyle::colors(false,false).track;
+inline constexpr auto ArtworkSurface=design::ShadowrocketStyle::artworkSurface;
+inline constexpr int ControlHeight = design::ShadowrocketStyle::geometry.controlHeight, TableRow = design::ShadowrocketStyle::geometry.tableRow, PanelGap = design::ShadowrocketStyle::geometry.panelGap, PopupRadius = design::ShadowrocketStyle::geometry.popupRadius;
+inline constexpr int ContentInset = design::ShadowrocketStyle::geometry.contentInset, ContentTop = design::ShadowrocketStyle::geometry.contentTop, PanelInset = design::ShadowrocketStyle::geometry.panelInset, SidebarWidth = design::ShadowrocketStyle::geometry.sidebarWidth;
+inline constexpr int TopbarHeight = design::ShadowrocketStyle::geometry.topbarHeight, SidebarItemHeight = design::ShadowrocketStyle::geometry.sidebarItemHeight, RowHeight = design::ShadowrocketStyle::geometry.rowHeight, NodeRowHeight = design::ShadowrocketStyle::geometry.nodeRowHeight;
+inline constexpr int SettingRowHeight = design::ShadowrocketStyle::geometry.settingRowHeight, ProfileRowHeight = design::ShadowrocketStyle::geometry.profileRowHeight, NodeCardHeight = design::ShadowrocketStyle::geometry.nodeCardHeight, DrawerWidth = design::ShadowrocketStyle::geometry.drawerWidth;
 #ifdef Q_OS_MACOS
-inline constexpr double BodyPoints=10.5;
-inline constexpr int DialogPoints=17, SectionPoints=11, ValuePoints=16, TitlePoints=13;
+inline constexpr double BodyPoints=design::ShadowrocketStyle::typography.bodyPointsMac;
 #else
-inline constexpr double BodyPoints=10.0;
-inline constexpr int DialogPoints=17, SectionPoints=11, ValuePoints=16, TitlePoints=13;
+inline constexpr double BodyPoints=design::ShadowrocketStyle::typography.bodyPointsWindows;
 #endif
-inline QFont rowCaptionFont(QFont font) { font.setPointSizeF(qMax(8.5,font.pointSizeF()*0.85)); return font; }
+inline constexpr int DialogPoints=design::ShadowrocketStyle::typography.dialogPoints, SectionPoints=design::ShadowrocketStyle::typography.sectionPoints, ValuePoints=design::ShadowrocketStyle::typography.valuePoints, TitlePoints=design::ShadowrocketStyle::typography.titlePoints;
+inline QFont rowCaptionFont(QFont font) { font.setPointSizeF(qMax(design::ShadowrocketStyle::typography.captionFloor,font.pointSizeF()*design::ShadowrocketStyle::typography.captionRatio)); return font; }
 inline int twoLineRowHeight(const QFont& font,int minimum=NodeRowHeight) {
     return qMax(minimum,QFontMetrics(font).height()+QFontMetrics(rowCaptionFont(font)).height()+4);
 }

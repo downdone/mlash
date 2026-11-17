@@ -84,12 +84,13 @@ QIcon NodePresentation::icon(const QString& name, bool group) {
     const auto region=location(name);
     const auto key=!region.code.isEmpty()?region.code:group?QString("group"):name=="DIRECT"?QString("direct"):name=="REJECT"||name=="REJECT-DROP"?QString("reject"):QString("unknown");
     if (region.code.isEmpty()) {
-        static QCache<QString,QIcon> glyphs(16); const auto identity=key+QString(UiTheme::Brand);
+        static QCache<QString,QIcon> glyphs(16); const auto identity=key+QString(UiTheme::Secondary);
         if (const auto* cached=glyphs.object(identity)) return *cached;
-        const auto icon=UiIcons::icon(group?UiIcons::Glyph::Layers:key=="reject"?UiIcons::Glyph::Close:key=="direct"?UiIcons::Glyph::Route:UiIcons::Glyph::Globe,UiTheme::Brand); glyphs.insert(identity,new QIcon(icon)); return icon;
+        const auto icon=UiIcons::icon(group?UiIcons::Glyph::Layers:key=="reject"?UiIcons::Glyph::Close:key=="direct"?UiIcons::Glyph::Route:UiIcons::Glyph::Globe,UiTheme::Secondary); glyphs.insert(identity,new QIcon(icon)); return icon;
     }
     static QHash<QString,QIcon> assets;
-    if (const auto cached=assets.constFind(key); cached!=assets.cend()) return cached.value();
+    const auto assetKey=key+QChar::Null+QString(UiTheme::Secondary)+QChar::Null+QString(UiTheme::Control);
+    if (const auto cached=assets.constFind(assetKey); cached!=assets.cend()) return cached.value();
     if (!region.code.isEmpty()) {
         static const bool initialized=[] { initializeFlags(); return true; }(); Q_UNUSED(initialized);
         QImage flag(":/flags/"+region.code+".png");
@@ -97,18 +98,18 @@ QIcon NodePresentation::icon(const QString& name, bool group) {
             QRect bounds;
             for (int y=0;y<flag.height();++y) for (int x=0;x<flag.width();++x) if (qAlpha(flag.pixel(x,y))>0) bounds=bounds.united(QRect(x,y,1,1));
             const QIcon icon(QPixmap::fromImage(flag.copy(bounds)));
-            assets.insert(key,icon);
+            assets.insert(assetKey,icon);
             return icon;
         }
     }
     QPixmap pixmap(96,72); pixmap.fill(Qt::transparent); QPainter p(&pixmap); p.scale(4,4); p.setRenderHint(QPainter::Antialiasing);
-    const QColor ink(group?"#7863ab":key=="reject"?"#bb5151":key=="direct"?"#348263":"#4e789e");
-    p.setPen(Qt::NoPen); p.setBrush(group?QColor("#eee9f7"):QColor("#e9f1f8")); p.drawRoundedRect(QRectF(0,0,24,18),3,3); p.setPen(QPen(ink,1.2));
+    const QColor ink(UiTheme::Secondary);
+    p.setPen(Qt::NoPen); p.setBrush(QColor(UiTheme::Control)); p.drawRoundedRect(QRectF(0,0,24,18),3,3); p.setPen(QPen(ink,1.2));
     if (!region.code.isEmpty()) { QFont font("Segoe UI"); font.setPixelSize(9); font.setBold(true); p.setFont(font); p.drawText(QRectF(0,0,24,18),Qt::AlignCenter,region.code); }
     else if (group) { p.drawLine(5,5,12,2); p.drawLine(12,2,19,5); p.drawLine(19,5,12,8); p.drawLine(12,8,5,5); p.drawPolyline(QPolygonF({{5,9},{12,12},{19,9}})); p.drawPolyline(QPolygonF({{5,13},{12,16},{19,13}})); }
     else if (key=="direct") { p.drawLine(5,9,19,9); p.drawLine(14,4,19,9); p.drawLine(14,14,19,9); }
     else if (key=="reject") { p.drawLine(8,5,16,13); p.drawLine(16,5,8,13); }
     else { p.drawEllipse(QRectF(6,3,12,12)); p.drawEllipse(QRectF(9,3,6,12)); p.drawLine(6,9,18,9); }
-    p.end(); const QIcon icon(pixmap); assets.insert(key,icon); return icon;
+    p.end(); const QIcon icon(pixmap); assets.insert(assetKey,icon); return icon;
 }
 }

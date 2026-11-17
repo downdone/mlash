@@ -6,7 +6,11 @@
 
 ```mermaid
 flowchart TD
+  Domain[domain / 纯值对象与有界校验]
   UI[Qt Widgets 四分区 / 五主视图 / 数据四页签 / 按需创建窗口] --> C[AppController 唯一状态写入者]
+  C --> Domain
+  P --> Domain
+  S --> Domain
   Tray[托盘 / 按需菜单] --> C
   C --> API[MihomoClient / Qt Network NoProxy]
   C --> CM[CoreManager / 普通进程或服务会话]
@@ -31,17 +35,24 @@ Mlash.exe 的 FileDescription 和 ProductName 均为 Mlash。mihomo 仍是 QProc
 普通模式使用 Windows Job 管理生命周期；TUN 模式由单独 SCM 权限服务拥有 Job。服务保留安装但核心绑定客户端心跳/管道，不能脱离客户端无限运行。任务管理器分组显示不是父子进程契约。
 界面不持有 Windows 句柄、文件事务或子进程；所有动作通过 Controller 方法。一级导航按首页/配置/数据/设置组织，内部使用五个主视图与数据四页签，历史八页入口由 ViewIds 适配；规则属于配置详情，跨页导航同步页签及分区，不增加持久化字段。
 
+U18：整组延迟由 Controller 有界队列调度 12 个异步请求，MihomoClient 使用两条独立本地 HTTP 连接池突破单池连接数限制；代次与取消仍由 Controller 统一处理，不产生每节点一个 OS 线程。窗口标题栏是纯偏好 `window_chrome=native|integrated`，应用内栏复用页面顶栏；Win32 边缘命中测试仅在 `platform/windows`，UI 只消费 Qt 事件与平台适配结果。应用在线更新由 `AppUpdateSource` 只读检查固定 GitHub Release，Controller 在有界 worker 校验大小/SHA-256 并原子保存独立候选包；运行 EXE 与内核不被覆盖，UI 显式打开候选包。发布策略与限制见 [U18 设计](design/u18-fast-tests-window-chrome-update.md)。
+
+`mlash_domain` 是独立静态库，提供通用状态类型与不触发 I/O 的校验；`mlash_engine` 依赖它。原 `app/Types.h`、`app/ConnectionColumns.h` 转发头已移除，消费者直接包含 domain 契约。`CoreApi` 描述现有核心能力；`MihomoClient` 是唯一特化，在 `MihomoEndpoints.cpp` 集中定义 REST 方法与路径。版本、运行配置和代理组响应用 `CoreDtos` 严格解析；其他端点保留有界 `Result`/JSON。Controller 持有具体实现并负责业务回读，进程管理和只读采样依赖能力接口。UI 控件、节点模型和委托分别在所属头文件中；原 `MainWindowParts.h`、`WindowUiBasics.h`、`WindowUiIncludes.h` 聚合头已移除，主窗口实现按外壳、数据、反馈、状态、导航和各页面分文件。`PageRouter` 以 `QPointer` 观察由主窗口持有的页面生命周期对象，销毁后不再调用悬空指针。`ui/design` 提供只读语义规格与 Shadowrocket 取值，`UiTheme` 是 Qt 外观适配和兼容桥，页面分组仍由布局与交互契约定义，见 [ADR 0056](adr/0056-independent-ui-design-system.md)。此结构仍保留单个 `AppController` 状态写入者及现有轻量销毁语义，见 [ADR 0055](adr/0055-domain-contracts-and-ui-components.md)。
+
+UI 公开头只前向声明 `AppController`，在需要调用命令的实现文件中才包含完整定义。`MainWindow.h` 只暴露 domain 状态类型和页面成员，不把内核、存储、平台的实现头经 UI 头继续传递。
+
 ## 2. 模块契约
 
 | 模块 | 实现 | 输入 / 输出 |
 |---|---|---|
+| domain | Types / ConnectionColumns / WebsiteTargets / TunOptions / HotkeyBindings | 值对象与纯校验；独立 `mlash_domain` 静态库，不访问 UI/进程/OS |
 | app | AppController / Types / Async | 命令 → 观测状态、operationFinished、profilesChanged |
 | app | ProfileMaintenance | 有界到期/文件变化 → Controller 维护命令；不写业务索引 |
 | app | WebsiteTests | 指定叶子/内置目标 → 有界响应延迟会话；Controller 命令控制，GUI释放清空，无磁盘历史 |
 | app | ConnectionSession | 可见快照/单调时间 → 有界活动/离开行、真实累计/差值速率；不写磁盘 |
 | core | CoreManager | 启停/校验 → 真实生命周期、就绪、崩溃 |
 | core | TunSession / TunPolicy / TunApiGate | 受限服务会话、受控配置、允许列表 API 转发；原生特权实现留在 platform/windows |
-| core | MihomoClient | REST / 日志流 → Result、增量日志 |
+| core | CoreApi / MihomoClient | 能力调用 → mihomo REST / 日志流 → Result、增量日志；mihomo 唯一特化 |
 | profile | ConfigBuilder | 原始 YAML + 设置 → 受控配置、Provider 下载清单、脱敏值 |
 | profile | SubscriptionDownloader | URL → 验证过地址/证书的有界字节流 |
 | profile | ProfileStore | 版本、设置、索引 → 加密原子持久化 |
@@ -49,6 +60,7 @@ Mlash.exe 的 FileDescription 和 ProductName 均为 Mlash。mihomo 仍是 QProc
 | platform/windows | WindowsServices | WinINet、HKCU Run、Job、DPAPI、私有 ACL、TCP 端口 PID |
 | diagnostics | Diagnostics | 应用/内核记录 → 2000 行视图、轮转文件 |
 | ui | GuiHost / MainWindow / WebsiteTestsPage / ProxyTableModel / TrayController | 按需创建/销毁窗口；状态 → Qt 标准控件；用户动作 → Controller |
+| ui/design | UiDesignTokens / ShadowrocketStyle / UiTheme | 语义规格 → 当前风格取值 → Qt 外观；不拥有业务状态或导航 |
 | ui | ImportDialog | URL/文件/名称输入 → 确认后的 Controller 导入命令；取消不产生网络请求 |
 
 `Result` 包含 ok/error/data；运行态对象只允许 Controller 写入。PlatformServices 返回观测值，不更改 AppState。

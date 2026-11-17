@@ -1,5 +1,5 @@
 #pragma once
-#include "app/Types.h"
+#include "domain/Types.h"
 
 namespace mlash {
 // Private editor result: definitions/yaml contain credentials. Never log this data.

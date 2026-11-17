@@ -1,5 +1,5 @@
 #pragma once
-#include "Types.h"
+#include "domain/Types.h"
 namespace mlash {
 class ConnectionSession {
 public:

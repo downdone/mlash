@@ -79,6 +79,26 @@ private slots:
         AppController c(root.path(),true,nullptr,platform); QSignalSpy init(&c,&AppController::initialized),finished(&c,&AppController::operationFinished); c.initialize(); QTRY_COMPARE(init.size(),1); const_cast<AppState&>(c.state()).ready=true; MockHttp server; QVERIFY(server.listen(QHostAddress::LocalHost)); QStringList targets;
         server.handler=[&](const QByteArray& request) { const auto path=request.split(' ').value(1); const QUrlQuery query(QUrl::fromEncoded(path)); targets.append(query.queryItemValue("url")); return HttpResponse{200,QJsonDocument(QJsonObject{{"delay",targets.size()==1?51:92}}).toJson()}; }; c.findChild<MihomoClient*>()->configure(server.serverPort(),"secret"); c.testNodes({"A"},"G"); QTRY_COMPARE(finished.size(),1); QVERIFY(c.trayNodeDelay("A","G").value("known").toBool()); QVERIFY(!c.trayNodeDelay("A","H").value("known").toBool()); QCOMPARE(c.trayNodeDelay("A","G").value("delay").toInt(),51); QVERIFY(!c.trayNodeDelay("A","G").value("measured_at").toString().isEmpty()); c.testNodes({"A"},"H"); QTRY_COMPARE(finished.size(),2); QCOMPARE(targets,QStringList({"https://example.test/one","https://example.test/two"})); QCOMPARE(c.trayNodeDelay("A","H").value("delay").toInt(),92); QVERIFY(!c.trayNodeDelay("A","G").value("known").toBool()); QCOMPARE(platform->writes,0);
     }
+    void groupDelayUsesBoundedParallelRequestsAndCancels() {
+        QTemporaryDir root; auto platform=std::make_shared<DepthPlatform>(); AppController c(root.path(),true,nullptr,platform);
+        QSignalSpy initialized(&c,&AppController::initialized), finished(&c,&AppController::operationFinished);
+        QSignalSpy delays(&c,&AppController::nodeDelay), progress(&c,&AppController::delayProgress);
+        c.initialize(); QTRY_COMPARE(initialized.size(),1); const_cast<AppState&>(c.state()).ready=true;
+        MockHttp server; QVERIFY(server.listen(QHostAddress::LocalHost));
+        server.handler=[](const QByteArray&) { return HttpResponse{200,"{\"delay\":72}",1200}; };
+        c.findChild<MihomoClient*>()->configure(server.serverPort(),"secret");
+        QStringList names; for (int i=0;i<24;++i) names.append(QString("node-%1").arg(i));
+        c.testNodes(names); QTRY_VERIFY_WITH_TIMEOUT(server.requests.size()>=12,1000);
+        QCOMPARE(server.requests.size(),12); QCOMPARE(progress.first()[0].toInt(),0); QCOMPARE(progress.first()[1].toInt(),24);
+        QTRY_COMPARE_WITH_TIMEOUT(delays.size(),24,6000); QTRY_COMPARE(finished.size(),1);
+        QCOMPARE(server.requests.size(),24); QCOMPARE(progress.last()[0].toInt(),24);
+        for (const auto& result:delays) QCOMPARE(result[1].toInt(),72);
+        server.requests.clear(); server.handler=[](const QByteArray&) { return HttpResponse{200,"{\"delay\":72}",2000}; };
+        c.testNodes(names); QTRY_VERIFY_WITH_TIMEOUT(server.requests.size()>=12,1000);
+        const int before=delays.size(); c.cancelTests(); QTRY_COMPARE(finished.size(),2);
+        QTest::qWait(100); QCOMPARE(delays.size(),before); QCOMPARE(server.requests.size(),12);
+        QVERIFY(!c.testingNodes()); QCOMPARE(platform->writes,0);
+    }
     void nodeFiltersAndPreferenceValidation() {
         ProxyTableModel model; const QJsonObject proxies{{"HK 香港 A",QJsonObject{{"type","Shadowsocks"}}},{"JP 日本 B",QJsonObject{{"type","Vless"}}},{"Unknown",QJsonObject{{"type","Trojan"}}},{"G",QJsonObject{{"all",QJsonArray{"HK 香港 A","JP 日本 B","Unknown"}}}}}; model.setGroup(proxies,"G"); model.setDelay("HK 香港 A",80,{}); model.setDelay("JP 日本 B",-1,"timeout"); NodeFilter filter; filter.setSourceModel(&model); filter.setFilterKeyColumn(0); filter.setFilterCaseSensitivity(Qt::CaseInsensitive);
         filter.setConditions("HK",{},0,0,false,{}); QCOMPARE(filter.rowCount(),1); filter.setConditions({},"vless",2,0,false,{}); QCOMPARE(filter.rowCount(),1); filter.setConditions({},{},1,100,false,{}); QCOMPARE(filter.rowCount(),1); filter.setConditions({},{},3,0,false,{}); QCOMPARE(filter.rowCount(),1); filter.setConditions({},{},0,0,true,{"Unknown"}); QCOMPARE(filter.rowCount(),1); filter.setFilterFixedString("香港"); QCOMPARE(filter.rowCount(),0);

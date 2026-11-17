@@ -17,12 +17,13 @@
 
 | 目录 | 归属 |
 |---|---|
+| src/domain | 值对象、列布局 ID、测速目标/TUN/快捷键的纯校验；不依赖应用、内核和 UI |
 | src/app | Controller、状态、串行命令及业务协调 |
 | src/core | 内核 API、进程、服务会话与就绪 |
 | src/profile | YAML、下载、Provider、不可变版本与配置合成 |
 | src/platform/windows | Windows 原生 API、权限、恢复及进程观测 |
 | src/storage / src/diagnostics | 持久化、机密与有界日志 |
-| src/ui | Widgets、按需主窗口、页面与托盘；只调用 Controller 命令 |
+| src/ui | Widgets、按需主窗口、页面与托盘；只调用 Controller 命令。design 保存语义 token 和 Shadowrocket 特化，UiTheme 做 Qt 运行时适配 |
 | resources / licenses | 运行资源、品牌与第三方许可署名 |
 | docs | 当前契约、ADR、状态、验证与明确标注的归档 |
 | scripts / tests | 构建验证工具与隔离测试 |

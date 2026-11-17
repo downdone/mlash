@@ -1,5 +1,5 @@
 #pragma once
-#include "app/AppController.h"
+#include "domain/Types.h"
 #include "ProxyTableModel.h"
 #include "ProfileRowModel.h"
 #include "ActivityTableModel.h"
@@ -10,6 +10,7 @@
 #include <QMainWindow>
 #include <QSortFilterProxyModel>
 #include <QPointer>
+#include <QTimer>
 
 class QListWidget; class QStackedWidget; class QComboBox; class QLabel; class QCheckBox;
 class QListView;
@@ -18,10 +19,10 @@ class QAction; class QTabWidget; class QMenu; class QDialog;
 class QToolButton; class QStatusBar;
 class QTabBar; class QHBoxLayout; class QScrollArea;
 class QDragEnterEvent; class QDropEvent;
-namespace mlash { class WebsiteTestsPage; class ImportDialog; class NodeRowModel; class ProfileRowModel; class ProfileKindFilter; }
+namespace mlash { class AppController; class WebsiteTestsPage; class ImportDialog; class NodeRowModel; class ProfileRowModel; class ProfileKindFilter; }
 namespace mlash { class ConnectionOptions; }
 namespace mlash {
-// 顶栏与抽屉用的小部件（K 版）。定义在 MainWindowParts.h 的 WindowParts 里，头文件只前向声明。
+// 抽屉组件只在使用它的实现文件中包含完整定义。
 namespace WindowParts { class DetailsDrawer; }
 class TaskWorkspace;
 class MainWindow : public QMainWindow {
@@ -260,6 +261,14 @@ private:
     QTabBar* connectionView_;
     QComboBox *startupPage_, *trayClick_, *ipv6Mode_, *unifiedDelayMode_;
     QComboBox *appearance_,*textScale_;
+    QComboBox* windowChrome_ = nullptr;
+    QWidget* chromeDragArea_ = nullptr;
+    QWidget* chromeLeading_ = nullptr;
+    QWidget* chromeTrailing_ = nullptr;
+    bool integratedChrome_ = false;
+    void applyWindowChrome();
+    bool eventFilter(QObject* watched, QEvent* event) override;
+    bool nativeEvent(const QByteArray& eventType, void* message, qintptr* result) override;
     QComboBox *homeProbeInterval_;
     QLabel* homeProbeResult_;
     QLabel* homeOutboundSummary_;

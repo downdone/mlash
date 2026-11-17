@@ -1,3 +1,4 @@
+#include "app/AppController.h"
 #include "ProtocolSettingsDialog.h"
 #include "ContextNote.h"
 #include <QDialogButtonBox>

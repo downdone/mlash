@@ -1,3 +1,4 @@
+#include "app/AppController.h"
 #include "DialogDraftGuard.h"
 #include "ProxyBypassDialog.h"
 #include "ContextNote.h"

@@ -1,13 +1,13 @@
 #include "ProviderEdits.h"
 #include "ProviderPolicy.h"
 #include "ProfileStore.h"
-#include "core/TunPolicy.h"
+#include "domain/TunOptions.h"
 #include "ProxyEdits.h"
 #include "RemoteBackup.h"
 #include "LocalBackup.h"
 #include "SubscriptionInfo.h"
-#include "app/WebsiteTests.h"
-#include "platform/GlobalHotkeys.h"
+#include "domain/WebsiteTargets.h"
+#include "domain/HotkeyBindings.h"
 #include "storage/Storage.h"
 #include <QDir>
 #include <QFile>
@@ -40,7 +40,7 @@ bool validSettingsObject(const QJsonObject& o) {
     if ((o.contains("appearance")&&!o.value("appearance").isString())||(o.contains("text_scale")&&(!o.value("text_scale").isDouble()||o.value("text_scale").toDouble()!=o.value("text_scale").toInt()))||!validAppearance(o.value("appearance").toString("system"),o.value("text_scale").toInt(100))) return false;
     if (o.contains("connection_view")&&(!o.value("connection_view").isObject()||!validateConnectionView(o.value("connection_view").toObject()).ok)) return false;
     QList<HotkeyBinding> hotkeys; if (o.contains("hotkeys")&&(!o.value("hotkeys").isObject()||!parseHotkeys(o.value("hotkeys").toObject(),hotkeys).ok)) return false;
-    if (o.contains("website_targets") && (!o.value("website_targets").isArray() || !WebsiteTests::validateTargets(o.value("website_targets").toArray()).ok)) return false;
+    if (o.contains("website_targets") && (!o.value("website_targets").isArray() || !validateWebsiteTargets(o.value("website_targets").toArray()).ok)) return false;
     for (const auto* key : {"auto_start", "silent_start", "start_core_on_launch", "restore_proxy_on_launch", "desired_proxy_enabled", "lightweight_mode"}) if (o.contains(key) && !o.value(key).isBool()) return false;
     for (const auto* key : {"log_level", "active_profile_id", "core_path", "test_url", "tray_click", "ipv6_mode", "unified_delay_mode"}) if (o.contains(key) && !o.value(key).isString()) return false;
     if (o.contains("startup_page") && (!o.value("startup_page").isDouble() || o.value("startup_page").toDouble()!=o.value("startup_page").toInt() || o.value("startup_page").toInt()<0 || o.value("startup_page").toInt()>7)) return false;

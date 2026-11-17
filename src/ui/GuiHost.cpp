@@ -1,4 +1,5 @@
 #include "GuiHost.h"
+#include "app/AppController.h"
 #include <QTimer>
 #include <QPixmapCache>
 

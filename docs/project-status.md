@@ -2,6 +2,16 @@
 
 ## 当前任务
 
+**U18 本地实现与 Windows 候选验收完成，远端预发布待确认。** 按[U18 方案](design/u18-fast-tests-window-chrome-update.md)实现 12 并发异步整组测速、可切换应用内标题栏及固定来源在线检查/已校验便携候选。最终 Windows 全量自动回归 50 通过、1 系统门禁跳过；原生标题栏切换样片、35 文件便携包完整性和包内八页冒烟通过，详情见[验证报告](verification-report.md)。实际 GitHub API 检查受公共限流，真实鼠标边缘缩放、系统代理/TUN 写入、Windows 10 与长期稳定性未验；`release_qualified=false`。保留 U15～U17 工作树变更并纳入同一 1.20.0 候选审查。
+
+**U17 已实施并完成本机定向验收：全界面视觉系统重建。** 按[事前原则、根因与实施后复核](design/u17-visual-system-rebuild.md)统一字阶计算、物理像素线、色彩层级、控件与节点卡片布局；未改变业务命令和系统写入契约。Windows 构建、单元和页面定向回归、原生 150% DPI 明暗/高对比与 100/120% 文字样片通过；首次受限沙盒中内核端口身份核对失败，同机允许只读观测后复测通过。本地 35 文件便携预览包及包内隔离冒烟通过。详情和未验范围见[验证报告](verification-report.md)，不据此声称发行资格。
+
+**P02 完成：U16 Windows 便携预览包。** 使用 `windows-mingw-open` 构建和固定发布内核生成独立 `dist/Mlash-1.19.0-u16-preview`；35 文件白名单、逐文件完整性、ZIP/侧车哈希和隔离包内冒烟均通过。包内 Qt 6.10.2、Schannel TLS 和八页截图已核对。它是本地预览包，`release_qualified=false`；结果见[验证报告](verification-report.md)。
+
+**U16 模块边界重构已实施并通过定向自动验证。** [事前设计与实施复核](design/u16-modular-architecture.md)确立 domain 纯契约、Controller 唯一状态写入、mihomo 专用内核适配、[独立 UI 设计系统](design/u16-shadowrocket-design-system.md)和[分层测试架构](design/u16-test-architecture.md)。主窗口/Controller 长实现按职责分文件，UI 控件按文件拆解；旧类型/列布局转发头与 UI 聚合头已删除，公开 UI 头不再引入完整 Controller。内核就绪链及代理组使用类型化响应，页面路由登记改为弱引用，纯路由与协议解析从混合套件抽出。Windows 完整构建、5 组单元层、8 组内核/页面定向回归及 3 组配置/外观回归通过，详情与未验范围见[验证报告](verification-report.md)。Controller 命令面仍宽，未覆盖的内核端点仍返回 JSON；二者保留为后续按功能扩展时的显式边界。本轮未执行完整全量回归、原生人工读屏或真实系统代理/TUN 写入，不据此宣称发行资格。
+
+**U15 细节根因修复已实施并定向自动复核。** [U15 根因与施工设计](design/u15-precision-root-causes.md) 对应修复设置行悬停缺口与重复绘制、首页重复入口、节点列表二值圆角、配置任务返回跳位、外部代理确认占用全局告警。原生 150% DPI 样片、定向 3 组 UI 回归和 2 个新增场景通过；35 文件独立本地预览包完整性通过。真实系统代理写入、人工读屏与正式发行资格未验，证据见[验证报告](verification-report.md)。
+
 **U14 原生全页精修与统一字体已实施并自动验证。** 按 [系统原则、逐页布局与验收](design/u14-shadowrocket-all-pages.md) 和 [可切换原型](design/u14-all-pages.html) 收紧文字/间距，统一图标与字体渲染链，调整四分区、子任务、网站测试和托盘快捷范围。内置 Noto Sans SC 可变字体并随包附 OFL 许可。完整构建、原生字体/页面样片、45 组全量回归（44 通过、1 系统写入门禁跳过）和 35 文件便携候选完整性通过，见[验证报告](verification-report.md)。本机 DPI 样片、自动化和本地候选不代表人工读屏、Windows 10、真实系统写入或正式发行资格；这些保持待验。
 
 **R19 完成：GitHub 1.19.0 已预发布。** 按用户的平台验收规则直接推送 main；[发布流水线](https://github.com/downdone/mlash/actions/runs/43670447421) 完成 Windows 编译、部署、包内原生冒烟及来源/完整性检查，跳过重复全量回归。[v1.19.0](https://github.com/downdone/mlash/releases/tag/v1.19.0) 八个附件已重新下载，SHA256、34 文件白名单、源码来源与标签提交一致。此前第三轮 PR 检查另有 44 通过、0 失败、1 系统门禁跳过；两条记录分别维护，预发布仍为 release_qualified=false。
