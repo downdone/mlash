@@ -8,7 +8,9 @@
 
 `scripts/build.ps1 -Preset windows-mingw-open` 在最终 1.20.0 代码上通过。首次全量运行 49 通过、1 系统门禁跳过、1 热键用例失败；失败是旧模拟 `/configs` 仅含 mode，违反现行类型化响应的 mixed-port 契约。修正夹具并定向复测后，最终 `scripts/test.ps1 -Preset windows-mingw-open` **50 通过、0 失败、1 系统写入门禁跳过**（51 项，457.79 秒）。整组测速定向夹具验证首批 12 个回环请求、进度与取消；应用更新定向单元测试通过。`python scripts/check_docs.py`（118 份 Markdown、0 问题）、`python scripts/check_document_privacy.py`（125 项、0 问题）与架构边界检查均通过。
 
-Windows 11 原生 Qt 后端的应用内/系统标题栏可逆切换测试通过，150% DPI 样片生成并查看；早先受限沙盒中偏好保存失败不计产品失败。尚未人工逐项验证真实鼠标拖动、边缘缩放、读屏、Windows 10 或系统级代理/TUN 写入。`scripts/package.ps1 -Preset windows-mingw-open` 的 35 文件白名单与逐文件完整性通过，便携 ZIP SHA-256 为 `89a81334c227a7e5a8a3eba50320a3dde13b25c386b85d40e4b24704ee63d3e3`；包内 `scripts/ci_smoke.ps1` 通过：CLI 为 1.20.0、Qt/Schannel 可用、八页样片齐全。当前为预发布候选，`release_qualified=false`，远端发布结果另行记录。
+Windows 11 原生 Qt 后端的应用内/系统标题栏可逆切换测试通过，150% DPI 样片生成并查看；早先受限沙盒中偏好保存失败不计产品失败。尚未人工逐项验证真实鼠标拖动、边缘缩放、读屏、Windows 10 或系统级代理/TUN 写入。`scripts/package.ps1 -Preset windows-mingw-open` 的 35 文件白名单与逐文件完整性通过，便携 ZIP SHA-256 为 `89a81334c227a7e5a8a3eba50320a3dde13b25c386b85d40e4b24704ee63d3e3`；包内 `scripts/ci_smoke.ps1` 通过：CLI 为 1.20.0、Qt/Schannel 可用、八页样片齐全。当前为预发布，`release_qualified=false`。
+
+提交 `1376b0301369680a88d1f024606e090c9ccfb316` 与 `v1.20.0` 标签已推送 main。[标签发布流水线](https://github.com/downdone/mlash/actions/runs/43989694240)的 Windows 编译、默认完整回归、打包、隔离原生冒烟、图标与来源核对及发布均成功；[主分支流水线](https://github.com/downdone/mlash/actions/runs/43989693858)构建成功、发布步骤按规则跳过。[GitHub 预发布](https://github.com/downdone/mlash/releases/tag/v1.20.0)含八个附件。GitHub 的便携 ZIP 摘要为 `d77d82c2acaa7445c40604aaa2ca41a58a9e6dda02dc62ba0362f715d0b07819`；重新下载的三份 SHA256 侧车、源码来源清单和 35 文件包校验记录，与 GitHub 附件摘要、标签提交及固定内核版本一致。大 ZIP 的独立重下载因本机连接 GitHub 附件服务器超时未完成，因此不记作重下载逐字节复验；CI 已在上传前验证包完整性。发布环境仅执行 Windows 检查，macOS/Linux 平台检查跳过；真实在线更新检查受本机公共 API 限流，未记作已验。
 
 ## U17：全界面视觉系统重建（2026-11-16）
 
