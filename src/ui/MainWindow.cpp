@@ -82,8 +82,16 @@ MainWindow::MainWindow(AppController* controller, QWidget* parent) : QMainWindow
     central->setObjectName("mainSurface"); central->setAttribute(Qt::WA_StyledBackground, true);
     layout->setContentsMargins(0,0,0,0); layout->setSpacing(0);
     auto* sidebar = new QWidget; sidebar->setObjectName("sidebar"); sidebar->setFixedWidth(UiTheme::SidebarWidth); sidebar->setAttribute(Qt::WA_StyledBackground); auto* sideLayout = new QVBoxLayout(sidebar); sideLayout->setContentsMargins(design::ShadowrocketStyle::geometry.sidebarInset,design::ShadowrocketStyle::geometry.sidebarInset,design::ShadowrocketStyle::geometry.sidebarInset,design::ShadowrocketStyle::geometry.sidebarInset); sideLayout->setSpacing(design::ShadowrocketStyle::geometry.sidebarGap);
-    navigation_ = new QListWidget; navigation_->setObjectName("navigation"); navigation_->addItems({"首页", "配置", "数据", "设置"}); navigation_->setIconSize(QSize(20, 20)); navigation_->setSpacing(design::ShadowrocketStyle::geometry.sidebarGap);
-    const QList<int> pageOrder{ViewIds::Home,ViewIds::Profiles,ViewIds::Data,ViewIds::Settings};
+    auto* brandHeader=new QWidget(sidebar); brandHeader->setObjectName("sidebarBrandHeader"); brandHeader->setFixedHeight(40);
+    auto* signature=new QHBoxLayout(brandHeader); signature->setContentsMargins(6,0,6,0); signature->setSpacing(10);
+    auto* mark=new QLabel(brandHeader); mark->setPixmap(TrayController::icon().pixmap(24,24)); mark->setFixedSize(24,24); signature->addWidget(mark);
+    auto* brand=new QLabel("Mlash",brandHeader); brand->setObjectName("sidebarBrand"); signature->addWidget(brand,1);
+    sideLayout->addWidget(brandHeader); sideLayout->addSpacing(14);
+    auto* section=new QLabel("工作区",sidebar); section->setObjectName("sidebarSection"); section->setFixedHeight(22); sideLayout->addWidget(section);
+    navigation_ = new QListWidget(sidebar); navigation_->setObjectName("navigation"); navigation_->addItems({"首页", "配置", "数据"}); navigation_->setIconSize(QSize(18, 18)); navigation_->setSpacing(design::ShadowrocketStyle::geometry.sidebarGap);
+    navigation_->setFrameShape(QFrame::NoFrame); navigation_->setVerticalScrollBarPolicy(Qt::ScrollBarAlwaysOff); navigation_->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
+    navigation_->setAccessibleName("工作区导航");
+    const QList<int> pageOrder{ViewIds::Home,ViewIds::Profiles,ViewIds::Data};
     for (int i=0;i<pageOrder.size();++i) { navigation_->item(i)->setData(Qt::UserRole,pageOrder[i]); navigation_->item(i)->setIcon(navigationIcon(navKindOfView(pageOrder[i]))); navigation_->item(i)->setSizeHint(QSize(0,UiTheme::SidebarItemHeight)); }
     sideLayout->addWidget(navigation_, 1);
     // 常驻状态条（分层设计 P1）：四段文案由 statusSentence 统一产出，与托盘 tooltip 同源。
@@ -95,9 +103,14 @@ MainWindow::MainWindow(AppController* controller, QWidget* parent) : QMainWindow
     statusLine2_ = new ElidedLabel(statusButton_); statusLine2_->setObjectName("sidebarStatusLine2"); statusLines->addWidget(statusLine2_);
     statusLayout->addLayout(statusLines, 1); statusButton_->hide();
     connect(statusButton_, &QToolButton::clicked, this, [this] { navigate(Route{ViewIds::Home, kNoCategory, HomeAnchor::Control}); });
-    auto* signature=new QHBoxLayout; auto* mark=new QLabel; mark->setPixmap(TrayController::icon().pixmap(20,20)); signature->addWidget(mark);
-    auto* brand=new QLabel("Mlash"); brand->setProperty("secondary",true); signature->addWidget(brand,1); sideLayout->addLayout(signature);
-    auto* version = new QLabel(QString("v" MLASH_VERSION)); version->setObjectName("secondaryText"); sideLayout->addWidget(version);
+    auto* divider=new QFrame(sidebar); divider->setObjectName("sidebarDivider"); divider->setFixedHeight(1); sideLayout->addWidget(divider); sideLayout->addSpacing(6);
+    settingsNav_=new QToolButton(sidebar); settingsNav_->setObjectName("sidebarSettings"); settingsNav_->setText("设置"); settingsNav_->setIcon(navigationIcon(NavKind::Settings));
+    settingsNav_->setIconSize(QSize(18,18)); settingsNav_->setToolButtonStyle(Qt::ToolButtonTextBesideIcon); settingsNav_->setCheckable(true);
+    settingsNav_->setSizePolicy(QSizePolicy::Expanding,QSizePolicy::Fixed);
+    settingsNav_->setFixedHeight(UiTheme::SidebarItemHeight); settingsNav_->setAccessibleName("设置"); settingsNav_->setCursor(Qt::PointingHandCursor);
+    sideLayout->addWidget(settingsNav_);
+    connect(settingsNav_,&QToolButton::clicked,this,[this] { navigate(Route{ViewIds::Settings}); });
+    auto* version = new QLabel(QString("v" MLASH_VERSION),sidebar); version->setObjectName("sidebarVersion"); sideLayout->addWidget(version);
     // K1/K6：页面栈只有五个视图，顺序与 ViewIds 一致；数据页内部再分四个页签。
     pages_ = new QStackedWidget; pages_->setObjectName("mainPages");
     auto pagePolicy=pages_->sizePolicy(); pagePolicy.setRetainSizeWhenHidden(true); pages_->setSizePolicy(pagePolicy);
@@ -175,11 +188,12 @@ MainWindow::MainWindow(AppController* controller, QWidget* parent) : QMainWindow
     });
     auto* resolve=new QToolButton; resolve->setObjectName("statusResolve"); resolve->setText("处理"); resolve->setPopupMode(QToolButton::InstantPopup); auto* resolveMenu=new QMenu(resolve); resolve->setMenu(resolveMenu); resolveMenu->addAction("查看日志",this,[this] { navigate(Route{ViewIds::Data, kNoCategory, HomeAnchor::Control, int(ViewIds::DataTab::Logs)}); }); resolveMenu->addAction("订阅管理",this,[this] { navigate(Route{ViewIds::Profiles}); }); resolveMenu->addAction("TUN 与服务…",this,[this] { showTool("tun",{},[this] { return new TunDialog(controller_,this); }); }); resolveMenu->addAction("刷新运行状态",controller_,&AppController::refresh); operationStatus_->addPermanentWidget(resolve); resolve->hide();
     connect(&refreshTimer_, &QTimer::timeout, this, [this] { if (!controller_->state().busy) controller_->refresh(); });
-    connect(navigation_, &QListWidget::currentRowChanged, this, [this](int index) {
-        // 条目里存的是视图 ID（0/1/3/4），不能再交给 setPage() 当旧编号解释：
-        // 旧编号 3 是规则视图、4 是数据·连接，会把「数据」入口送到规则页，把「设置」入口送到数据页。
-        if (index >= 0) navigate(Route{navigation_->item(index)->data(Qt::UserRole).toInt()});
-    });
+    // 样式重绘可能重置 QListWidget 的 currentRow。路由只接受明确的点击或键盘激活。
+    auto activateNavigation=[this](QListWidgetItem* item) {
+        if (item) navigate(Route{item->data(Qt::UserRole).toInt()});
+    };
+    connect(navigation_, &QListWidget::itemClicked, this, activateNavigation);
+    connect(navigation_, &QListWidget::itemActivated, this, activateNavigation);
     navigation_->setCurrentRow(0);
     connect(controller_, &AppController::stateChanged, this, &MainWindow::updateState);
     connect(controller_, &AppController::stateChanged, this, &MainWindow::applyWindowChrome);
@@ -244,6 +258,7 @@ MainWindow::MainWindow(AppController* controller, QWidget* parent) : QMainWindow
 void MainWindow::applyAppearance() {
     const int statusHeight=qMax(30,QFontMetrics(qApp->font()).height()+10); operationStatus_->setFixedHeight(statusHeight); if (auto* details=findChild<QToolButton*>("statusDetails")) details->setFixedHeight(statusHeight-8);
     for (int row=0;row<navigation_->count();++row) navigation_->item(row)->setIcon(navigationIcon(navKindOfView(navigation_->item(row)->data(Qt::UserRole).toInt())));
+    settingsNav_->setIcon(UiIcons::icon(UiIcons::Glyph::Settings,settingsNav_->isChecked()?UiTheme::Brand:UiTheme::Secondary));
     using G=UiIcons::Glyph;
     if (locateAction_) locateAction_->setIcon(UiIcons::icon(G::Locate,UiTheme::Secondary));
     if (testAction_) testAction_->setIcon(UiIcons::icon(G::Gauge,UiTheme::Secondary));

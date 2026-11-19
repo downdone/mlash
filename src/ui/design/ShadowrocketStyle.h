@@ -4,13 +4,13 @@
 
 namespace mlash::design::ShadowrocketStyle {
 
-inline constexpr Geometry geometry{30,28,8,8, 14,12,12,228, 42,48,34,36, 36,38,52,350, 8,8,16,76,4};
+inline constexpr Geometry geometry{30,28,8,8, 14,12,12,216, 42,40,34,36, 36,38,52,350, 12,2,16,76,4};
 inline constexpr Typography typography{9.5,10.0,0.87,8.25, 15,10,14,12};
 inline constexpr const char* artworkSurface="#F2F2F7";
 
 // Header-only immutable values keep lightweight UI consumers link-independent.
 inline constexpr Colors light{
-    "#F4F5F8","#ECEEF3","#FFFFFF",
+    "#F4F5F8","#F3F4F6","#FFFFFF",
     "#1B2430","#526174","#5D6A7B","#8E98A5",
     "#DDE2E9","#E6EAF0","#075DBB","#E4EFFC",
     "#075DBB","#FFFFFF","#E9EDF3","#075DBB",

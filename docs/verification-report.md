@@ -1,5 +1,11 @@
 # 验证报告
 
+## 2026-11-19：U23 Daymark 导航与 1.21.0 最终本机候选
+
+按 [U23 设计与复核](design/u23-daymark-navigation.md)完成顶部品牌、三项工作区和底部设置的侧栏重组。样式切换时 `QListWidget` 内部重选曾误触发首页导航，改为只在用户点击或键盘激活时请求路由；设置选中面修正为与工作区行等宽。最终 `scripts/build.ps1` 成功，`scripts/test.ps1 -TestRegex '^(prototype_ui_tests|navigation_contract_tests|appearance_tests|website_tests|workflow_depth_tests)$'` **5/5 通过**，覆盖尺寸、路由、主题切换、草稿与关联工作流。1040×720 首页及明暗设置截图已目视检查，底部分区和选中宽度符合设计；原生鼠标手感与读屏仍需人工复核。此轮未重跑全量 62 组；U22 的 61 通过、1 系统门禁跳过结果对应导航修改前代码，导航相关路径由本轮定向测试覆盖。
+
+重新运行 `scripts/package.ps1` 得到最终 `dist/Mlash-1.21.0-windows-x64-portable.zip`，SHA-256 为 `f152617864339fbab2ddd399e6c77cf55a976c998044485f6fee4e2ce764ecc8`。`scripts/ci_release_check.py` 验证 35 文件白名单、可执行文件与固定内核完整性；`scripts/ci_smoke.ps1` 在包内隔离数据上启动，Qt 6.10.2 / Schannel TLS 可用，0–7 八个入口均核对到预期视图。未写系统代理/TUN。GitHub 标签和预发布资产尚待流水线结果，正式发行资格仍为 `false`。
+
 ## 2026-11-19：1.21.0 订阅优先预发布候选
 
 本轮以 [U22 设计](design/u22-config-rethink.md)与 [ADR 0057](adr/0057-subscription-first-unified-list.md)为验收依据。远程/本地共用配置卡片，来源位按域名/文件名展示；使用、单项更新、候选预览与应用分区命中；菜单进入实际内容/来源工作区；来源维护可确认回滚，列表支持按稳定 ID 排序。规则编辑为左侧新建、右侧现有项的双区任务。返回保持所选对象与列表位置；节点/连接与设置路径按 U22 操作链复核。

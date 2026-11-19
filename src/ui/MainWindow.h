@@ -148,6 +148,7 @@ private:
     bool hasDisplayedSettings_ = false;
     Settings displayedSettings_;
     QListWidget* navigation_;
+    QToolButton* settingsNav_ = nullptr;
     QStackedWidget* pages_;
     // K1：内容区首行的固定顶栏（72px）。标题/副标题随路由变化，右侧是状态胶囊与两个图标钮。
     QLabel* topbarTitle_ = nullptr;

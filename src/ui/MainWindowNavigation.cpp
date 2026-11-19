@@ -72,11 +72,13 @@
 namespace mlash {
 using namespace WindowParts;
 void MainWindow::syncSectionNavigation(const Route& route) {
-    // 侧栏只有四个入口（首页 / 配置 / 数据 / 设置），规则页仍可由托盘与设置搜索进入，
-    // 此时侧栏保持上一条可归属的分区高亮，不额外造第五个入口。
+    // 三个工作区入口与底部设置共用同一路由；规则深链归属配置。
     const int row = route.view == ViewIds::Rules ? ViewIds::Profiles : route.view;
     { const QSignalBlocker block(navigation_);
-      for (int i = 0; i < navigation_->count(); ++i) if (navigation_->item(i)->data(Qt::UserRole).toInt() == row) { navigation_->setCurrentRow(i); break; } }
+      if (row == ViewIds::Settings) navigation_->setCurrentRow(-1);
+      else for (int i = 0; i < navigation_->count(); ++i) if (navigation_->item(i)->data(Qt::UserRole).toInt() == row) { navigation_->setCurrentRow(i); break; } }
+    settingsNav_->setChecked(row==ViewIds::Settings);
+    settingsNav_->setIcon(UiIcons::icon(UiIcons::Glyph::Settings,settingsNav_->isChecked()?UiTheme::Brand:UiTheme::Secondary));
     if (dataTabs_) {
         const QSignalBlocker block(dataTabs_);
         const int tab = route.view == ViewIds::Data ? currentDataTab() : dataTabs_->currentIndex();

@@ -112,11 +112,20 @@ QString templateStyleSheet() {
         QLabel#statValue[tier="secondary"] { font-size: @BodyPoints; font-weight: 600; }
         QListWidget#proxyGroups { border: none; background: transparent; outline: none; }
         QLabel#statValue { font-size: @BodyPoints; font-weight: 600; }
+        QLabel#sidebarBrand { color: @Ink; font-size: 16pt; font-weight: 600; }
+        QLabel#sidebarSection { color: @Secondary; font-size: @CaptionPoints; font-weight: 600; padding-left: 8px; }
+        QLabel#sidebarVersion { color: @Secondary; font-size: @CaptionPoints; padding-left: 8px; }
+        QFrame#sidebarDivider { background: @Separator; border: none; }
         QListWidget#navigation { border: none; background: transparent; outline: none; font-size: @BodyPoints; }
-        QListWidget#navigation::item { padding: 4px 8px; margin: 0px; border-radius: 6px; }
+        QListWidget#navigation::item { padding: 0px 8px; margin: 0px; border-radius: 8px; }
         QListWidget#navigation::item:hover { background: @Hover; }
-        QListWidget#navigation::item:selected { background: @Selection; color: @Ink; }
+        QListWidget#navigation::item:selected { background: @Selection; color: @Brand; font-weight: 600; }
         QListWidget#navigation::item:selected:hover { background: @Selection; }
+        QListWidget#navigation::item:focus { border: 1px solid @Focus; }
+        QToolButton#sidebarSettings { min-height: 0px; padding: 0px 8px; border: 1px solid transparent; border-radius: 8px; background: transparent; color: @Ink; text-align: left; font-size: @BodyPoints; }
+        QToolButton#sidebarSettings:hover { background: @Hover; }
+        QToolButton#sidebarSettings:checked { background: @Selection; color: @Brand; border-color: transparent; font-weight: 600; }
+        QToolButton#sidebarSettings:focus { border-color: @Focus; }
         QLabel#nodeHeadingTitle { font-size: @SectionPoints; font-weight: 600; }
         QLabel#nodeHeadingCount { color: @Secondary; font-size: @CaptionPoints; }
         QPushButton, QToolButton { min-height: @ControlMinimum; padding: 3px 10px; border: 1px solid transparent; border-radius: 6px; background: @Control; }

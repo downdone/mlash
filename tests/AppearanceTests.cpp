@@ -129,7 +129,7 @@ private slots:
         QVERIFY(UiIcons::service("not-a-service").pixmap(24,24).toImage()!=UiIcons::service("youtube").pixmap(24,24).toImage());
     }
     void themeChangesPreserveDraftAndPopupFirstFrame() {
-        QTemporaryDir dir; AppController controller(dir.path(),true,nullptr,std::make_shared<ReviewPlatform>()); QSignalSpy init(&controller,&AppController::initialized); controller.initialize(); QTRY_COMPARE(init.size(),1); MainWindow window(&controller); window.show(); window.setPage(6); auto* port=window.findChild<QSpinBox*>("mixedPort"); const int draft=port->value()+1; port->setValue(draft);
+        QTemporaryDir dir; AppController controller(dir.path(),true,nullptr,std::make_shared<ReviewPlatform>()); QSignalSpy init(&controller,&AppController::initialized); controller.initialize(); QTRY_COMPARE(init.size(),1); MainWindow window(&controller); window.show(); window.setPage(6); QCOMPARE(window.page(),6); auto* port=window.findChild<QSpinBox*>("mixedPort"); const int draft=port->value()+1; port->setValue(draft);
         TrayController tray(&controller); auto* menu=tray.findChild<QSystemTrayIcon*>()->contextMenu();
         for (const auto scheme:{Qt::ColorScheme::Light,Qt::ColorScheme::Dark}) {
             UiTheme::applyAppearance(scheme); QCoreApplication::processEvents(); QCOMPARE(port->value(),draft); QCOMPARE(controller.settings().mixedPort,draft-1); QCOMPARE(window.page(),6); QCOMPARE(window.findChild<QLabel*>("settingsDraftHint")->text(),QString("有 1 项未保存的网络设置"));
@@ -342,17 +342,21 @@ private slots:
         QTemporaryDir dir; auto platform=std::make_shared<ReviewPlatform>(); AppController controller(dir.path(),true,nullptr,platform);
         QSignalSpy initialized(&controller,&AppController::initialized),operations(&controller,&AppController::operationFinished); controller.initialize(); QTRY_COMPARE(initialized.size(),1);
         MainWindow window(&controller); window.show();
-        auto* navigation=window.findChild<QListWidget*>("navigation"); QCOMPARE(navigation->count(),4);
-        for (int row=0;row<4;++row) QCOMPARE(navigation->item(row)->text(),QStringList({"首页","配置","数据","设置"})[row]);
+        auto* navigation=window.findChild<QListWidget*>("navigation"); QCOMPARE(navigation->count(),3);
+        for (int row=0;row<3;++row) QCOMPARE(navigation->item(row)->text(),QStringList({"首页","配置","数据"})[row]);
+        auto clickNavigation=[navigation](int row) { QTest::mouseClick(navigation->viewport(),Qt::LeftButton,{},navigation->visualItemRect(navigation->item(row)).center()); };
+        auto* settingsNav=window.findChild<QToolButton*>("sidebarSettings"); QVERIFY(settingsNav);
         // K1：侧栏条目存的是视图 ID，点击按视图导航；分区页签宿主已随顶栏删除。
         QVERIFY(!window.findChild<QTabBar*>("sectionNavigation"));
         const int homePage=0, profilesPage=1, rulesPage=3, dataPage=4, logsPage=5, settingsPage=6;
-        navigation->setCurrentRow(0); QCOMPARE(window.currentRoute().view,int(ViewIds::Home)); QCOMPARE(window.page(),homePage);
-        navigation->setCurrentRow(1); QCOMPARE(window.currentRoute().view,int(ViewIds::Profiles)); QCOMPARE(window.page(),profilesPage);
+        clickNavigation(0); QCOMPARE(window.currentRoute().view,int(ViewIds::Home)); QCOMPARE(window.page(),homePage);
+        clickNavigation(1); QCOMPARE(window.currentRoute().view,int(ViewIds::Profiles)); QCOMPARE(window.page(),profilesPage);
         window.setPage(rulesPage); QCOMPARE(window.currentRoute().view,int(ViewIds::Rules));
-        navigation->setCurrentRow(2); QCOMPARE(window.currentRoute().view,int(ViewIds::Data)); QCOMPARE(window.page(),dataPage);
+        clickNavigation(2); QCOMPARE(window.currentRoute().view,int(ViewIds::Data)); QCOMPARE(window.page(),dataPage);
         window.setPage(logsPage); QCOMPARE(window.currentRoute().view,int(ViewIds::Data)); QCOMPARE(window.currentRoute().tab,int(ViewIds::DataTab::Logs));
-        navigation->setCurrentRow(3); QCOMPARE(window.currentRoute().view,int(ViewIds::Settings)); QCOMPARE(window.page(),settingsPage); navigation->setCurrentRow(0); QCOMPARE(window.page(),homePage); window.setPage(0);
+        settingsNav->click(); QCOMPARE(window.currentRoute().view,int(ViewIds::Settings)); QCOMPARE(window.page(),settingsPage); QVERIFY(settingsNav->isChecked()); QCOMPARE(navigation->currentRow(),-1);
+        clickNavigation(0); QCOMPARE(window.page(),homePage); QVERIFY(!settingsNav->isChecked()); window.setPage(0);
+        navigation->setFocus(); navigation->setCurrentRow(1); QTest::keyClick(navigation,Qt::Key_Return); QCOMPARE(window.currentRoute().view,int(ViewIds::Profiles)); window.setPage(0);
         // 首页空态由节点区引导；连接页按缺失条件只给一处空态动作。
         QVERIFY(!window.findChild<QPushButton*>("homeNextStep")); QCOMPARE(window.findChild<QLabel*>("overviewTitle")->text(),QString("未连接"));
         // K5：抽屉与代理总开关按钮都已删除，首屏的代理入口就是控制区第一行的行尾开关。
