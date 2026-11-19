@@ -8,6 +8,8 @@
 
 最终 `scripts/package.ps1 -OutputName Mlash-1.22.0-windows-x64-portable` 生成 `dist/Mlash-1.22.0-windows-x64-portable.zip`，本地 SHA-256 `93a2fbe16b62317f8d2d3f8e7c0558412bd96341bf5f5882aeed2a3877ff3f5a`。`ci_release_check.py` 验证 35 文件白名单、逐文件内容、包与当前构建的 EXE 一致、固定内核和 ZIP 侧车。`ci_smoke.ps1` 从最终包用隔离数据启动，Qt 6.10.2 / Schannel TLS 可用，八个入口和设置搜索往返通过。证据在忽略的 `build/u29-package-identity-final.json` 与 `build/u29-package-smoke-final/`。此段记录本地候选；远端标签、预发布资产和下载核验待实际流水线完成后另记。真实系统代理/TUN、Windows 10/干净机器、原生读屏和 72 小时长稳未验，`release_qualified=false`。
 
+[v1.22.0 标签流水线](https://github.com/downdone/mlash/actions/runs/44488323339)成功，标签解引用及发布来源均指向 `8e3258b52d5ae5424a5f5f43dabbc18ec41ad122`。[Windows x64 预发布](https://github.com/downdone/mlash/releases/tag/v1.22.0)有八个附件，均已重新下载：三个 ZIP、各自的 SHA-256 侧车、来源 JSON 和包验证 JSON。三个 ZIP 都通过侧车、来源记录和 ZIP CRC 检查；远端便携 ZIP SHA-256 为 `6758a2b3948998224f0042781b58c3a1adf1b2bcbf707abf5f0ac48f9f075674`，与本地独立构建的摘要不同。远端包解压后 35 文件白名单、Mlash.exe/固定内核哈希、版本、来源提交和 `release_qualified=false` 均与附件记录匹配。远端下载证据位于忽略的 `build/u29-release-download/`；源码来源 JSON 明示第三方对应源码和分发声明仍需发布复核（`complete_distribution_sources=false`），本次保持预发布而非正式发行资格。
+
 ## 2026-11-19：U28 按任务优先原则逐页实施与本地便携预览
 
 按[事前逐页设计与实施后复核](design/u28-shadowrocket-task-first-delivery.md)，核对首页、节点、配置、配置内容/新增、数据和设置的主动作、次动作、返回及空态。代码补足首页路由模式的结果说明、节点行和卡片的常显独立详情入口，以及配置卡片的主体使用和更新失败重试提示。节点卡片详情、延迟重测与主体使用采用独立命中区；测试确认详情和延迟操作均不切换当前节点。配置、数据、设置的既有任务结构经审视符合设计，本轮未另加页面或业务写入。人工检查隔离离屏截图 `route-menu.png`、`node-card-details-affordance.png`、`subscription-list.png`，未见新增遮挡或卡片高度变化。
