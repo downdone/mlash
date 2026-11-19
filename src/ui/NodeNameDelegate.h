@@ -13,7 +13,11 @@ public:
     using QStyledItemDelegate::QStyledItemDelegate;
     bool helpEvent(QHelpEvent* event,QAbstractItemView* view,const QStyleOptionViewItem& option,const QModelIndex& index) override {
         if (!index.isValid()) return false;
-        if (view->objectName()=="nodeCards" && nodeDelayRect(option.rect.adjusted(3,3,-5,-5),view->font(),index.siblingAtColumn(2).data().toString()).contains(event->pos())) {
+        const auto card=option.rect.adjusted(3,3,-5,-5);
+        if (view->objectName()=="nodeCards" && QRect(card.right()-30,card.center().y()-13,26,26).contains(event->pos())) {
+            QToolTip::showText(event->globalPos(),QStringLiteral("查看节点详情；不会切换节点"),view); return true;
+        }
+        if (view->objectName()=="nodeCards" && nodeDelayRect(card.adjusted(0,0,-32,0),view->font(),index.siblingAtColumn(2).data().toString()).contains(event->pos())) {
             const auto action=view->property("nodeTestEnabled").toBool()?QString("点击重新测试此节点延迟；不会使用或切换节点"):QString("当前无法测速；等待任务结束或内核就绪"); QToolTip::showText(event->globalPos(),action+"<br>"+index.data(Qt::ToolTipRole).toString().toHtmlEscaped().replace('\n',"<br>"),view); return true;
         }
         const auto name=index.siblingAtColumn(0).data(Qt::UserRole).toString(); const bool group=index.siblingAtColumn(1).data().toString()=="策略组 ›";

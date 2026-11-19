@@ -1,5 +1,13 @@
 # 验证报告
 
+## 2026-11-19：U28 按任务优先原则逐页实施与本地便携预览
+
+按[事前逐页设计与实施后复核](design/u28-shadowrocket-task-first-delivery.md)，核对首页、节点、配置、配置内容/新增、数据和设置的主动作、次动作、返回及空态。代码补足首页路由模式的结果说明、节点行和卡片的常显独立详情入口，以及配置卡片的主体使用和更新失败重试提示。节点卡片详情、延迟重测与主体使用采用独立命中区；测试确认详情和延迟操作均不切换当前节点。配置、数据、设置的既有任务结构经审视符合设计，本轮未另加页面或业务写入。人工检查隔离离屏截图 `route-menu.png`、`node-card-details-affordance.png`、`subscription-list.png`，未见新增遮挡或卡片高度变化。
+
+`scripts/build.ps1` 成功。先在截图采集环境运行 `ui_interactions`，因该用例额外生成整套截图超过常规 30 秒时限；关闭截图环境变量后，受影响定向测试 **4/4 通过**，`ui_interactions` 约 17 秒。测试时限保持 30 秒。最终 `scripts/test.ps1` 完整隔离回归 **62 组中 61 通过、0 失败、1 组 `system_test_guard` 按默认系统写入门禁跳过**，耗时 460.59 秒。`check_docs.py` 检查 141 个 Markdown 文件、0 问题；`check_document_privacy.py` 检查 148 个文件、0 问题；`check_ui_tokens.py` 0 命中；`git diff --check` 0 问题。
+
+`scripts/package.ps1 -OutputName Mlash-1.21.0-windows-x64-u28-task-first-preview` 生成独立本地 ZIP，SHA-256 `e582ec19d934ecc0ad6db7c45199b4092505871bacee5fdeab3a4d8289c12eee`。`ci_release_check.py` 验证 35 文件白名单、逐文件内容、包与当前构建的 EXE 一致、锁定内核和 ZIP 侧车一致。`ci_smoke.ps1` 从该包使用隔离数据启动，Schannel TLS 可用，八路由身份和设置搜索往返通过。证据位于忽略的 `build/u28-package-identity.json`、`build/u28-package-smoke-final/` 和 `build/ui-screens-u28-final2/`。这是 v1.21.0 已发布标签之后的本地预览，未替换 GitHub 发布资产；真实系统代理/TUN、原生读屏、Windows 10/干净机器、72 小时长稳和性能预算未由本轮证明，`release_qualified=false`。
+
 ## 2026-11-19：U27 移动端参考图设计审视
 
 按用户提供的 Shadowrocket 截图审视首页、配置、节点编辑、路由、设置与数据的任务和发现路径，记录[桌面端转译准则](design/u27-shadowrocket-mobile-lessons.md)，未修改这些页面的业务行为或路由。`check_docs.py`：139 个 Markdown 文件、0 问题；`check_document_privacy.py`：146 个文件、0 问题；`check_ui_tokens.py`：0 命中；`git diff --check`：0 问题。该设计审视不构成 UI 实施或原生人工验收。

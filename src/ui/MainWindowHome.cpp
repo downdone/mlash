@@ -75,7 +75,7 @@ QWidget* MainWindow::homePage() {
         auto* menu=new QMenu(homeRouteRow_);
         menu->setObjectName("routeModeMenu");
         auto* choices=new QActionGroup(menu); choices->setExclusive(true);
-        for (const auto& mode : QList<QPair<QString,QString>>{{"规则模式","rule"},{"全局模式","global"},{"直连模式","direct"}}) {
+        for (const auto& mode : QList<QPair<QString,QString>>{{"规则模式 · 按配置规则分流","rule"},{"全局模式 · 所有请求走代理","global"},{"直连模式 · 不经代理转发","direct"}}) {
             auto* action = menu->addAction(mode.first);
             action->setCheckable(true);
             action->setChecked(controller_->state().mode == mode.second);

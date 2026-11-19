@@ -69,8 +69,8 @@ public:
         const auto usage=index.data(ProfileRowModel::UsageText).toString();
         const auto error=index.data(ProfileRowModel::UpdateError).toString();
         painter->setPen(QColor(!error.isEmpty()?UiTheme::Error:current?UiTheme::Brand:UiTheme::Secondary));
-        const auto footer=!error.isEmpty()?QStringLiteral("更新失败 · ")+error:
-            current?QStringLiteral("当前使用"):QString();
+        const auto footer=!error.isEmpty()?QStringLiteral("更新失败 · 点击刷新重试"):
+            current?QStringLiteral("当前使用"):QStringLiteral("点击卡片使用");
         if (!candidate && !footer.isEmpty()) painter->drawText(QRect(left,r.top()+64,qMax(1,r.width()-170),18),Qt::AlignVCenter,
                                                 QFontMetrics(small).elidedText(footer,Qt::ElideRight,qMax(1,r.width()-170)));
         if (!candidate && !usage.isEmpty()) { painter->setPen(QColor(UiTheme::Secondary));

@@ -4,6 +4,7 @@
 #include "ui/ImportDialog.h"
 #include "ui/DialogDraftGuard.h"
 #include "ui/NodePresentation.h"
+#include "ui/NodeCardDelegate.h"
 #include "ui/NodeRowDelegate.h"
 #include "ui/NodeRowModel.h"
 #include "ui/NodeRowView.h"
@@ -619,6 +620,16 @@ private slots:
         rows->setCurrentIndex(a);
         window.setMemberView(1);
         QCOMPARE(cards->currentIndex().data(Qt::UserRole).toString(),QString("A"));
+        if (const auto output=qEnvironmentVariable("MLASH_UI_SCREENSHOTS"); !output.isEmpty()) {
+            QVERIFY(QDir().mkpath(output)); QVERIFY(window.grab().save(output+"/node-card-details-affordance.png"));
+        }
+        const auto currentCard=cards->currentIndex();
+        const auto detailsPoint=WindowParts::NodeCardDelegate::infoRect(cards->visualRect(currentCard).adjusted(3,3,-5,-5)).center();
+        QTest::mouseClick(cards->viewport(),Qt::LeftButton,{},detailsPoint);
+        auto* nodeDetails=window.findChild<QFrame*>("nodeDetailsDrawer"); QTRY_VERIFY(nodeDetails && nodeDetails->isVisible());
+        QCOMPARE(window.findChild<QLabel*>("drawerTitle")->text(),QString("A"));
+        QCOMPARE(cards->currentIndex(),currentCard);
+        nodeDetails->findChild<QToolButton*>("drawerClose")->click();
         for (int i=0;i<cards->model()->rowCount();++i) if (cards->model()->index(i,0).data(Qt::UserRole).toString()=="B") cards->setCurrentIndex(cards->model()->index(i,0));
         QCOMPARE(window.nodeBookmark().value("member").toString(),QString("B"));
         window.setMemberView(0);
@@ -1567,7 +1578,8 @@ private slots:
         const auto hkIndex=memberIndexFor("香港示例"); QVERIFY(hkIndex.isValid());
         cards->setCurrentIndex(hkIndex); const auto selectedBefore=hkIndex.data(Qt::UserRole).toString();
         const auto nowBefore=controller.proxies().value("节点选择").toObject().value("now").toString(); const auto pidBefore=controller.coreProcessId();
-        cards->scrollTo(hkIndex); const auto cardRect=cards->visualRect(hkIndex); const QPoint delayPoint(cardRect.right()-16,cardRect.center().y());
+        cards->scrollTo(hkIndex); const auto cardRect=cards->visualRect(hkIndex).adjusted(3,3,-5,-5);
+        const QPoint delayPoint=WindowParts::NodeCardDelegate::delayRect(cardRect,cards->font(),hkIndex.siblingAtColumn(2).data().toString()).center();
         QVERIFY(cards->viewport()->hasMouseTracking());
         QMouseEvent hoverMove(QEvent::MouseMove,QPointF(delayPoint),QPointF(cards->viewport()->mapToGlobal(delayPoint)),Qt::NoButton,Qt::NoButton,Qt::NoModifier); QApplication::sendEvent(cards->viewport(),&hoverMove);
         QTRY_COMPARE(cards->property("nodeDelayHover").toString(),QString("香港示例")); QCOMPARE(cards->viewport()->cursor().shape(),Qt::PointingHandCursor); QVERIFY(cards->property("nodeTestEnabled").toBool());
@@ -1988,6 +2000,12 @@ private slots:
         auto* mode=window.findChild<QPushButton*>("homeRouteRow"); QVERIFY(mode); QTRY_VERIFY(mode->isEnabled());
         QTest::mouseClick(mode,Qt::LeftButton); QPointer<QMenu> routeMenu=mode->findChild<QMenu*>("routeModeMenu"); QVERIFY(routeMenu); QTRY_VERIFY(routeMenu->isVisible());
         QCOMPARE(routeMenu->actions().size(),3); int checked=0; for (auto* action:routeMenu->actions()) checked+=action->isChecked(); QCOMPARE(checked,1);
+        QCOMPARE(routeMenu->actions().at(0)->property("mode").toString(),QString("rule"));
+        QCOMPARE(routeMenu->actions().at(1)->property("mode").toString(),QString("global"));
+        QCOMPARE(routeMenu->actions().at(2)->property("mode").toString(),QString("direct"));
+        QVERIFY(routeMenu->actions().at(0)->text().contains("按配置规则分流"));
+        QVERIFY(routeMenu->actions().at(1)->text().contains("所有请求走代理"));
+        QVERIFY(routeMenu->actions().at(2)->text().contains("不经代理转发"));
         const QRect routePosition=routeMenu->geometry(); QTest::qWait(60); QCOMPARE(routeMenu->geometry(),routePosition);
         QCOMPARE(routeMenu->grab().toImage().pixelColor(0,0).alpha(),0);
         const auto output=qEnvironmentVariable("MLASH_UI_SCREENSHOTS"); if (!output.isEmpty()) { QVERIFY(QDir().mkpath(output)); QVERIFY(routeMenu->grab().save(output+"/route-menu.png")); }

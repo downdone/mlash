@@ -179,7 +179,9 @@ QWidget* MainWindow::nodeSection() {
     auto* cardEnter = new QShortcut(QKeySequence(Qt::Key_Return), nodeCards_); cardEnter->setContext(Qt::WidgetWithChildrenShortcut); connect(cardEnter, &QShortcut::activated, this, &MainWindow::chooseSelectedNode);
     auto* cardRight = new QShortcut(QKeySequence(Qt::Key_Right), nodeCards_); cardRight->setContext(Qt::WidgetWithChildrenShortcut); connect(cardRight, &QShortcut::activated, this, &MainWindow::enterSelectedGroup);
     static_cast<NodeCardView*>(nodeCards_)->delayClicked = [this](const QModelIndex& index) { if (testAction_->isEnabled() && index.isValid()) controller_->testNodes({index.data(Qt::UserRole).toString()}, selectedGroup_); };
+    static_cast<NodeCardView*>(nodeCards_)->infoClicked = [this](const QModelIndex& index) { if (index.isValid()) showNodeDetails(index.data(Qt::UserRole).toString()); };
     auto* retest = new QShortcut(QKeySequence(Qt::Key_F5), nodeCards_); retest->setContext(Qt::WidgetWithChildrenShortcut); connect(retest, &QShortcut::activated, this, [this] { if (testSelectedAction_->isEnabled()) testSelectedAction_->trigger(); });
+    auto* cardInfo = new QShortcut(QKeySequence(Qt::CTRL|Qt::Key_I), nodeCards_); cardInfo->setContext(Qt::WidgetWithChildrenShortcut); connect(cardInfo,&QShortcut::activated,this,[this] { const auto index=nodeCards_->currentIndex(); if (index.isValid()) showNodeDetails(index.data(Qt::UserRole).toString()); });
     connect(nodeList_->selectionModel(), &QItemSelectionModel::currentChanged, this, [this] { updateActions(); updateCurrentMember(); });
     connect(nodeList_->selectionModel(), &QItemSelectionModel::selectionChanged, this, [this] { updateActions(); });
 
