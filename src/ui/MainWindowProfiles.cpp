@@ -40,32 +40,29 @@ QWidget* MainWindow::profilesPage() {
     auto* page = new QWidget;
     page->setObjectName("profilesSurface");
     auto* layout = new QVBoxLayout(page);
-    layout->setContentsMargins(18, 14, 18, 18);
-    layout->setSpacing(12);
+    layout->setContentsMargins(20, 18, 20, 18);
+    layout->setSpacing(10);
 
-    // Subscription import is a page-local task; the URL field stays visible.
-    auto* importRow = new QHBoxLayout;
-    auto* source = new QLineEdit(page);
-    source->setObjectName("profileSourceInput");
-    source->setPlaceholderText("粘贴订阅地址或节点链接");
-    source->setAccessibleName("订阅地址或节点链接");
-    importRow->addWidget(source, 1);
-    auto* import = new QPushButton("导入", page);
+    auto* listTools = new QHBoxLayout;
+    auto* heading = new QLabel("我的配置",page);
+    heading->setObjectName("profileCollectionHeading");
+    listTools->addWidget(heading);
+    auto* count = new QLabel(page);
+    count->setObjectName("profileCollectionCount");
+    listTools->addWidget(count);
+    listTools->addStretch();
+    auto* import = new QPushButton("添加配置", page);
     import->setObjectName("importSubscription");
-    importRow->addWidget(import);
-    auto* file = new QPushButton("本地文件…", page);
-    file->setObjectName("importLocalProfile");
-    importRow->addWidget(file);
-    layout->addLayout(importRow);
-    connect(import, &QPushButton::clicked, this, [this, source] { importPayload(source->text()); });
-    connect(source, &QLineEdit::returnPressed, import, &QPushButton::click);
-    connect(file, &QPushButton::clicked, this, [this] { addSubscription(false); });
+    import->setProperty("primary",true);
+    listTools->addWidget(import);
+    connect(import, &QPushButton::clicked, this, [this] {
+        if (profileImport_) profileImport_->reject();
+        else addSubscription(true);
+    });
     auto* paste = new QPushButton(page);
     paste->setObjectName("pasteSubscription");
     paste->hide();
     connect(paste, &QPushButton::clicked, this, [this] { importPayload(QApplication::clipboard()->text()); });
-    auto* listTools = new QHBoxLayout;
-    listTools->addStretch();
     auto* order = new QToolButton(page);
     order->setObjectName("profileOrder");
     order->setText("排序");
@@ -94,7 +91,15 @@ QWidget* MainWindow::profilesPage() {
     listTools->addWidget(batch);
     layout->addLayout(listTools);
     connect(batch, &QPushButton::clicked, this, [this] { showProfileBatch(false); });
-    mutations_ += {import, file, batch};
+    mutations_ += {import, batch};
+
+    profileImportHost_ = new QFrame(page);
+    profileImportHost_->setObjectName("profileImportHost");
+    auto* importLayout = new QVBoxLayout(profileImportHost_);
+    importLayout->setContentsMargins(8,8,8,8);
+    importLayout->setSpacing(0);
+    profileImportHost_->hide();
+    layout->addWidget(profileImportHost_);
 
     profileRowsModel_ = new ProfileRowModel(this);
     profileRowsModel_->setObjectName("profileRows");
@@ -115,7 +120,7 @@ QWidget* MainWindow::profilesPage() {
     profiles_->setMovement(QListView::Static);
     profiles_->setSpacing(0);
     profiles_->setUniformItemSizes(true);
-    profiles_->setGridSize(QSize(320, 144));
+    profiles_->setGridSize(QSize(320, 112));
     profiles_->setMouseTracking(true);
     profiles_->viewport()->installEventFilter(this);
     profiles_->setAccessibleName("订阅卡片");
@@ -137,11 +142,11 @@ QWidget* MainWindow::profilesPage() {
 void MainWindow::updateProfileGrid() {
     if (!profiles_) return;
     const int available = qMax(1, profiles_->viewport()->width());
-    const int columns = available >= 600 ? 2 : 1;
+    const int columns = profileRowsModel_ && profileRowsModel_->rowCount() > 1 && available >= 600 ? 2 : 1;
     // Leave a few pixels for the view's own layout rounding and scrollbar.
     // An exact half can wrap the second card onto a new row at fractional DPI.
-    const int width = qMax(1, columns == 2 ? (available - 48) / 2 : available - 8);
-    if (profiles_->gridSize() != QSize(width, 144)) profiles_->setGridSize(QSize(width, 144));
+    const int width = qMax(1, columns == 2 ? qMin((available - 20) / 2, 520) : qMin(available - 8, 560));
+    if (profiles_->gridSize() != QSize(width, 112)) profiles_->setGridSize(QSize(width, 112));
 }
 
 QString MainWindow::profileAt(const QModelIndex& index) {
@@ -351,7 +356,10 @@ void MainWindow::updateProfiles() {
     if (profileRowsModel_) {
         profileRowsModel_->setProfiles(controller_->profiles());
         profileRowsModel_->setState(controller_->state().activeProfile, controller_->state().ready);
+        updateProfileGrid();
     }
+    if (auto* count=findChild<QLabel*>("profileCollectionCount"))
+        count->setText(QString("%1 个").arg(controller_->profiles().size()));
     if (auto* batch = findChild<QPushButton*>("batchProfiles")) {
         int refreshable = 0;
         for (const auto& profile : controller_->profiles()) if (!profile.source.isEmpty()) ++refreshable;
@@ -447,12 +455,33 @@ void MainWindow::showProfileBatch(bool start) {
 void MainWindow::presentImport(ImportDialog* dialog) {
     QSet<QString> before; for (const auto& profile:controller_->profiles()) before.insert(profile.id);
     dialog->setAttribute(Qt::WA_DeleteOnClose); dialog->bindController(controller_);
-    if (auto* repeatedTitle=dialog->findChild<QLabel*>("dialogTitle")) repeatedTitle->hide();
     // 导入成功后在统一卡片网格中定位新对象，不以来源类型改变落点。
     connect(dialog,&QDialog::accepted,this,[this,before] { navigate(Route{ViewIds::Profiles}); if (route_.view!=ViewIds::Profiles) return; for (const auto& profile:controller_->profiles()) if (!before.contains(profile.id)) { selectProfile(profile.id); break; } });
-    navigate(Route{ViewIds::Profiles}); if (route_.view!=ViewIds::Profiles) { dialog->deleteLater(); return; } presentTask(dialog,"import","导入配置");
+    navigate(Route{ViewIds::Profiles});
+    if (route_.view!=ViewIds::Profiles || !profileImportHost_) { dialog->deleteLater(); return; }
+    dialog->setInlinePresentation();
+    dialog->setParent(profileImportHost_,Qt::Widget);
+    profileImport_=dialog;
+    profileImportHost_->layout()->addWidget(dialog);
+    connect(dialog,&QDialog::finished,this,[this,guard=QPointer<ImportDialog>(dialog)] {
+        if (profileImportHost_) profileImportHost_->hide();
+        profileImport_=nullptr;
+        if (auto* add=findChild<QPushButton*>("importSubscription")) add->setText("添加配置");
+        if (guard) guard->deleteLater();
+        if (profiles_) profiles_->setFocus(Qt::OtherFocusReason);
+    });
+    profileImportHost_->show(); dialog->show();
+    if (auto* add=findChild<QPushButton*>("importSubscription")) add->setText("收起");
+    if (auto* field=dialog->findChild<QLineEdit*>(dialog->isUrl()?"subscriptionUrl":"subscriptionFile"))
+        field->setFocus(Qt::OtherFocusReason);
 }
 void MainWindow::addSubscription(bool url) {
+    if (profileImport_) {
+        navigate(Route{ViewIds::Profiles});
+        profileImport_->setSourceTab(url);
+        profileImportHost_->show(); profileImport_->show();
+        return;
+    }
     auto* dialog = new ImportDialog(this); dialog->setSourceTab(url); presentImport(dialog);
 }
 

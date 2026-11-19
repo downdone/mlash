@@ -39,6 +39,8 @@ Mlash.exe 的 FileDescription 和 ProductName 均为 Mlash。mihomo 仍是 QProc
 
 U22 配置入口使用一个 `ProfileRowModel` 与 `ProfileCardDelegate` 绘制远程/本地同列卡片。委托只绘制及计算独立命中区，`MainWindow` 将卡片使用、来源更新、候选查看/应用和对象菜单映射为 Controller 命令或所属工作区；内容工作区按配置 ID 组织节点、规则、DNS、拨号链、规则源和兼容性，同级切换不改变运行对象。列表排序属于列表级工具，版本回滚属于来源维护。规则编辑的左侧新建与右侧现有规则共享一份未提交草稿，由 Controller 校验保存。
 
+U24 只更换配置列表的展示层：`ProfileCardDelegate` 的尺寸跟随有上限的 `QListView` 网格，避免 Qt 图标视图居中固定尺寸内容；卡片的使用、更新、候选和菜单命中区仍独立。添加配置时，同一个 `ImportDialog` 以子控件形式挂载在配置页列表上方，业务校验和 Controller 命令不另建一份；外部协议导入仍保留独立确认窗口。明暗配色由 `ui/design` 的语义 token 驱动，其余页面通过共用 `UiTheme` / 样式表消费。
+
 U18：整组延迟由 Controller 有界队列调度 12 个异步请求，MihomoClient 使用两条独立本地 HTTP 连接池突破单池连接数限制；代次与取消仍由 Controller 统一处理，不产生每节点一个 OS 线程。窗口标题栏是纯偏好 `window_chrome=native|integrated`，应用内栏复用页面顶栏；Win32 边缘命中测试仅在 `platform/windows`，UI 只消费 Qt 事件与平台适配结果。应用在线更新由 `AppUpdateSource` 只读检查固定 GitHub Release，Controller 在有界 worker 校验大小/SHA-256 并原子保存独立候选包；运行 EXE 与内核不被覆盖，UI 显式打开候选包。发布策略与限制见 [U18 设计](design/u18-fast-tests-window-chrome-update.md)。
 
 `mlash_domain` 是独立静态库，提供通用状态类型与不触发 I/O 的校验；`mlash_engine` 依赖它。原 `app/Types.h`、`app/ConnectionColumns.h` 转发头已移除，消费者直接包含 domain 契约。`CoreApi` 描述现有核心能力；`MihomoClient` 是唯一特化，在 `MihomoEndpoints.cpp` 集中定义 REST 方法与路径。版本、运行配置和代理组响应用 `CoreDtos` 严格解析；其他端点保留有界 `Result`/JSON。Controller 持有具体实现并负责业务回读，进程管理和只读采样依赖能力接口。UI 控件、节点模型和委托分别在所属头文件中；原 `MainWindowParts.h`、`WindowUiBasics.h`、`WindowUiIncludes.h` 聚合头已移除，主窗口实现按外壳、数据、反馈、状态、导航和各页面分文件。`PageRouter` 以 `QPointer` 观察由主窗口持有的页面生命周期对象，销毁后不再调用悬空指针。`ui/design` 提供只读语义规格与 Shadowrocket 取值，`UiTheme` 是 Qt 外观适配和兼容桥，页面分组仍由布局与交互契约定义，见 [ADR 0056](adr/0056-independent-ui-design-system.md)。此结构仍保留单个 `AppController` 状态写入者及现有轻量销毁语义，见 [ADR 0055](adr/0055-domain-contracts-and-ui-components.md)。

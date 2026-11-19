@@ -40,7 +40,7 @@ ImportDialog::ImportDialog(QWidget* parent) : TaskDialog(parent) {
     setWindowTitle("添加订阅 · Mlash"); setObjectName("importDialog"); resize(520, 460); setMinimumSize(420,340);
     auto* outer = new QVBoxLayout(this); outer->setContentsMargins(16,16,16,14); outer->setSpacing(10);
     auto* title = new QLabel("添加订阅"); title->setObjectName("dialogTitle"); outer->addWidget(title);
-    auto* scroll=new QScrollArea; scroll->setObjectName("importScroll"); scroll->setWidgetResizable(true); scroll->setFrameShape(QFrame::NoFrame); auto* body=new QWidget; auto* layout=new QVBoxLayout(body); layout->setContentsMargins(0,0,0,0); layout->setSpacing(10); scroll->setWidget(body); outer->addWidget(scroll,1);
+    auto* scroll=new QScrollArea; scroll->setObjectName("importScroll"); scroll->setWidgetResizable(true); scroll->setFrameShape(QFrame::NoFrame); auto* body=new QWidget; body->setObjectName("importBody"); auto* layout=new QVBoxLayout(body); layout->setContentsMargins(0,0,0,0); layout->setSpacing(10); scroll->setWidget(body); outer->addWidget(scroll,1);
     tabs_ = new ImportSourceTabs; tabs_->setObjectName("importTabs");
     auto* urlPage = new QWidget; urlPage->setObjectName("importSource"); urlPage->setAttribute(Qt::WA_StyledBackground, true); auto* urlForm = new QVBoxLayout(urlPage);
     urlForm->addWidget(new QLabel("订阅地址")); url_ = new QLineEdit; url_->setObjectName("subscriptionUrl");
@@ -53,12 +53,13 @@ ImportDialog::ImportDialog(QWidget* parent) : TaskDialog(parent) {
     connect(browse, &QPushButton::clicked, this, [this] { const auto path = QFileDialog::getOpenFileName(this, "选择订阅配置", {}, "YAML (*.yaml *.yml)"); if (!path.isEmpty()) file_->setText(path); });
     urlForm->addStretch(1); fileLayout->addStretch(1); tabs_->addTab(urlPage, "订阅链接"); tabs_->addTab(filePage, "配置文件"); links_=new NodeLinksEditor(nullptr); tabs_->addTab(links_,"节点链接"); static_cast<ImportSourceTabs*>(tabs_)->fitCurrent(); layout->addWidget(tabs_,0,Qt::AlignTop);
     auto* form = new QFormLayout; name_ = new QLineEdit; name_->setObjectName("subscriptionName"); name_->setMaxLength(120); name_->setPlaceholderText("可选，留空使用默认名称"); form->addRow("名称", name_); layout->addLayout(form);
-    auto* advanced = new QPushButton("下载设置"); advanced->setCheckable(true); advanced->setAutoDefault(false); layout->addWidget(advanced, 0, Qt::AlignLeft);
+    auto* advanced = new QPushButton("下载设置"); advanced->setObjectName("importAdvanced"); advanced->setCheckable(true); advanced->setAutoDefault(false); layout->addWidget(advanced, 0, Qt::AlignLeft);
     download_ = new DownloadPolicyEditor; download_->hide(); layout->addWidget(download_); connect(advanced, &QPushButton::toggled, download_, &QWidget::setVisible);
-    connect(tabs_, &QTabWidget::currentChanged, this, [this, advanced](int index) { advanced->setVisible(index == 0); download_->setVisible(index == 0 && advanced->isChecked()); });
+    connect(tabs_, &QTabWidget::currentChanged, this, [this, advanced](int index) { advanced->setVisible(index == 0); download_->setVisible(index == 0 && advanced->isChecked()); if (inlineMode_) setFixedHeight(index==2 || (index==0 && advanced->isChecked())?430:300); });
+    connect(advanced,&QPushButton::toggled,this,[this](bool expanded) { if (inlineMode_) setFixedHeight(expanded?430:300); });
     connect(download_->userAgentEditor(), &QLineEdit::textChanged, this, &ImportDialog::inputChanged);
     hint_ = new ElidedLabel; hint_->setObjectName("importHint"); hint_->setSizePolicy(QSizePolicy::Ignored,QSizePolicy::Preferred); hint_->setMinimumHeight(hint_->fontMetrics().height()+6); outer->addWidget(hint_);
-    auto* note = new QLabel("导入后需手动使用。"); note->setToolTip("端口、控制接口和 TUN 由 Mlash 设置管理；仅监听本机。"); note->setObjectName("secondaryText"); note->setWordWrap(true); layout->addWidget(note);
+    auto* note = new QLabel("导入后需手动使用。"); note->setToolTip("端口、控制接口和 TUN 由 Mlash 设置管理；仅监听本机。"); note->setObjectName("importNote"); note->setProperty("secondary",true); note->setWordWrap(true); layout->addWidget(note);
     layout->addStretch(1);
     auto* buttons = new QDialogButtonBox(QDialogButtonBox::Cancel); buttons->button(QDialogButtonBox::Cancel)->setText("取消");
     import_ = buttons->addButton("导入并校验", QDialogButtonBox::AcceptRole); import_->setObjectName("importSubmit"); import_->setProperty("primary", true); import_->setDefault(true); outer->addWidget(buttons);
@@ -69,6 +70,36 @@ ImportDialog::ImportDialog(QWidget* parent) : TaskDialog(parent) {
     rememberInputs();
     DialogDraftGuard::protect(this,[this] { return !pending_&&inputs()!=initialInputs_; },[this] { return pending_||links_->checking(); });
     validateInput();
+}
+void ImportDialog::setInlinePresentation() {
+    // The same validation and Controller command serve the page-local form.
+    // Only the presentation changes: a bounded child panel beside the list.
+    setWindowFlags(Qt::Widget);
+    if (auto* scroll=findChild<QScrollArea*>("importScroll")) {
+        auto* body=scroll->takeWidget();
+        auto* outer=qobject_cast<QVBoxLayout*>(layout());
+        delete outer->replaceWidget(scroll,body);
+        scroll->deleteLater();
+    }
+    inlineMode_=true;
+    auto* outer=qobject_cast<QVBoxLayout*>(layout());
+    outer->setContentsMargins(10,8,10,8);
+    outer->setSpacing(6);
+    if (auto* body=findChild<QWidget*>("importBody")) {
+        auto* content=qobject_cast<QVBoxLayout*>(body->layout());
+        content->setSpacing(6);
+        if (content->count() && content->itemAt(content->count()-1)->spacerItem()) delete content->takeAt(content->count()-1);
+    }
+    for (auto* page:findChildren<QWidget*>("importSource")) if (auto* sourceLayout=qobject_cast<QVBoxLayout*>(page->layout())) {
+        sourceLayout->setContentsMargins(2,2,2,2);
+        sourceLayout->setSpacing(4);
+    }
+    if (auto* note=findChild<QLabel*>("importNote")) note->hide();
+    hint_->hide();
+    setMinimumSize(0,0);
+    setFixedHeight(isNodeLinks()?430:300);
+    setProperty("inlineImport",true);
+    setProperty("embeddedTask",true);
 }
 bool ImportDialog::isUrl() const { return tabs_->currentIndex() == 0; }
 bool ImportDialog::isNodeLinks() const { return tabs_->currentIndex()==2; }
@@ -98,10 +129,16 @@ void ImportDialog::accept() {
     auto* close=findChild<QDialogButtonBox*>()->button(QDialogButtonBox::Cancel);
     close->setText("关闭"); close->setToolTip("返回页面后，已提交的导入仍继续；结果显示在状态栏。");
     tabs_->setEnabled(false); name_->setEnabled(false); download_->setEnabled(false);
-    import_->setEnabled(false); hint_->setText("正在导入并校验；返回后可在状态栏查看结果。");
+    import_->setEnabled(false); hint_->setText("正在导入并校验；返回后可在状态栏查看结果。"); if (inlineMode_) hint_->show();
     if (isNodeLinks()) controller_->importNodeLinks(profileName(),source());
     else if (isUrl()) controller_->importUrl(profileName(),QUrl(source()),downloadPolicy());
     else controller_->importFile(profileName(),source());
+}
+void ImportDialog::reject() {
+    // Once submitted, closing only hides the form; the Controller operation
+    // continues and reports through the status bar. Drafts still use the guard.
+    if (pending_) QDialog::reject();
+    else TaskDialog::reject();
 }
 QString ImportDialog::source() const { return isNodeLinks()?links_->text():(isUrl() ? url_ : file_)->text().trimmed(); }
 QString ImportDialog::profileName() const { return name_->text().trimmed(); }
@@ -122,6 +159,7 @@ void ImportDialog::validateInput() {
     if (isUrl() && !download_->policy().valid()) { valid = false; hint = "User-Agent 仅支持最多 256 个单行 ASCII 字符"; }
     if (!pending_) {
         hint_->setText(failure_.isEmpty()?hint:failure_);
+        if (inlineMode_) hint_->setVisible(!hint_->text().isEmpty());
         hint_->setToolTip(failure_); hint_->setAccessibleDescription(failure_);
     }
     import_->setEnabled(valid&&available_&&!pending_);

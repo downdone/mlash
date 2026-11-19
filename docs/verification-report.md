@@ -1,5 +1,13 @@
 # 验证报告
 
+## 2026-11-19：U24 Daymark 配色、订阅卡片与就近导入
+
+按[事前设计与实施后复核](design/u24-daymark-color-and-profile-composition.md)，浅/深主题改用中性表面层级，配置页将固定大卡压为 112 DIP 网格行；单卡/双卡有界宽度，标题、文件名或域名、更新时间和操作相邻。导入表单在配置列表上方就近展开，仍使用原 `ImportDialog` 的校验及 Controller 命令。测试中发现关闭旧表单后 Qt 延迟销毁，断言改为等待真实销毁；宽窗截图又发现固定委托宽度造成网格居中错位，改为委托宽度与网格单元一致。导入后须等待布局收缩再截图，最终单卡位于标题下方。
+
+`scripts/build.ps1` 通过；`scripts/test.ps1` 选取 `flat_workspace_tests|workflow_depth_tests|prototype_ui_tests|navigation_contract_tests|subscription_cards_ui|profile_import_ui|settings_inline_ui|ui_components|settings_value_tests|appearance_tests` **10/10 通过、0 失败**，耗时 70.47 秒。新增的导入→本地卡片用例覆盖收起/重开不重复、文件名、成功落卡和宽窗左对齐。查看了 900×650 双卡、1400×720 单卡、940×620 页内导入及深色设置截图；这是离屏视觉复核，不代表原生显示器观感。未重跑全量 62 组，U22 的全量结果属于先前代码；本轮按影响范围运行主题与工作流相关组。
+
+`scripts/package.ps1` 生成 `dist/Mlash-1.21.0-windows-x64-portable.zip`，SHA-256 `55dd1fea7ae6813f7811457e8176b090daf55533397848658f22ece5b3af7ba4`。`ci_release_check.py` 验证 35 文件白名单、客户端与固定内核完整性；`ci_smoke.ps1` 用包内隔离数据启动，Qt 6.10.2 / Schannel TLS 和八个路由身份均通过。文档链接 137 篇、隐私检查 144 项与 `git diff --check` 均无发现。未执行真实系统代理/TUN 写入、原生鼠标/读屏、Windows 10/干净机器及 72 小时长稳；保持 Windows x64 **预发布候选**、`release_qualified=false`。GitHub 推送及远端流水线结果另记。
+
 ## 2026-11-19：U23 Daymark 导航与 1.21.0 最终本机候选
 
 按 [U23 设计与复核](design/u23-daymark-navigation.md)完成顶部品牌、三项工作区和底部设置的侧栏重组。样式切换时 `QListWidget` 内部重选曾误触发首页导航，改为只在用户点击或键盘激活时请求路由；设置选中面修正为与工作区行等宽。最终 `scripts/build.ps1` 成功，`scripts/test.ps1 -TestRegex '^(prototype_ui_tests|navigation_contract_tests|appearance_tests|website_tests|workflow_depth_tests)$'` **5/5 通过**，覆盖尺寸、路由、主题切换、草稿与关联工作流。1040×720 首页及明暗设置截图已目视检查，底部分区和选中宽度符合设计；原生鼠标手感与读屏仍需人工复核。此轮未重跑全量 62 组；U22 的 61 通过、1 系统门禁跳过结果对应导航修改前代码，导航相关路径由本轮定向测试覆盖。

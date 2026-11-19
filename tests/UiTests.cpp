@@ -82,6 +82,42 @@ static bool seedDashboardFixture(const QString& root) {
 class UiTests : public QObject {
     Q_OBJECT
 private slots:
+    void inlineImportCreatesBoundedDaymarkCard() {
+        QTemporaryDir data; ProfileStore store(data.path(),createPlatformServices());
+        QVERIFY(store.load().result.ok);
+        Settings settings; settings.startCore=false;
+        settings.corePath=QString(MLASH_SOURCE_DIR)+"/cores/mihomo.exe";
+        QVERIFY(store.save(settings,{}).ok);
+        const auto source=data.path()+"/new.yaml";
+        QVERIFY(writeAtomic(source,"proxies: []\nrules: ['MATCH,DIRECT']\n").ok);
+        AppController controller(data.path(),true);
+        QSignalSpy initialized(&controller,&AppController::initialized);
+        controller.initialize(); QTRY_COMPARE(initialized.size(),1);
+        MainWindow window(&controller); window.resize(1400,720); window.show(); window.setPage(1);
+        auto* add=window.findChild<QPushButton*>("importSubscription"); QVERIFY(add);
+        auto* host=window.findChild<QWidget*>("profileImportHost"); QVERIFY(host);
+        add->click(); QTRY_VERIFY(host->isVisible()); QCOMPARE(add->text(),QString("收起"));
+        auto* dialog=window.findChild<ImportDialog*>(); QVERIFY(dialog);
+        add->click(); QTRY_VERIFY(!host->isVisible()); QCOMPARE(add->text(),QString("添加配置"));
+        add->click(); QTRY_VERIFY(host->isVisible());
+        QTRY_COMPARE(window.findChildren<ImportDialog*>().size(),1);
+        dialog=window.findChild<ImportDialog*>(); QVERIFY(dialog&&dialog->isVisible());
+        dialog->setSourceTab(false);
+        dialog->findChild<QLineEdit*>("subscriptionFile")->setText(source);
+        dialog->findChild<QLineEdit*>("subscriptionName")->setText("新配置");
+        dialog->findChild<QPushButton*>("importSubmit")->click();
+        auto* cards=window.findChild<QListView*>("profileList"); QVERIFY(cards);
+        QTRY_COMPARE_WITH_TIMEOUT(cards->model()->rowCount(),1,15000);
+        QTRY_VERIFY(!host->isVisible());
+        QTRY_VERIFY(cards->viewport()->mapTo(&window,QPoint()).y()<=160);
+        QCOMPARE(cards->model()->index(0,0).data(Qt::DisplayRole).toString(),QString("新配置"));
+        QCOMPARE(cards->model()->index(0,0).data(ProfileRowModel::SourceLabel).toString(),QString("new.yaml"));
+        const auto cardRect=cards->visualRect(cards->model()->index(0,0));
+        QVERIFY(cardRect.left()<=12);
+        QVERIFY(cardRect.width()>500 && cardRect.width()<=560);
+        const auto shots=qEnvironmentVariable("MLASH_UI_SCREENSHOTS");
+        if (!shots.isEmpty()) { QVERIFY(QDir().mkpath(shots)); QVERIFY(window.grab().save(shots+"/single-subscription-card.png")); }
+    }
     void subscriptionCardsRouteActionsWithoutChangingUse() {
         QTemporaryDir data; QVERIFY(seedDashboardFixture(data.path()));
         AppController controller(data.path(), true);
@@ -105,7 +141,7 @@ private slots:
         QVERIFY(!localIndex.data(ProfileRowModel::CanRefresh).toBool());
         QVERIFY(remoteIndex.data(ProfileRowModel::CanRefresh).toBool());
         QCOMPARE(list->viewMode(), QListView::IconMode);
-        QCOMPARE(list->itemDelegate()->sizeHint({}, remoteIndex).height(), 144);
+        QCOMPARE(list->itemDelegate()->sizeHint({}, remoteIndex).height(), 112);
         QVERIFY(list->visualRect(localIndex).top() == list->visualRect(remoteIndex).top());
         window.resize(560, 650);
         QTRY_VERIFY(list->visualRect(localIndex).top() < list->visualRect(remoteIndex).top());
@@ -1206,9 +1242,11 @@ private slots:
         QCOMPARE(sourceEditor->findChild<QLineEdit*>("profileEditSource")->text(),p.source);
         sourceEditor->reject();
         window.findChild<QPushButton*>("taskBack")->click();
-        auto* add = window.findChild<QPushButton*>("importLocalProfile"); QVERIFY(add); add->click();
-        auto* dialog = window.findChild<ImportDialog*>(); QTRY_VERIFY(dialog && dialog->isVisible()); QVERIFY(!dialog->isUrl());
-        QVERIFY(!dialog->findChild<QLabel*>("dialogTitle")->isVisible()); dialog->reject();
+        auto* add = window.findChild<QPushButton*>("importSubscription"); QVERIFY(add); add->click();
+        auto* dialog = window.findChild<ImportDialog*>(); QTRY_VERIFY(dialog && dialog->isVisible());
+        QVERIFY(window.findChild<QWidget*>("profileImportHost")->isVisible());
+        dialog->setSourceTab(false); QVERIFY(!dialog->isUrl());
+        dialog->reject(); QTRY_VERIFY(!window.findChild<QWidget*>("profileImportHost")->isVisible());
         QSignalSpy exited(&controller, &AppController::exitReady); controller.requestExit(); QTRY_COMPARE(exited.count(), 1);
     }
     void coherentActionsAndBilingualRuleTokens() {
@@ -1693,21 +1731,26 @@ private slots:
     void emptyStatesOfferFocusableNextStep() {
         QTemporaryDir data; AppController controller(data.path(),true); QSignalSpy initialized(&controller,&AppController::initialized); controller.initialize(); QTRY_COMPARE(initialized.size(),1);
         MainWindow window(&controller); window.resize(940,620); window.show(); QCoreApplication::processEvents();
-        // 配置的导入入口始终在页首，空态不再重复一个导入按钮。
+        // 配置只留一个添加入口，表单在列表上方就近展开。
         window.setPage(1); QCoreApplication::processEvents();
         auto* profiles=window.findChild<QListView*>("profileList"); QVERIFY(profiles);
         auto* profilesAction=profiles->viewport()->findChild<QPushButton*>("emptyStateAction"); QVERIFY(profilesAction);
         QVERIFY(!profilesAction->isVisible());
-        auto* source=window.findChild<QLineEdit*>("profileSourceInput"); QVERIFY(source&&source->isVisible());
-        QVERIFY(source->focusPolicy()!=Qt::NoFocus);
-        QVERIFY(window.findChild<QPushButton*>("importSubscription")->isVisible());
-        QVERIFY(window.findChild<QPushButton*>("importLocalProfile")->isVisible());
+        auto* add=window.findChild<QPushButton*>("importSubscription"); QVERIFY(add&&add->isVisible());
+        auto* inlineHost=window.findChild<QWidget*>("profileImportHost"); QVERIFY(inlineHost&&!inlineHost->isVisible());
+        add->click(); QTRY_VERIFY(inlineHost->isVisible());
+        QVERIFY(inlineHost->y()<profiles->y());
+        const auto shots=qEnvironmentVariable("MLASH_UI_SCREENSHOTS");
+        if (!shots.isEmpty()) { QVERIFY(QDir().mkpath(shots)); QVERIFY(window.grab().save(shots+"/inline-import.png")); }
+        auto* source=window.findChild<QLineEdit*>("subscriptionUrl"); QVERIFY(source&&source->isVisible());
+        QVERIFY(window.findChild<QLineEdit*>("subscriptionName")->isVisible());
+        auto* dialog=window.findChild<ImportDialog*>(); QVERIFY(dialog); QCOMPARE(dialog->parentWidget(),inlineHost); dialog->reject(); QTRY_VERIFY(!inlineHost->isVisible());
         // 连接页：无配置时唯一空态动作直接前往配置。
         window.setPage(4); QCoreApplication::processEvents();
         auto* connections=window.findChild<QTableView*>("connectionsTable"); QVERIFY(connections);
         auto* connectionsAction=connections->viewport()->findChild<QPushButton*>("emptyStateAction"); QVERIFY(connectionsAction);
         QVERIFY(connectionsAction->isVisible()); QVERIFY(!connectionsAction->text().isEmpty()); QCOMPARE(connectionsAction->focusPolicy(),Qt::StrongFocus);
-        QTest::mouseClick(connectionsAction,Qt::LeftButton); QTRY_VERIFY(source->isVisible());
+        QTest::mouseClick(connectionsAction,Qt::LeftButton); QTRY_VERIFY(add->isVisible());
         QSignalSpy exited(&controller,&AppController::exitReady); controller.requestExit(); QTRY_COMPARE(exited.size(),1);
     }
     // P4.1 反馈路由：页面级结果只出现在所属页面，跨页结果进状态栏「最近操作」段，

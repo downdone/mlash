@@ -9,10 +9,16 @@ QString templateStyleSheet() {
         QScrollArea#connectionColumnScroll, QWidget#connectionColumnRows { background: transparent; border: none; }
         QStackedWidget#nodeViews { background: @Surface; border-radius: 8px; }
         QDialog#importDialog, QDialog#profilePolicyDialog { background: @Window; }
+        QDialog#importDialog[inlineImport="true"] { background: transparent; }
+        QFrame#profileImportHost { background: @Surface; border: 1px solid @Separator; border-radius: 10px; }
+        QScrollArea#importScroll { background: transparent; border: none; }
+        QWidget#importBody, QTabWidget#importTabs, QTabWidget#importTabs::pane { background: @Surface; border: none; }
+        QLabel#profileCollectionHeading { font-size: @SectionPoints; font-weight: 600; }
+        QLabel#profileCollectionCount { color: @Secondary; font-size: @CaptionPoints; padding-left: 4px; }
         QWidget#importSource { background: @Surface; }
         QFrame#profileImportGroup, QFrame#websiteCard, QFrame#overview, QFrame#panel, QFrame#homeControlCard, QFrame#settingsGroup, QFrame#trafficChart { background: @Surface; border: @PanelBorder; border-radius: 8px; }
         /* K1：内容区首行固定 72px（原型 topbar）。左标题/副标题，右状态胶囊与图标钮。 */
-        QWidget#topbar { background: @Sidebar; border: none; border-bottom: 1px solid @Separator; }
+        QWidget#topbar { background: @Window; border: none; border-bottom: 1px solid @Separator; }
         QLabel#chromeBrand { color: @Secondary; font-weight: 500; }
         QToolButton[windowChromeButton="true"] { background: transparent; border: none; border-radius: 5px; color: @Secondary; font-size: 14px; padding: 0; }
         QToolButton[windowChromeButton="true"]:hover { background: @Hover; color: @Ink; }

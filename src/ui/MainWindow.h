@@ -226,6 +226,8 @@ private:
     // One visible list for URL and file profiles; source capability remains in the model.
     ProfileRowModel* profileRowsModel_ = nullptr;
     QListView* profiles_ = nullptr;
+    QWidget* profileImportHost_ = nullptr;
+    QPointer<ImportDialog> profileImport_;
     QMenu* profileContextMenu_ = nullptr;
     QPointer<QWidget> profileDrawer_;
     QAction* importFilesAction_ = nullptr;   // 标题行「导入文件」

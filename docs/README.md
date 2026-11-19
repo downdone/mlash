@@ -17,6 +17,7 @@
 [U22 逐页操作链与返回上下文](design/u22-page-operation-flows.md)：对照 Daymark 的导航、行主动作和菜单源码，逐页规定跳转、就近操作、草稿保护及回到原位置的验收边界；实施结果以项目状态与验证报告为准。
 
 [U23 导航重设](design/u23-daymark-navigation.md)：以 Daymark 的品牌、工作区和底部工具分区为参考，记录 Mlash 侧栏的设计、实现后复核与路由边界。
+[U24 Daymark 配色与配置卡片](design/u24-daymark-color-and-profile-composition.md)：语义配色、紧凑卡片、自适应网格和就近导入的事前设计与截图复核；验证结果另见报告。
 [U22 Daymark 方法逐页重审](design/u22-daymark-page-reaudit.md)：把“简约而不简单”落实到 Mlash 的配置、节点、观察和恢复路径；逐页检查布局、信息、交互与切换状态。设计不等于完成。
 [U22 订阅优先的配置页重设计](design/u22-config-rethink.md)：先脱离旧的列表→详情目录→检查器结构，形成第一版[内容工作台原型](design/u22-config-rethink.html)；按用户明确的高频任务与 Clash 源码操作链，第二版改为[订阅列表/更新优先原型](design/u22-subscription-first.html)。当前运行 UI 已迁入统一卡片网格和内容工作区；实际完成度以项目状态与验证报告为准。
 
