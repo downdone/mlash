@@ -1,5 +1,11 @@
 # 验证报告
 
+## 2026-11-19：GitHub v1.21.0 Windows 预发布
+
+`main` 与 `v1.21.0` 指向 `94874eb5f938c8328dbb91782fb773b86c6e7f11`。[GitHub Actions 标签运行](https://github.com/downdone/mlash/actions/runs/44448223393) 成功：干净 Windows runner 构建、文档/隐私检查、完整隔离回归（62 组中 61 通过、0 失败，`system_test_guard` 依默认门禁跳过；468.82 秒）、35 文件便携包完整性、包内隔离启动及八路由冒烟均通过。发布任务校验标签与构建提交一致并上传资产。
+
+[v1.21.0 预发布](https://github.com/downdone/mlash/releases/tag/v1.21.0) 已上线，含 Windows portable ZIP、SHA-256 侧车、验证 JSON 与对应源码/内核来源附件。远端 ZIP 的 GitHub 资产摘要为 `sha256:a1388328dea3675c98911d460dacf3cc616b7b785cd8939a27f041caf380312f`；它与本地独立构建 ZIP 摘要不同，下载者应按对应发布页的 `.sha256` 校验。此次是 Windows x64 预发布；真实系统代理/TUN 写入、其他 Windows 环境、原生读屏和 72 小时长稳仍未验，`release_qualified=false`。
+
 ## 2026-11-19：U24 Daymark 配色、订阅卡片与就近导入
 
 按[事前设计与实施后复核](design/u24-daymark-color-and-profile-composition.md)，浅/深主题改用中性表面层级，配置页将固定大卡压为 112 DIP 网格行；单卡/双卡有界宽度，标题、文件名或域名、更新时间和操作相邻。导入表单在配置列表上方就近展开，仍使用原 `ImportDialog` 的校验及 Controller 命令。测试中发现关闭旧表单后 Qt 延迟销毁，断言改为等待真实销毁；宽窗截图又发现固定委托宽度造成网格居中错位，改为委托宽度与网格单元一致。导入后须等待布局收缩再截图，最终单卡位于标题下方。
