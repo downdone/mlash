@@ -10,19 +10,19 @@ inline constexpr const char* artworkSurface="#F2F2F7";
 
 // Header-only immutable values keep lightweight UI consumers link-independent.
 inline constexpr Colors light{
-    "#FFFFFF","#F3F4F6","#F6F6F8",
-    "#1C1C1E","#5D5D66","#62636B","#989CA5",
-    "#D9DEE6","#E0E1E7","#0058BA","#EAF1FC",
-    "#0063CF","#FFFFFF","#F0F2F6","#0058BA",
-    "#F2F3F6","#EDF0F5","#004B9A",
-    "#236E46","#855100","#B92330","#7D8490","#F2F2F7"};
+    "#FAFAFC","#F5F6F8","#FFFFFF",
+    "#1D1D1F","#585E68","#62636B","#989DA6",
+    "#DDE1E7","#E7E9ED","#0058BA","#EAF2FF",
+    "#0063CF","#FFFFFF","#F0F4F9","#0058BA",
+    "#F5F6F8","#E9EDF3","#004B9A",
+    "#236E46","#855100","#B92330","#8A919C","#F2F2F7"};
 inline constexpr Colors dark{
-    "#1C1C1E","#171719","#252527",
-    "#F2F2F7","#B7B7C2","#B7B7C2","#6F7580",
-    "#424249","#38383E","#83BAFF","#263A52",
-    "#1767BC","#FFFFFF","#303034","#83BAFF",
-    "#2B2B30","#38383E","#0B529A",
-    "#83D6AA","#FFC18C","#FF9CA4","#8B8B97","#F2F2F7"};
+    "#222326","#25262A","#2D2E32",
+    "#F5F5F7","#CDD0D8","#B9BFC8","#858A93",
+    "#50535B","#42454C","#A5C9FF","#2D4564",
+    "#2776CF","#FFFFFF","#36393F","#A5C9FF",
+    "#303238","#3D4249","#175FAF",
+    "#91DDB4","#FFD09C","#FFAFB5","#969AA3","#F2F2F7"};
 inline constexpr Colors highContrastLight{
     "#FFFFFF","#FFFFFF","#FFFFFF",
     "#000000","#1A1A1A","#333333","#6B6B6B",

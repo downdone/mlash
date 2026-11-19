@@ -2,6 +2,8 @@
 
 ## 当前任务
 
+**U25 已实现并完成本机定向验证：macOS 式明亮语义配色。** 按[事前设计与复核](design/u25-brighter-macos-semantic-palette.md)统一窗口、内容面、侧栏、控件及选中层级，保持业务操作与深色/增强对比语义。Windows 构建、6 组受影响回归、四主页面明暗截图、35 文件预览包完整性及包内八路由冒烟通过；证据与未验范围见[验证报告](verification-report.md)。此变更在 v1.21.0 已发布标签之后，仅作为另名本地预览，不声称已进入该发布版。
+
 **U24 实现、Windows 验收与 v1.21.0 预发布已完成：Daymark 语义配色与配置页重组。** 按[设计与复核](design/u24-daymark-color-and-profile-composition.md)统一明暗配色，配置卡片改为紧凑、有界宽度且与集合标题左对齐；导入在列表上方就近展开。本机 10 组受影响测试、单/双卡截图、35 文件包完整性及包内八路由冒烟通过；[远端标签流水线](https://github.com/downdone/mlash/actions/runs/44448223393) 完整回归 61 通过、1 系统门禁跳过，并生成[预发布资产](https://github.com/downdone/mlash/releases/tag/v1.21.0)。证据与未验边界见[验证报告](verification-report.md)；正式发行资格仍为 `false`。
 
 **U23 已实施并完成本机定向验收：Daymark 导航结构重设。** 按[事前设计与复核](design/u23-daymark-navigation.md)把品牌放在顶部、首页/配置/数据组成工作区、设置固定在底部；明确的鼠标/键盘激活才触发导航，主题刷新不再误跳页。Windows 构建、5 组受影响测试、明暗截图、35 文件最终包完整性及包内八路由冒烟通过；U23 与 U24 已一同纳入 v1.21.0 远端标签流水线，[实际证据](verification-report.md)已记录。

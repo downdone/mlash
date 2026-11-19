@@ -1,5 +1,11 @@
 # 验证报告
 
+## 2026-11-19：U25 明亮语义配色本地预览
+
+按[事前设计与复核](design/u25-brighter-macos-semantic-palette.md)仅修改集中浅/深语义色；浅色改为近白画布、白色内容面和浅灰侧栏，深色改为柔和深灰层级，增强对比套色保持原值。`scripts/build.ps1` 成功。`scripts/test.ps1 -TestRegex '^(appearance_tests|appearance_prefs_tests|navigation_contract_tests|subscription_cards_ui|settings_value_tests|ui_components)$'` **6/6 通过，0 失败**，耗时 75.12 秒；外观测试包含四主页面明暗、多尺寸/文字缩放及语义文字对比度。人工查看离屏首页、配置双卡、数据连接、设置及托盘菜单截图，未见表面颜色断层。`check_ui_tokens.py` 0 命中；没有执行原生显示器/读屏验收。
+
+`scripts/package.ps1 -OutputName Mlash-1.21.0-windows-x64-u25-brighter-preview` 生成独立本地预览 ZIP，SHA-256 `6875b3d12ec9e4fd90868c794a4384386f88be90ffd9cf55d4cb9cd5755d7d61`。`ci_release_check.py` 验证 35 文件白名单、客户端与固定内核完整性；`ci_smoke.ps1` 从该包以隔离数据启动，Schannel TLS 与八个路由身份通过。此次配色改动发生在已发布的 v1.21.0 标签之后，预览包不是 GitHub v1.21.0 资产；没有运行真实系统代理/TUN、跨机器或长稳验收，`release_qualified=false`。
+
 ## 2026-11-19：GitHub v1.21.0 Windows 预发布
 
 `main` 与 `v1.21.0` 指向 `94874eb5f938c8328dbb91782fb773b86c6e7f11`。[GitHub Actions 标签运行](https://github.com/downdone/mlash/actions/runs/44448223393) 成功：干净 Windows runner 构建、文档/隐私检查、完整隔离回归（62 组中 61 通过、0 失败，`system_test_guard` 依默认门禁跳过；468.82 秒）、35 文件便携包完整性、包内隔离启动及八路由冒烟均通过。发布任务校验标签与构建提交一致并上传资产。
