@@ -9,7 +9,9 @@
 #include "UiTheme.h"
 #include "ViewIds.h"
 #include "WindowUiFactories.h"
+#include "WidgetStyle.h"
 #include <QtWidgets>
+#include <algorithm>
 
 namespace mlash {
 using namespace WindowParts;
@@ -33,17 +35,13 @@ QWidget* MainWindow::homePage() {
     auto* control = panel(); control->setObjectName("homeControlCard"); control->setSizePolicy(QSizePolicy::Preferred,QSizePolicy::Maximum);
     auto* summary = new QVBoxLayout(control); summary->setContentsMargins(12, 0, 12, 0); summary->setSpacing(0);
 
-    // ① 当前代理：当前成员名 + 「订阅 · 选择方式」 + 状态句，行尾为系统代理开关。
-    auto* currentRow = new QWidget; currentRow->setObjectName("homeControlRow"); currentRow->setProperty("first", true); currentRow->setMinimumHeight(UiTheme::RowHeight);
+    // 每行只表达一个任务；固定同一行高，状态变化不推动后续内容。
+    auto* currentRow = new QWidget; currentRow->setObjectName("homeControlRow"); currentRow->setProperty("first", true); currentRow->setFixedHeight(UiTheme::RowHeight);
     auto* currentLayout = new QHBoxLayout(currentRow); currentLayout->setContentsMargins(0, 3, 0, 3); currentLayout->setSpacing(10);
     statusDot_ = new QLabel; statusDot_->setObjectName("statusDot"); statusDot_->setFixedSize(0,0); statusDot_->hide(); auto* currentIcon=new QLabel; currentIcon->setPixmap(UiIcons::icon(UiIcons::Glyph::Rocket,UiTheme::Brand).pixmap(22,22)); currentIcon->setFixedSize(22,22); currentLayout->addWidget(currentIcon,0,Qt::AlignVCenter);
-    auto* currentText = new QVBoxLayout; currentText->setSpacing(2);
     overviewTitle_ = new QLabel("尚未连接"); overviewTitle_->setObjectName("overviewTitle"); overviewTitle_->setTextFormat(Qt::PlainText);
-    homeCurrentMeta_ = new QLabel; homeCurrentMeta_->setObjectName("homeControlMeta"); homeCurrentMeta_->setProperty("secondary", true); homeCurrentMeta_->setTextFormat(Qt::PlainText); homeCurrentMeta_->hide();
-    homeStateLine_ = new QLabel; homeStateLine_->setObjectName("homeStateLine"); homeStateLine_->setProperty("secondary", true); homeStateLine_->setTextFormat(Qt::PlainText); homeStateLine_->setWordWrap(true);
-    currentText->addWidget(overviewTitle_); currentText->addWidget(homeCurrentMeta_); currentText->addWidget(homeStateLine_);
     connect(UiTheme::notifier(),&UiTheme::AppearanceNotifier::changed,currentIcon,[currentIcon] { currentIcon->setPixmap(UiIcons::icon(UiIcons::Glyph::Rocket,UiTheme::Brand).pixmap(22,22)); });
-    currentLayout->addLayout(currentText, 1);
+    currentLayout->addWidget(overviewTitle_, 1, Qt::AlignVCenter);
     // 行尾开关就是代理总开关（ADR 0048 的 setProxyEnabled）；原来的「开启代理」按钮移入
     // 「更多运行信息」，两处同源同命令，只是首屏只留一个入口（原型 01/02）。
     proxyEnabled_ = new ProxySwitch(""); proxyEnabled_->setObjectName("systemProxy"); proxyEnabled_->setAccessibleName("代理总开关 · 系统代理");
@@ -62,53 +60,62 @@ QWidget* MainWindow::homePage() {
     });
 
     // ② 路由方式：整行可点，行下方弹出浮层菜单（原型 03）；当前项带勾。
-    homeRouteRow_ = new DashboardCardButton; homeRouteRow_->setObjectName("homeRouteRow"); homeRouteRow_->setProperty("controlRow", true); homeRouteRow_->setMinimumHeight(UiTheme::RowHeight);
+    homeRouteRow_ = new DashboardCardButton; homeRouteRow_->setObjectName("homeRouteRow"); homeRouteRow_->setProperty("controlRow", true); homeRouteRow_->setFixedHeight(UiTheme::RowHeight);
     auto* routeLayout = new QHBoxLayout(homeRouteRow_); routeLayout->setContentsMargins(0, 3, 0, 3); routeLayout->setSpacing(10);
     auto* routeIcon=new QLabel; routeIcon->setFixedSize(22,22); routeIcon->setPixmap(UiIcons::icon(UiIcons::Glyph::Route,UiTheme::Brand).pixmap(22,22)); routeLayout->addWidget(routeIcon);
-    auto* routeText = new QVBoxLayout; routeText->setSpacing(2);
     auto* routeTitle = new QLabel("全局路由"); routeTitle->setObjectName("homeControlTitle"); routeTitle->setTextFormat(Qt::PlainText);
     connect(UiTheme::notifier(),&UiTheme::AppearanceNotifier::changed,routeIcon,[routeIcon] { routeIcon->setPixmap(UiIcons::icon(UiIcons::Glyph::Route,UiTheme::Brand).pixmap(22,22)); });
-    routeText->addWidget(routeTitle); homeRouteRow_->setToolTip("控制代理请求的分流行为");
-    routeLayout->addLayout(routeText, 1);
+    homeRouteRow_->setToolTip("控制代理请求的分流行为");
+    routeLayout->addWidget(routeTitle, 1, Qt::AlignVCenter);
     homeRouteValue_ = new QLabel; homeRouteValue_->setObjectName("homeControlValue"); homeRouteValue_->setTextFormat(Qt::PlainText); routeLayout->addWidget(homeRouteValue_, 0, Qt::AlignVCenter);
     auto* routeChevron = new QLabel("›"); routeChevron->setObjectName("homeControlChevron"); routeChevron->setTextFormat(Qt::PlainText); routeLayout->addWidget(routeChevron, 0, Qt::AlignVCenter);
-    // 浮层菜单（原型 03）：每次点击按当前 state.mode 重建勾选状态，菜单项即三个模式。
+    // 每次打开从观察状态重建；菜单是临时对象，避免嵌套事件循环。
     connect(homeRouteRow_, &QPushButton::clicked, this, [this] {
-        QMenu menu(homeRouteRow_);
-        menu.setObjectName("routeModeMenu");
+        for (auto* old:homeRouteRow_->findChildren<QMenu*>("routeModeMenu")) { old->setObjectName({}); old->close(); }
+        auto* menu=new QMenu(homeRouteRow_);
+        menu->setObjectName("routeModeMenu");
+        auto* choices=new QActionGroup(menu); choices->setExclusive(true);
         for (const auto& mode : QList<QPair<QString,QString>>{{"规则模式","rule"},{"全局模式","global"},{"直连模式","direct"}}) {
-            auto* action = menu.addAction(mode.first);
+            auto* action = menu->addAction(mode.first);
             action->setCheckable(true);
             action->setChecked(controller_->state().mode == mode.second);
             action->setProperty("mode", mode.second);
+            choices->addAction(action);
             connect(action, &QAction::triggered, this, [this, mode] { controller_->setMode(mode.second); updateState(); });
         }
-        menu.exec(homeRouteRow_->mapToGlobal(QPoint(0, homeRouteRow_->height())));
+        connect(menu,&QMenu::aboutToHide,menu,&QObject::deleteLater);
+        WidgetStyle::popupMenu(menu,homeRouteRow_->mapToGlobal(QPoint(0,homeRouteRow_->height())));
     });
     auto* firstSeparator=new QFrame; firstSeparator->setObjectName("homeControlSeparator"); firstSeparator->setFixedHeight(1); summary->addWidget(firstSeparator);
     summary->addWidget(homeRouteRow_);
     auto* secondSeparator=new QFrame; secondSeparator->setObjectName("homeControlSeparator"); secondSeparator->setFixedHeight(1); summary->addWidget(secondSeparator);
 
-    // ③ 连通性测试：结果/测试目标 + 「开始测试」，行尾箭头进网站测试页。
-    auto* connectivityRow = new QWidget; connectivityRow->setObjectName("homeControlRow"); connectivityRow->setMinimumHeight(UiTheme::RowHeight);
+    // ③ 连通性测试：只读测当前浏览策略组的所有可测成员。
+    auto* connectivityRow = new QWidget; connectivityRow->setObjectName("homeControlRow"); connectivityRow->setFixedHeight(UiTheme::RowHeight);
     auto* connectivityLayout = new QHBoxLayout(connectivityRow); connectivityLayout->setContentsMargins(0, 3, 0, 3); connectivityLayout->setSpacing(10);
     auto* probeIcon=new QLabel; probeIcon->setFixedSize(22,22); probeIcon->setPixmap(UiIcons::icon(UiIcons::Glyph::Gauge,UiTheme::Brand).pixmap(22,22)); connectivityLayout->addWidget(probeIcon);
     connect(UiTheme::notifier(),&UiTheme::AppearanceNotifier::changed,probeIcon,[probeIcon] { probeIcon->setPixmap(UiIcons::icon(UiIcons::Glyph::Gauge,UiTheme::Brand).pixmap(22,22)); });
-    auto* connectivityText = new QVBoxLayout; connectivityText->setSpacing(2);
     auto* connectivityLabel = new QLabel("连通性测试"); connectivityLabel->setObjectName("homeControlTitle"); connectivityLabel->setTextFormat(Qt::PlainText);
-    homeConnectivityCaption_ = new ElidedLabel("尚未测试", this); homeConnectivityCaption_->setObjectName("homeControlMeta"); homeConnectivityCaption_->setProperty("secondary", true); homeConnectivityCaption_->setTextFormat(Qt::PlainText); homeConnectivityCaption_->setSizePolicy(QSizePolicy::Ignored, QSizePolicy::Preferred);
-    connectivityText->addWidget(connectivityLabel); connectivityText->addWidget(homeConnectivityCaption_);
-    connectivityLayout->addLayout(connectivityText, 1);
-    homeConnectivityResult_ = new ElidedLabel(this); homeConnectivityResult_->setObjectName("homeConnectivity"); homeConnectivityResult_->hide();
+    connectivityLayout->addWidget(connectivityLabel, 1, Qt::AlignVCenter);
     homeConnectivityButton_ = new QPushButton("开始测试", this); homeConnectivityButton_->setObjectName("homeConnectivityTest"); homeConnectivityButton_->setProperty("quiet", true); homeConnectivityButton_->setAutoDefault(false); connectivityLayout->addWidget(homeConnectivityButton_, 0, Qt::AlignVCenter);
-    connect(homeConnectivityButton_, &QPushButton::clicked, this, [this] { if (controller_->connectivity()->running()) controller_->cancelConnectivityProbe(); else controller_->runConnectivityProbe(); updateHome(); });
-    homeConnectivityLink_ = new QToolButton(this); homeConnectivityLink_->setObjectName("homeConnectivityOpen"); homeConnectivityLink_->setText("›"); homeConnectivityLink_->setProperty("quiet", true); homeConnectivityLink_->setToolTip("打开网站测试页查看各目标结果"); connectivityLayout->addWidget(homeConnectivityLink_, 0, Qt::AlignVCenter);
-    connect(homeConnectivityLink_, &QToolButton::clicked, this, [this] { navigate(Route{ViewIds::Data, kNoCategory, HomeAnchor::Control, int(ViewIds::DataTab::Tests)}); });
-    connect(const_cast<ConnectivityProbe*>(controller_->connectivity()), &ConnectivityProbe::changed, this, &MainWindow::updateHome);
+    connect(homeConnectivityButton_, &QPushButton::clicked, this, [this] {
+        if (controller_->homeGroupTestStatus().value("running").toBool()) controller_->cancelHomeGroupTests();
+        else controller_->startHomeGroupTests(selectedGroup_);
+        updateHome();
+    });
+    connect(controller_, &AppController::homeGroupTestsChanged, this, &MainWindow::updateHome);
+    // RowHeight 是视觉下限；开关和图标按钮含内边距后可能更高。
+    // 按三个实际控件的上界统一行高，避免 Qt 单独撑开首行。
+    const auto syncControlRowHeight=[this,currentRow,connectivityRow] {
+        const int height=std::max({UiTheme::RowHeight,proxyEnabled_->sizeHint().height()+6,
+            homeConnectivityButton_->sizeHint().height()+6,overviewTitle_->sizeHint().height()+6});
+        currentRow->setFixedHeight(height);
+        homeRouteRow_->setFixedHeight(height);
+        connectivityRow->setFixedHeight(height);
+    };
+    syncControlRowHeight();
+    connect(UiTheme::notifier(),&UiTheme::AppearanceNotifier::changed,currentRow,syncControlRowHeight);
     summary->addWidget(connectivityRow);
-    // 内核与接管观测：只读一行，随当前代理行一起显示（不是两行、也不是开关）。
-    proxyLabel_ = new QLabel; proxyLabel_->setObjectName("secondaryText"); proxyLabel_->setTextFormat(Qt::PlainText); proxyLabel_->setWordWrap(true); proxyLabel_->hide();
-    summary->addWidget(proxyLabel_);
     layout->addWidget(control);
     // 对象内结果（P4.1）：挂到「更多运行信息」抽屉之前的位置无法保证可见，改挂在控制区之后——
     // 「请先激活订阅」这类结论恰恰出现在控制区被隐藏的时候，所以它按原设计留在面板外。
@@ -156,58 +163,30 @@ void MainWindow::updateHome() {
     const auto& current=controller_->state();
     const bool hasActive=!current.activeProfile.isEmpty();
     if (auto* empty=findChild<QWidget*>("prototypeHomeEmpty")) { const bool noProfiles=controller_->profiles().isEmpty(); empty->setVisible(noProfiles); nodeSection_->setVisible(!noProfiles); }
-    // K5（原型 01）：首页固定五段，控制卡在任何状态下都可见——没有订阅时三行
-    // 分别显示「尚未连接 / 规则模式 / 尚未测试」，不用整卡空态替换。
+    // 控制卡在任何状态下都保持三行；技术状态和测试进度不额外占行。
     findChild<QWidget*>("homeControlCard")->setVisible(true);
     findChild<QWidget*>("homeInlineStat")->hide();
-    // 控制区第 1 行：当前成员名 + 「订阅 · 选择方式」 + 状态句。
-    if (homeCurrentMeta_ && homeStateLine_) {
-        const Profile* active=nullptr; for (const auto& profile:controller_->profiles()) if (profile.id==current.activeProfile) active=&profile;
+    // 名称只读；实现状态由 Controller 和全局状态栏维护。
+    if (overviewTitle_) {
         const auto node = controller_->homeNode();
         overviewTitle_->setText(hasActive&&current.ready ? (node.isEmpty() ? QString("没有唯一当前节点") : node) : QString("未连接"));
-        const auto mode = current.mode=="global" ? QString("全局") : current.mode=="direct" ? QString("直连") : QString("规则");
-        homeCurrentMeta_->setText(hasActive ? (active ? active->name : QString("订阅未加载")) + " · " + mode : QString("未订阅"));
-        homeCurrentMeta_->setVisible(false);
-        // 状态句：内核 / 接管 / 可达 三段，只报告观测（P3）。
-        const auto core = current.core==CoreState::Running ? (current.ready?QString("内核运行中"):QString("正在确认内核")) : current.core==CoreState::Starting ? QString("内核启动中") : current.core==CoreState::Stopping ? QString("正在停止内核") : current.core==CoreState::Failed ? QString("内核失败") : QString("内核已停止");
-        const auto takeover = current.tunObserved ? QString("TUN 已接管") : current.proxy==ProxyState::Owned ? QString("系统代理已接管") : current.proxy==ProxyState::External ? QString("系统代理由其他程序管理") : QString("未接管流量");
-        const auto probe = controller_->connectivity()->result().value("status").toString();
-        const auto reach = probe=="ok" ? QString("目标可达 · ") + QString::number(controller_->connectivity()->result().value("delay").toInt()) + " ms"
-            : probe=="failed" ? QString("目标不可达")
-            : probe=="running" ? QString("目标测试中…") : QString();
-        const auto reason = current.core==CoreState::Failed && !current.lastError.isEmpty() ? QString("：") + current.lastError : QString();
-        homeStateLine_->setText(core + reason + " · " + takeover + (reach.isEmpty() ? QString() : " · " + reach));
-        homeStateLine_->setToolTip(homeStateLine_->text());
-        const auto detail=homeStateLine_->text();
-        homeStateLine_->setText(current.ready?(current.tunObserved?QString("TUN 已接管"):current.proxy==ProxyState::Owned?QString("系统代理已接管"):current.proxy==ProxyState::External?QString("外部系统代理"):QString("系统代理未开启"))+(active?" · "+active->name:QString()):QString("未连接"));
-        homeStateLine_->setToolTip(detail);
-        homeStateLine_->setVisible(current.core==CoreState::Failed||current.proxy==ProxyState::External||current.readOnly);
-        if (current.core==CoreState::Failed) homeStateLine_->setText("连接失败 · "+current.lastError);
     }
     // 控制区第 2 行：当前路由方式。
     if (homeRouteValue_) homeRouteValue_->setText(current.mode=="global"?"全局模式":current.mode=="direct"?"直连模式":"规则模式");
     homeRouteRow_->setEnabled(hasActive && current.ready && !current.busy && !current.exiting && !current.readOnly);
-    // 控制区第 3 行：连通性结果与测试按钮。
-    if (homeConnectivityButton_ && homeConnectivityLink_ && homeConnectivityCaption_) {
-        const auto* probe = controller_->connectivity(); const auto value = probe->result();
-        const auto status = value.value("status").toString();
-        QString text;
-        if (status == "running") text = QString("测试中…");
-        else if (status == "ok") {
-            const auto measured = QDateTime::fromString(value.value("measured_utc").toString(), Qt::ISODate).toLocalTime();
-            text = QString("%1 ms · %2").arg(value.value("delay").toInt()).arg(measured.isValid() ? measured.toString("HH:mm:ss") : QString("时间未知"));
-            if (probe->stale()) text += " · 已过期";
-        }
-        else if (status == "failed") text = QString("失败 · ") + (value.value("error").toString().isEmpty() ? QString("原因未知") : value.value("error").toString());
-        else text = QString("尚未测试");
-        homeConnectivityCaption_->setText(text); homeConnectivityCaption_->setVisible(!value.isEmpty());
-        homeConnectivityCaption_->setToolTip(value.isEmpty() ? QString("测试所选节点到 %1 的响应延迟；只读，不改变节点选择").arg(controller_->settings().testUrl) : value.value("error").toString().isEmpty() ? value.value("url").toString() : value.value("error").toString());
-        const bool ready = hasActive && current.ready && !current.busy && !current.exiting && !current.readOnly;
-        homeConnectivityButton_->setText(QString()); homeConnectivityButton_->setIcon(UiIcons::icon(status=="running"?UiIcons::Glyph::Close:UiIcons::Glyph::Gauge,UiTheme::Brand)); homeConnectivityButton_->setAccessibleName(status=="running"?"取消连通测试":"测试当前节点连通性");
-        homeConnectivityButton_->setEnabled(status == "running" || ready);
-        homeConnectivityButton_->setToolTip(ready ? "就地测试当前叶子节点到测试地址的响应延迟" : "内核就绪后可测试连通性");
-        homeConnectivityLink_->setVisible(false);
-        homeConnectivityLink_->setEnabled(true);
+    // 测试结果和进度留在下方成员列表，控制行只提供启动/停止动作。
+    if (homeConnectivityButton_) {
+        const auto test=controller_->homeGroupTestStatus();
+        const bool running=test.value("running").toBool();
+        const bool sameProfile=profilesCombo_ && profilesCombo_->currentData().toString()==current.activeProfile;
+        const auto group=controller_->proxies().value(selectedGroup_).toObject();
+        const bool ready=hasActive && sameProfile && group.value("all").isArray()
+            && current.ready && !current.busy && !current.exiting && !current.readOnly;
+        homeConnectivityButton_->setText(QString());
+        homeConnectivityButton_->setIcon(UiIcons::icon(running?UiIcons::Glyph::Close:UiIcons::Glyph::Gauge,UiTheme::Brand));
+        homeConnectivityButton_->setAccessibleName(running?"停止本组测速":"测试当前策略组全部节点");
+        homeConnectivityButton_->setEnabled(running || ready);
+        homeConnectivityButton_->setToolTip(running?"停止本组测速":ready?"测试当前策略组所有可测成员":"连接并浏览当前配置后可测速");
     }
     if (homeInlineStat_) {
         int activeCount = 0; const auto metrics = controller_->homeMetrics()->snapshot();
@@ -222,7 +201,8 @@ void MainWindow::updateHome() {
     }
     // 列表底部提示行：只在内核未就绪时给一句下一步，就绪后为空。
     const auto& state = controller_->state();
-    const auto text = !state.ready ? "添加并使用订阅，或启动内核后即可选择节点。" : QString();
+    const auto text = controller_->profiles().isEmpty() || state.ready ? QString()
+        : state.activeProfile.isEmpty() ? QString("使用配置后即可浏览节点。") : QString("连接后即可浏览节点。");
     homeSelection_->setToolTip(state.ready ? QString() : text); homeSelection_->setText(text);
 }
 

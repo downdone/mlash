@@ -40,6 +40,27 @@ class WebsiteTestCases : public QObject {
     Q_OBJECT
 private slots:
     void initTestCase() { QApplication::setFont(QFont("Microsoft YaHei UI",9)); }
+    void nodeSwitchKeepsBoundedResultsUntilExplicitClear() {
+        MockHttp server; QVERIFY(server.listen(QHostAddress::LocalHost,0));
+        server.handler=[](const QByteArray& request) {
+            const auto node=requestUrl(request).path().contains("/node-B/") ? 91 : 42;
+            return HttpResponse{200,QJsonDocument(QJsonObject{{"delay",node}}).toJson()};
+        };
+        MihomoClient api; api.configure(server.serverPort(),"isolated");
+        WebsiteTests tests(&api,nullptr,targets(1));
+        tests.start("node-A"); QTRY_VERIFY(!tests.running());
+        QCOMPARE(tests.result("0").delay,42);
+        tests.selectNode("node-B"); QCOMPARE(tests.result("0").status,WebsiteResult::Untested);
+        tests.start("node-B"); QTRY_VERIFY(!tests.running()); QCOMPARE(tests.result("0").delay,91);
+        tests.selectNode("node-A"); QCOMPARE(tests.result("0").delay,42);
+        for (int i=0;i<9;++i) {
+            const auto node=QString("node-%1").arg(i);
+            tests.start(node); QTRY_VERIFY(!tests.running());
+        }
+        tests.selectNode("node-A"); QCOMPARE(tests.result("0").status,WebsiteResult::Untested);
+        tests.clear(); QCOMPARE(tests.node(),QString());
+        tests.selectNode("node-B"); QCOMPARE(tests.result("0").status,WebsiteResult::Untested);
+    }
     void resultDetailsAreFrozenAndDoNotStartRequests() {
         QTemporaryDir data; AppController c(data.path(),true); QSignalSpy initialized(&c,&AppController::initialized); c.initialize(); QTRY_COMPARE(initialized.size(),1); MockHttp server; QVERIFY(server.listen(QHostAddress::LocalHost)); int delay=42; server.handler=[&](const QByteArray&) { return HttpResponse{200,QJsonDocument(QJsonObject{{"delay",delay}}).toJson()}; }; c.findChild<MihomoClient*>()->configure(server.serverPort(),"fixture"); auto& state=const_cast<AppState&>(c.state()); state.ready=true; state.core=CoreState::Running; const_cast<QJsonObject&>(c.proxies())={{"Leaf",QJsonObject{{"type","Http"}}}};
         WebsiteTestsPage page(&c); page.resize(900,600); page.show(); page.setActive(true); QToolButton* button=nullptr; for (auto* item:page.findChildren<QToolButton*>("websiteResultDetails")) if (item->property("targetId").toString()=="github") button=item; QVERIFY(button); QVERIFY(!button->icon().isNull()); QVERIFY(button->accessibleName().contains("GitHub")); button->click(); QPointer<QDialog> dialog=page.findChild<QDialog*>("websiteResultSnapshot"); QVERIFY(dialog); auto* evidence=dialog->findChild<QPlainTextEdit*>("websiteResultEvidence"); QVERIFY(evidence->isReadOnly()); QVERIFY(evidence->toPlainText().contains("尚未开始")); QVERIFY(evidence->toPlainText().contains("https://github.com")); QVERIFY(server.requests.isEmpty()); dialog->reject(); QTRY_VERIFY(dialog.isNull());
@@ -58,7 +79,7 @@ private slots:
     void customTargetEditorPersistenceAndReset() {
         QTemporaryDir data; ProfileStore store(data.path(),createPlatformServices()); QVERIFY(store.load().result.ok); Settings settings; settings.startCore=false; QVERIFY(store.save(settings,{}).ok);
         AppController controller(data.path(),true); QSignalSpy initialized(&controller,&AppController::initialized), finished(&controller,&AppController::operationFinished); controller.initialize(); QTRY_COMPARE(initialized.size(),1); MainWindow window(&controller); window.show(); window.setPage(7);
-        auto* edit = window.findChild<QPushButton*>("editWebsiteTargets"); QVERIFY(edit); edit->click(); QPointer<WebsiteTargetsDialog> dialog = window.findChild<WebsiteTargetsDialog*>(); QVERIFY(dialog); auto* table = dialog->findChild<QTableWidget*>("websiteTargetsTable"); QCOMPARE(table->rowCount(),12); table->item(0,0)->setText("Cancelled"); QTimer::singleShot(0,[] { if (auto* box=qobject_cast<QMessageBox*>(QApplication::activeModalWidget())) box->button(QMessageBox::Yes)->click(); }); dialog->reject(); QTRY_VERIFY(dialog.isNull()); QVERIFY(controller.settings().websiteTargets.isEmpty()); QCOMPARE(finished.size(),0);
+        auto* edit = window.findChild<QPushButton*>("editWebsiteTargets"); QVERIFY(edit); edit->click(); QPointer<WebsiteTargetsDialog> dialog = window.findChild<WebsiteTargetsDialog*>(); QVERIFY(dialog); QVERIFY(dialog->isVisible()); QVERIFY(dialog->property("embeddedTask").toBool()); QVERIFY(window.findChild<QWidget*>("taskWorkspace")->isVisible()); auto* table = dialog->findChild<QTableWidget*>("websiteTargetsTable"); QCOMPARE(table->rowCount(),12); table->item(0,0)->setText("Cancelled"); QTimer::singleShot(0,[] { if (auto* box=qobject_cast<QMessageBox*>(QApplication::activeModalWidget())) box->button(QMessageBox::Yes)->click(); }); dialog->reject(); QTRY_VERIFY(dialog.isNull()); QVERIFY(controller.settings().websiteTargets.isEmpty()); QCOMPARE(finished.size(),0); QTRY_VERIFY(edit->isVisible());
         edit->click(); dialog = window.findChild<WebsiteTargetsDialog*>(); QVERIFY(dialog); table = dialog->findChild<QTableWidget*>("websiteTargetsTable"); dialog->findChild<QPushButton*>("addWebsiteTarget")->click(); QCOMPARE(table->rowCount(),13); table->closePersistentEditor(table->item(12,0)); table->setCurrentCell(0,0); table->item(12,0)->setText("Custom service"); table->item(12,1)->setText("https://example.test/check"); dialog->findChild<QDialogButtonBox*>()->button(QDialogButtonBox::Save)->click(); QTRY_VERIFY(dialog.isNull()); QTRY_COMPARE(finished.size(),1); QVERIFY(finished[0][0].toBool()); QCOMPARE(controller.websiteTests()->targets().size(),13); QCOMPARE(window.findChildren<QFrame*>("websiteCard").size(),13);
         const auto loaded = store.load(); QVERIFY(loaded.result.ok); QCOMPARE(loaded.settings.websiteTargets.size(),13); settings = loaded.settings; QByteArray before; QVERIFY(readFile(data.path()+"/state.dat",before).ok); auto malformed = settings.websiteTargets; auto bad = malformed[0].toObject(); bad["url"] = "not-a-url"; malformed[0] = bad; settings.websiteTargets=malformed; QVERIFY(!store.save(settings,{}).ok); QByteArray after; QVERIFY(readFile(data.path()+"/state.dat",after).ok); QCOMPARE(after,before);
         AppController reopened(data.path(),true); QSignalSpy again(&reopened,&AppController::initialized); reopened.initialize(); QTRY_COMPARE(again.size(),1); QCOMPARE(reopened.websiteTests()->targets().size(),13); QVERIFY(!reopened.websiteTests()->running());

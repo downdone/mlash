@@ -1,0 +1,244 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Mlash · 订阅优先交互原型</title>
+<style>
+:root{font-family:"Noto Sans SC","Microsoft YaHei UI",system-ui,sans-serif;color:#1e2a39;background:#edf0f4;font-size:14px}
+*{box-sizing:border-box}body{margin:0}button,input{font:inherit}button{cursor:pointer}
+.app{height:100vh;min-height:620px;min-width:720px;display:flex;flex-direction:column;background:#fff;overflow:hidden}
+.chrome{height:37px;flex:none;display:flex;align-items:center;justify-content:space-between;padding:0 15px;background:#f8f9fb;border-bottom:1px solid #e7ebf0;font-size:12px;color:#657387}
+.shell{flex:1;min-height:0;display:flex}
+.side{width:250px;flex:none;padding:23px 14px 16px;display:flex;flex-direction:column;background:#f3f5f8;border-right:1px solid #e1e6ed}
+.brand{display:flex;align-items:center;gap:11px;padding:0 11px 31px;font-size:21px;font-weight:700;letter-spacing:-.02em}
+.mark{width:32px;height:32px;display:grid;place-items:center;color:white;background:#1169c2;border-radius:9px;font-size:18px}
+.nav{display:flex;flex-direction:column;gap:8px}.nav button{height:50px;width:100%;border:0;border-radius:11px;background:transparent;display:flex;align-items:center;gap:13px;padding:0 14px;text-align:left;color:#4a5a6f;font-size:15px;font-weight:550}
+.nav button:hover{background:#e9edf3}.nav button.active{background:#dfedfc;color:#075fb0;font-weight:700}
+.nav svg{width:20px;height:20px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
+.side-note{margin-top:auto;padding:12px 11px 0;border-top:1px solid #dce3eb;font-size:12px;color:#8a96a5;line-height:1.5}
+.main{flex:1;min-width:0;display:flex;flex-direction:column}
+.page-head{height:83px;flex:none;padding:0 32px;display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid #e7ebf0}
+h1{margin:0;font-size:25px;letter-spacing:-.03em}.page-actions{display:flex;gap:9px;align-items:center}
+.button{min-height:36px;padding:0 13px;border-radius:9px;border:1px solid #d7e0ea;background:#fff;color:#36536f;font-size:13px;font-weight:600;white-space:nowrap}
+.button:hover{border-color:#a9cbea;background:#f5f9fd}.button:disabled{color:#a4b0bd;background:#f7f8fa;cursor:default}
+.button.primary{background:#0869c4;border-color:#0869c4;color:white}.button.primary:hover{background:#075db0}
+.button.quiet{border-color:transparent;background:transparent}.button.quiet:hover{background:#edf3f9}
+.import-row{display:flex;gap:9px;align-items:center;max-width:1060px;margin:22px 32px 0}
+.url-wrap{position:relative;flex:1;min-width:0}.url-wrap input{height:43px;width:100%;padding:0 48px 0 14px;border-radius:10px;border:1px solid #dce4ed;outline:none;color:#1e2a39}
+.url-wrap input:focus{border-color:#72a8df;box-shadow:0 0 0 3px #1477d11c}.url-wrap input::placeholder{color:#9ba7b5}
+.paste{position:absolute;right:5px;top:4px;width:35px;height:35px;border:0;border-radius:7px;background:transparent;color:#667a90;font-size:17px}.paste:hover{background:#eff5fb}
+.body{flex:1;min-height:0;overflow:auto;padding:24px 32px 50px}
+.section-head{max-width:1080px;display:flex;justify-content:space-between;align-items:end;margin:5px 0 12px}
+.section-head h2{font-size:15px;margin:0;font-weight:700}.section-head span{color:#8a97a6;font-size:12px}
+.grid{max-width:1080px;display:grid;grid-template-columns:repeat(auto-fill,minmax(min(100%,370px),1fr));gap:14px;margin-bottom:34px}
+.card{position:relative;border:1px solid #dfe6ee;border-radius:12px;background:white;box-shadow:0 1px 2px #1e3a5a09;min-height:155px;overflow:hidden}
+.card.current{border-color:#7eb5ed;box-shadow:inset 3px 0 0 #1476d0,0 1px 3px #1e3a5a0c}
+.card:hover{border-color:#a9c9e8;box-shadow:0 4px 15px #1e3a5a0d}
+.card-main{display:block;width:100%;border:0;background:transparent;text-align:left;padding:17px 60px 16px 19px;min-height:120px}
+.card-main:hover{background:#fafcff}.card-main:focus-visible,.icon:focus-visible,.button:focus-visible,.nav button:focus-visible{outline:2px solid #0869c4;outline-offset:-2px}
+.name-line{display:flex;align-items:center;gap:8px;min-width:0}.name{font-size:17px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.tag{font-size:11px;padding:3px 8px;border-radius:99px;color:#167247;background:#eaf6ee;font-weight:650;white-space:nowrap}
+.tag.pending{color:#93621d;background:#fff2df}.meta{display:flex;justify-content:space-between;gap:10px;color:#8491a1;font-size:12px;margin-top:10px}
+.meta .origin{overflow:hidden;white-space:nowrap;text-overflow:ellipsis}.meta2{font-size:12px;color:#6e7e90;margin-top:13px;display:flex;justify-content:space-between}
+.bar{height:3px;background:#edf1f5;margin-top:11px;border-radius:3px;overflow:hidden}.bar i{display:block;height:100%;background:#61b58a}
+.card-tools{position:absolute;top:12px;right:12px;display:flex;gap:1px}.icon{width:31px;height:31px;border:0;background:transparent;border-radius:7px;color:#667b91;font-size:19px;line-height:1}
+.icon:hover{background:#eaf2fc;color:#075fb0}.icon.spin{animation:turn 1s linear infinite}@keyframes turn{to{transform:rotate(360deg)}}
+.candidate{border-top:1px solid #f2e1c3;background:#fffbf5;padding:10px 15px;display:flex;align-items:center;gap:10px;color:#8e611f;font-size:11px}
+.candidate span{flex:1}.candidate button{border:0;background:transparent;color:#0869c4;font-weight:700;padding:3px}
+.empty{max-width:650px;border:1px dashed #cfd9e5;border-radius:12px;padding:28px;text-align:center;color:#8290a0}
+.status{min-height:32px;border-top:1px solid #e7ebf0;background:#fafbfc;padding:8px 18px;color:#8390a1;font-size:11px}
+.menu{position:fixed;z-index:10;min-width:178px;padding:5px;background:white;border:1px solid #dbe3eb;border-radius:10px;box-shadow:0 12px 32px #233b5726}
+.menu.hidden{display:none}.menu button{display:block;width:100%;text-align:left;border:0;border-radius:6px;padding:9px 11px;background:transparent;color:#314459;font-size:12px}.menu button:hover{background:#eff5fd}.menu .danger{color:#b42332}
+.detail-head{display:flex;align-items:center;gap:12px;padding:18px 32px 16px}.detail-sub{color:#8491a1;font-size:12px}.detail-state{margin-left:auto;color:#52718f;font-size:12px;white-space:nowrap}
+.tabs{display:flex;gap:2px;padding:0 27px;border-bottom:1px solid #e7ebf0}.tabs button{height:41px;border:0;border-bottom:2px solid transparent;background:transparent;padding:0 14px;color:#697a8f;font-size:13px}
+.tabs button.active{border-bottom-color:#0869c4;color:#0869c4;font-weight:700}
+.tabs.hidden{display:none}
+.detail-body{max-width:1030px;padding:24px 32px 44px}.detail-body h3{margin:0;font-size:18px}.detail-body p{color:#748397;line-height:1.6}
+.content-top{display:flex;align-items:center;gap:12px;justify-content:space-between;margin-bottom:17px}.content-top .sub{font-size:12px;color:#8190a0;margin-top:5px}
+.content-top input{width:235px;height:35px;padding:0 11px;border:1px solid #dce4ed;border-radius:8px;outline:none}.content-top input:focus{border-color:#72a8df}
+.group-label{font-size:12px;color:#77889a;margin:22px 0 9px}.content-list{border:1px solid #e1e7ef;border-radius:10px;overflow:hidden}
+.content-row{min-height:58px;display:flex;align-items:center;gap:12px;padding:8px 13px;border-bottom:1px solid #edf0f3}.content-row:last-child{border:0}
+.row-symbol{width:31px;height:31px;display:grid;place-items:center;border-radius:8px;background:#eef4fa;color:#386e9c;font-size:17px;flex:none}
+.row-copy{min-width:0;flex:1}.row-copy strong{display:block;font-size:13px;font-weight:650;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.row-copy small{display:block;color:#8391a2;font-size:11px;margin-top:3px}
+.row-end{color:#8795a4;font-size:11px}.row-action{border:0;background:transparent;border-radius:7px;color:#2672ba;padding:7px 9px;font-size:12px}.row-action:hover{background:#edf5fc}
+.inline-pane,.content-note{border:1px solid #dce6f0;border-radius:10px;background:#f8fbfe;padding:14px 16px;color:#536b83;font-size:12px;margin-top:15px}
+.inline-pane strong{display:block;color:#24384d;font-size:13px;margin-bottom:8px}.inline-pane .button{margin-top:10px}
+.field-row{display:flex;align-items:center;justify-content:space-between;gap:15px;min-height:52px;border-bottom:1px solid #e9eef4;font-size:13px}.field-row:last-child{border:0}.field-row small{color:#8391a2;font-size:11px}.field-row input{width:240px;max-width:55%;height:35px;padding:0 10px;border:1px solid #dce4ed;border-radius:8px}
+.field-card{border:1px solid #e1e7ef;border-radius:10px;background:#fff;padding:0 16px}.detail-body textarea{display:block;width:100%;min-height:86px;margin-top:12px;padding:10px;border:1px solid #dce4ed;border-radius:8px;resize:vertical;font:inherit}
+.compare{display:grid;grid-template-columns:1fr 1fr;gap:12px}.compare>div{border:1px solid #e1e7ef;border-radius:10px;padding:16px}.compare strong{font-size:13px}.compare small{display:block;margin-top:8px;color:#8391a2}.compare-actions{display:flex;justify-content:flex-end;gap:8px;margin-top:18px}
+.list-view{flex:1;min-height:0;display:flex;flex-direction:column}.list-view.hidden{display:none}
+.detail-view{display:none;flex:1;min-height:0;overflow:auto}.detail-view.visible{display:block}
+@media(max-width:960px){.side{width:225px}.page-head{padding:0 25px}.import-row{margin-left:25px;margin-right:25px}.body{padding:22px 25px}.grid{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+<div class="app">
+  <div class="chrome"><span>Mlash · 订阅交互设计</span><span aria-hidden="true">—　□　×</span></div>
+  <div class="shell">
+    <aside class="side">
+      <div class="brand"><span class="mark">M</span>Mlash</div>
+      <nav class="nav" aria-label="一级导航">
+        <button data-nav="首页"><svg viewBox="0 0 24 24"><path d="m3 10 9-7 9 7M5 9v11h14V9M9 20v-7h6v7"/></svg>首页</button>
+        <button class="active" data-nav="订阅"><svg viewBox="0 0 24 24"><path d="M3 7h7l2 2h9v10H3zM3 7V5h7"/></svg>订阅</button>
+        <button data-nav="数据"><svg viewBox="0 0 24 24"><path d="M2 13h4l2-6 4 11 3-8 2 3h5"/></svg>数据</button>
+        <button data-nav="设置"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M12 2v3m0 14v3M2 12h3m14 0h3M5 5l2 2m10 10 2 2M19 5l-2 2M7 17l-2 2"/></svg>设置</button>
+      </nav>
+      <div class="side-note">订阅页先完成日常选择与更新。规则、DNS 和节点编辑按需进入。</div>
+    </aside>
+    <main class="main">
+      <header class="page-head"><h1 id="pageTitle">订阅</h1><div class="page-actions"><button class="button" id="updateAll">更新全部</button><button class="button quiet" id="addLocal">本地文件…</button></div></header>
+      <section class="list-view" id="listView">
+        <div class="import-row"><div class="url-wrap"><input id="url" placeholder="粘贴订阅链接" aria-label="订阅链接"><button class="paste" id="paste" aria-label="粘贴链接">▤</button></div><button class="button primary" id="import" disabled>导入</button></div>
+        <div class="body">
+          <div class="section-head"><h2>全部配置</h2><span id="profileCount"></span></div><div class="grid" id="profileCards"></div>
+        </div>
+      </section>
+      <section class="detail-view" id="detailView"><div class="detail-head"><button class="button quiet" id="back">‹ 返回订阅</button><span class="detail-sub" id="detailName"></span><span class="detail-state" id="detailStatus"></span></div><nav class="tabs" id="tabs"></nav><div class="detail-body" id="detailBody"></div></section>
+      <div class="status" id="status">原型只模拟操作，不下载、不写入配置，也不切换真实代理。</div>
+    </main>
+  </div>
+</div>
+<div class="menu hidden" id="menu"></div>
+<script>
+const items=[
+ {id:1,name:"日常订阅",kind:"remote",host:"subscription.example",updated:"今天 09:08",used:true,usedTraffic:"36.2 GB",totalTraffic:"100 GB",fraction:36,expires:"剩余 28 天",sourceLinked:true,candidate:false,updating:false},
+ {id:2,name:"备用订阅",kind:"remote",host:"backup.example",updated:"昨天 18:30",used:false,usedTraffic:"4.8 GB",totalTraffic:"50 GB",fraction:10,expires:"剩余 56 天",sourceLinked:true,candidate:false,updating:false},
+ {id:3,name:"本地测试",kind:"local",host:"local-example.yaml",updated:"11 月 15 日",used:false,sourceLinked:true,candidate:false,updating:false}
+];
+const preview=new URLSearchParams(location.search);
+if(preview.get("candidate")==="1")items[0].candidate=true;
+const state={mode:"list",detailId:1,detailTab:"节点与组",listScrollTop:0,returnFocus:".card-main"};
+const $=id=>document.getElementById(id);
+function escapeHtml(s){return String(s).replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#39;"}[c]));}
+function note(s){$("status").textContent=s;}
+function renderCard(item){
+ const card=document.createElement("article");card.className="card"+(item.used?" current":"");card.dataset.id=item.id;
+ const badge=(item.used?'<span class="tag">当前使用</span>':"")+(item.candidate?'<span class="tag pending">更新待应用</span>':"");
+ card.innerHTML='<button class="card-main" aria-label="使用 '+escapeHtml(item.name)+'"><div class="name-line"><span class="name">'+escapeHtml(item.name)+'</span>'+badge+'</div>'+
+ '<div class="meta"><span class="origin">'+escapeHtml(item.host)+'</span><span>'+escapeHtml(item.updated)+'</span></div>'+
+ (item.kind==="remote"?'<div class="meta2"><span>'+escapeHtml(item.usedTraffic)+' / '+escapeHtml(item.totalTraffic)+'</span><span>'+escapeHtml(item.expires)+'</span></div><div class="bar"><i style="width:'+item.fraction+'%"></i></div>':'')+'</button>'+
+ '<div class="card-tools">'+(item.sourceLinked?'<button class="icon refresh'+(item.updating?" spin":"")+'" aria-label="检查 '+escapeHtml(item.name)+' 的来源更新" title="检查来源更新">↻</button>':"")+'<button class="icon more" aria-label="'+escapeHtml(item.name)+' 的更多操作" title="更多操作">⋯</button></div>'+
+ (item.candidate?'<div class="candidate"><span>已取得候选，当前运行版未改变</span><button class="review">查看</button><button class="apply">应用更新</button></div>':"");
+ card.querySelector(".card-main").onclick=()=>use(item);
+ card.querySelector(".more").onclick=e=>showMenu(e.currentTarget,item);
+ card.querySelector(".refresh")?.addEventListener("click",()=>update(item));
+ card.querySelector(".review")?.addEventListener("click",()=>openDetail(item,"候选变化",".review"));
+ card.querySelector(".apply")?.addEventListener("click",()=>applyCandidate(item));
+ return card;
+}
+function render(){
+ $("profileCards").replaceChildren();
+ items.forEach(item=>$("profileCards").append(renderCard(item)));
+ $("profileCount").textContent=items.length+" 个";
+ $("listView").classList.toggle("hidden",state.mode!=="list");
+ $("detailView").classList.toggle("visible",state.mode==="detail");
+ const viewed=items.find(x=>x.id===state.detailId);
+ $("pageTitle").textContent=state.mode==="list"?"订阅":viewed?.name||"配置内容";
+ $("updateAll").style.visibility=state.mode==="list"&&items.filter(x=>x.sourceLinked).length>1?"visible":"hidden";
+ $("addLocal").style.visibility=state.mode==="list"?"visible":"hidden";
+ if(state.mode==="detail")renderDetail();
+}
+function use(item){
+ if(item.used){note(item.name+" 已是当前使用配置。");return;}
+ items.forEach(x=>x.used=false);item.used=true;render();
+ note("原型：已选择 "+item.name+"；真实产品须等 Controller 回读成功后标为当前。");
+}
+function update(item){
+ if(item.updating)return;
+ item.updating=true;render();note("正在检查 "+item.name+" 的更新；其他订阅仍可操作。");
+ setTimeout(()=>{item.updating=false;item.candidate=true;render();note(item.name+" 有已验证候选，当前运行版未改变。");},850);
+}
+function applyCandidate(item){
+ if(!item.candidate){note("候选已不存在，请重新检查来源。");return;}
+ item.candidate=false;item.updated="刚刚";state.mode="list";render();
+ note("原型：更新已应用；真实产品必须等待校验和回读，失败保留原运行版本。");
+}
+function showMenu(anchor,item){
+ const menu=$("menu");menu.replaceChildren();
+ const entries=[["查看配置内容",()=>openDetail(item,"节点与组",".more")],["编辑订阅资料…",()=>openDetail(item,"资料与更新",".more")],...(item.kind==="remote"?[["分享订阅地址…",()=>note("分享需先提示地址含私人令牌，再由用户明确显示二维码；本地文件无此项。")]]:[]),["删除配置…",()=>note("真实产品须先确认删除对象和当前使用状态；取消不改变配置。")]];
+ entries.forEach(([label,run])=>{const b=document.createElement("button");b.textContent=label;if(label.startsWith("删除"))b.className="danger";b.onclick=()=>{menu.classList.add("hidden");run();};menu.append(b);});
+ const r=anchor.getBoundingClientRect();menu.style.left=Math.min(innerWidth-190,Math.max(8,r.left-140))+"px";menu.style.top=Math.min(innerHeight-entries.length*38-20,r.bottom+5)+"px";menu.classList.remove("hidden");
+}
+function openDetail(item,tab,returnFocus=".card-main"){
+ state.listScrollTop=$("listView").querySelector(".body").scrollTop;
+ state.returnFocus=returnFocus;state.mode="detail";state.detailId=item.id;state.detailTab=tab;
+ render();$("detailView").scrollTop=0;note("已打开 "+item.name+" 的"+tab+"；浏览内容不会切换当前使用配置。");
+}
+function contentRow(symbol,name,sub,end=""){
+ return '<div class="content-row"><span class="row-symbol">'+symbol+'</span><span class="row-copy"><strong>'+escapeHtml(name)+'</strong><small>'+escapeHtml(sub)+'</small></span>'+end+'</div>';
+}
+function renderDetail(){
+ const item=items.find(x=>x.id===state.detailId);if(!item){state.mode="list";render();note("配置已不存在，已返回订阅列表。");return;}
+ const tab=state.detailTab,settings=tab==="资料与更新",compare=tab==="候选变化";
+ $("detailName").textContent=item.host;
+ $("detailStatus").textContent=(item.used?"当前使用":"未使用")+" · "+(compare?"候选与已保存版对比":"查看已保存版本");
+ const tabs=["节点与组","规则","DNS","拨号链"];
+ $("tabs").classList.toggle("hidden",settings||compare);
+ $("tabs").innerHTML=settings||compare?"":tabs.map(t=>'<button class="'+(t===tab?"active":"")+'" data-tab="'+t+'">'+t+'</button>').join("");
+ $("tabs").querySelectorAll("button").forEach(b=>b.onclick=()=>{state.detailTab=b.dataset.tab;render();$("detailView").scrollTop=0;});
+ let html="";
+ if(tab==="节点与组"){
+  html='<div class="content-top"><div><h3>节点与组</h3><div class="sub">这里查看配置定义；切换当前节点在首页完成。</div></div><input id="contentSearch" placeholder="搜索组或节点" aria-label="搜索组或节点"></div>'+
+  '<div class="group-label">策略组 · 2 个预览</div><div class="content-list">'+
+  contentRow("◇","自动选择","按延迟选用 · 12 个成员",'<button class="row-action" data-inspect="自动选择">查看</button>')+
+  contentRow("◇","手动选择","手动选用 · 12 个成员",'<button class="row-action" data-inspect="手动选择">查看</button>')+'</div>'+
+  '<div class="group-label">节点 · 3 个预览</div><div class="content-list">'+
+  contentRow("🇯🇵","日本 · 01","VLESS / TLS",'<button class="row-action" data-inspect="日本 · 01">编辑</button>')+
+  contentRow("🇭🇰","香港 · 02","Shadowsocks",'<button class="row-action" data-inspect="香港 · 02">编辑</button>')+
+  contentRow("🇸🇬","新加坡 · 03","VLESS / TLS",'<button class="row-action" data-inspect="新加坡 · 03">编辑</button>')+'</div><div id="inlineInspect"></div>';
+ }else if(tab==="规则"){
+  html='<div class="content-top"><div><h3>规则</h3><div class="sub">覆盖规则可编辑；订阅原规则只读。</div></div><button class="button" id="addRule">添加覆盖规则</button></div>'+
+  '<div class="group-label">我的覆盖 · 2 条</div><div class="content-list">'+
+  contentRow("↪","example.org","DOMAIN-SUFFIX · DIRECT",'<button class="row-action" data-inspect="example.org">编辑</button>')+
+  contentRow("↪","example.exe","PROCESS-NAME · REJECT",'<button class="row-action" data-inspect="example.exe">编辑</button>')+'</div>'+
+  '<div class="group-label">订阅原规则 · 326 条</div><div class="content-list">'+
+  contentRow("▤","来源规则预览","只读 · 原始订阅不会被覆盖",'<button class="row-action" data-inspect="来源规则">查看</button>')+'</div><div id="inlineInspect"></div>';
+ }else if(tab==="DNS"){
+  html='<div class="content-top"><div><h3>DNS</h3><div class="sub">默认沿用订阅设置，需要时再启用覆盖。</div></div></div>'+
+  '<div class="field-card"><div class="field-row"><span>当前方式</span><strong id="dnsMode">沿用订阅</strong></div><div class="field-row"><span>自定义 DNS</span><button class="button" id="dnsToggle">启用覆盖</button></div></div><div id="dnsEditor"></div>';
+ }else if(tab==="拨号链"){
+  html='<div class="content-top"><div><h3>拨号链</h3><div class="sub">仅在此配置需要特殊上游时设置。</div></div></div>'+
+  '<div class="content-note">当前没有自定义拨号链。<button class="button" id="addChain">添加拨号链</button></div><div id="inlineInspect"></div>';
+ }else if(settings){
+  html='<div class="content-top"><div><h3>订阅资料与更新</h3><div class="sub">名称、来源、更新计划和下载方式使用同一份草稿。</div></div></div>'+
+  '<div class="field-card"><div class="field-row"><span>名称</span><input aria-label="名称" value="'+escapeHtml(item.name)+'"></div><div class="field-row"><span>来源</span><span>'+escapeHtml(item.host)+'　<button class="button" id="replaceSource">更换来源…</button></span></div><div class="field-row"><span>自动检查</span><button class="button" id="autoCheck">'+(item.kind==="remote"?"每 24 小时":"文件变化时")+'</button></div><div class="field-row"><span>下载方式</span><button class="button" id="downloadPolicy">直接连接</button></div></div><div class="content-note">更换来源及保存必须由 Controller 校验；旧运行版和草稿在失败时保留。</div>';
+ }else if(compare){
+  html='<div class="content-top"><div><h3>候选变化</h3><div class="sub">先对比，再决定是否替换；查看不会影响当前运行配置。</div></div></div>'+
+  (item.candidate?'<div class="compare"><div><strong>已保存版本</strong><small>当前继续使用 · '+escapeHtml(item.updated)+'</small></div><div><strong>待应用候选</strong><small>已检查来源 · 尚未生效</small></div></div><div class="content-note">变化摘要仅显示有界数量与名称。真实内容由 Controller 按快照身份生成；来源又变时需重新比较。</div><div class="compare-actions"><button class="button" id="skipCandidate">暂不应用</button><button class="button primary" id="applyFromCompare">应用更新</button></div>':'<div class="content-note">候选已不存在，请返回订阅列表重新检查来源。</div>');
+ }
+ $("detailBody").innerHTML=html;
+ $("contentSearch")?.addEventListener("input",e=>{$("detailBody").querySelectorAll(".content-row").forEach(row=>{row.style.display=row.textContent.toLowerCase().includes(e.target.value.trim().toLowerCase())?"":"none";});});
+ $("detailBody").querySelectorAll("[data-inspect]").forEach(b=>b.onclick=()=>{const name=b.dataset.inspect;$("inlineInspect").innerHTML='<div class="inline-pane"><strong>'+escapeHtml(name)+'</strong><span>在当前位置查看或编辑；保存和取消只影响此对象，不打开整屏弹窗。</span><br><button class="button" id="closeInline">关闭</button></div>';$("closeInline").onclick=()=>$("inlineInspect").replaceChildren();});
+ $("addRule")?.addEventListener("click",()=>{$("inlineInspect").innerHTML='<div class="inline-pane"><strong>添加覆盖规则</strong><input aria-label="规则内容" placeholder="例如 DOMAIN-SUFFIX,example.org,DIRECT"><br><button class="button" id="cancelInline">取消</button><button class="button primary" id="saveInline">保存规则</button></div>';$("cancelInline").onclick=()=>$("inlineInspect").replaceChildren();$("saveInline").onclick=()=>note("原型：规则草稿只在此处提交，真实产品需校验并保留失败输入。");});
+ $("dnsToggle")?.addEventListener("click",()=>{$("dnsMode").textContent="自定义覆盖 · 未保存";$("dnsEditor").innerHTML='<div class="inline-pane"><strong>上游 DNS · 每行一个</strong><textarea aria-label="上游 DNS" placeholder="https://dns.example/dns-query"></textarea><button class="button" id="cancelDns">取消</button><button class="button primary" id="saveDns">保存 DNS</button></div>';$("cancelDns").onclick=()=>renderDetail();$("saveDns").onclick=()=>note("原型：DNS 草稿待 Controller 校验，失败必须保留输入。");});
+ $("addChain")?.addEventListener("click",()=>{$("inlineInspect").innerHTML='<div class="inline-pane"><strong>添加拨号链</strong>在当前配置内编辑上游，不改变运行节点。<br><button class="button" id="cancelInline">取消</button></div>';$("cancelInline").onclick=()=>$("inlineInspect").replaceChildren();});
+ $("detailBody").querySelectorAll("#replaceSource,#autoCheck,#downloadPolicy").forEach(b=>b.onclick=()=>note("原型：此字段在同一订阅资料工作区编辑，保存前不改变来源或运行版。"));
+ $("skipCandidate")?.addEventListener("click",()=>{$("back").click();});
+ $("applyFromCompare")?.addEventListener("click",()=>applyCandidate(item));
+}
+$("back").onclick=()=>{
+ state.mode="list";render();$("listView").querySelector(".body").scrollTop=state.listScrollTop;
+ const card=Array.from($("profileCards").children).find(x=>x.dataset.id===String(state.detailId));
+ (card?.querySelector(state.returnFocus)||card?.querySelector(".card-main")||$("url")).focus();
+ note("已回到订阅列表。");
+};
+$("updateAll").onclick=()=>{items.filter(x=>x.sourceLinked).forEach(update);};
+$("addLocal").onclick=()=>note("原型：此处使用系统文件选择器导入本地 YAML。");
+$("url").oninput=e=>$("import").disabled=!e.target.value.trim();
+$("import").onclick=()=>{
+ let host;try{const u=new URL($("url").value.trim());if(!["https:","http:"].includes(u.protocol))throw Error();host=u.hostname;}catch{note("订阅链接无效；请输入 HTTP 或 HTTPS 地址。");return;}
+ items.push({id:Date.now(),name:"新订阅",kind:"remote",host,updated:"刚刚导入",used:false,usedTraffic:"—",totalTraffic:"—",fraction:0,expires:"未提供",sourceLinked:true,candidate:false,updating:false});
+ $("url").value="";$("import").disabled=true;render();note("原型：新订阅已加入列表；没有真实下载。");
+};
+$("paste").onclick=async()=>{try{const value=await navigator.clipboard.readText();$("url").value=value;$("import").disabled=!value;note("已粘贴链接，按“导入”确认。");}catch{note("浏览器未允许读取剪贴板，可直接粘贴到输入框。");}};
+document.addEventListener("keydown",e=>{if(e.key==="Escape")$("menu").classList.add("hidden");});
+document.addEventListener("click",e=>{if(!$("menu").contains(e.target)&&!e.target.closest(".more"))$("menu").classList.add("hidden");});
+document.querySelectorAll(".nav button").forEach(b=>b.onclick=()=>{document.querySelectorAll(".nav button").forEach(x=>x.classList.toggle("active",x===b));if(b.dataset.nav==="订阅"){state.mode="list";render();}else note("原型聚焦订阅页；点击“订阅”返回。");});
+render();
+if(preview.get("menu")==="1")setTimeout(()=>document.querySelector(".card .more")?.click(),0);
+if(preview.get("detail")==="nodes")openDetail(items[0],"节点与组");
+if(preview.get("detail")==="compare")openDetail(items[0],"候选变化");
+</script>
+</body>
+</html>

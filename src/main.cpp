@@ -23,10 +23,20 @@
 #include <QElapsedTimer>
 #include <QJsonDocument>
 #include <QJsonArray>
+#include <QKeyEvent>
+#include <QLineEdit>
 #include <QSslSocket>
+#include <QStackedWidget>
+#include <functional>
 
 int main(int argc, char** argv) {
     QElapsedTimer startup; startup.start();
+#ifdef Q_OS_WIN
+    // Choose Qt's gray-scale FreeType rasterizer before QPA initializes. Explicit
+    // platform choices (including offscreen tests) retain their precedence.
+    if (!qEnvironmentVariableIsSet("QT_QPA_PLATFORM"))
+        qputenv("QT_QPA_PLATFORM", "windows:fontengine=freetype");
+#endif
     QApplication app(argc, argv);
     mlash::WidgetStyle::install();
     app.setApplicationName("Mlash"); app.setOrganizationName("Mlash"); app.setApplicationVersion(MLASH_VERSION); app.setQuitOnLastWindowClosed(false);
@@ -60,6 +70,9 @@ int main(int argc, char** argv) {
     mlash::GuiHost gui(&controller, !smoke && tray.available());
     mlash::ProtocolImportQueue imports(&controller,&gui); QObject::connect(&protocolInbox,&mlash::ProtocolInbox::received,&imports,[&imports](const QString& link) { const auto accepted=imports.enqueue(link); if (!accepted.ok) QMessageBox::warning(nullptr,"Mlash",accepted.error); }); if (!importLink.isEmpty()) imports.enqueue(importLink);
     std::unique_ptr<mlash::QualificationRun> measurement;
+    bool smokeUiOk = true;
+    QJsonArray smokePages;
+    std::function<void(int)> captureSmokePage;
     auto showWindow = [&] { gui.show(); };
     QObject::connect(&tray, &mlash::TrayController::showWindow, &app, showWindow);
     QObject::connect(&tray, &mlash::TrayController::showPage, &app, [&](int page) { gui.show(page); });
@@ -81,22 +94,69 @@ int main(int argc, char** argv) {
                 mlash::runTask(&controller, [path, bytes] { return mlash::writeAtomic(path, bytes); }, [&controller](mlash::Result r) { if (!r.ok) controller.diagnostics()->append("error", r.error); });
             }
             const auto output = parser.value("screenshots-dir"); if (!output.isEmpty()) QDir().mkpath(output);
-            // 每次切页之间留 200ms：setPage() 只换栈索引，新页面的子控件几何要等
-            // 下一次布局请求处理完才更新，紧跟着抓图会拿到「新页面、旧几何」。
-            for (int page = 0; page < 8; ++page) QTimer::singleShot(250 + page * 200, &app, [&, page, output] {
-                if (auto* window = gui.window()) {
-                    window->setPage(page);
-                    // Let the newly visible scroll area complete its resize/layout pass.
-                    if (!output.isEmpty()) QTimer::singleShot(50, &app, [&, page, output] {
-                        if (auto* readyWindow=gui.window()) readyWindow->grab().save(output + QString("/page-%1.png").arg(page));
-                    });
+            // 切页、确认路由、截图必须串行。独立定时器会在慢布局时把下一页误存成上一页。
+            captureSmokePage = [&,output](int page) {
+                if (page == 8) {
+                    if (output.isEmpty()) { controller.requestExit(); return; }
+                    const auto bytes=QJsonDocument(smokePages).toJson();
+                    mlash::runTask(&controller,[output,bytes] { return mlash::writeAtomic(output+"/page-routes.json",bytes); },
+                        [&](mlash::Result r) { if (!r.ok) smokeUiOk=false; controller.requestExit(); });
+                    return;
                 }
-            });
-            QTimer::singleShot(2000, &controller, &mlash::AppController::requestExit);
+                auto* window=gui.window();
+                if (!window) { smokeUiOk=false; controller.requestExit(); return; }
+                window->setPage(page);
+                QTimer::singleShot(80,&app,[&,page,output] {
+                    auto* readyWindow=gui.window();
+                    const auto expected=mlash::fromLegacyPage(page);
+                    if (!readyWindow || readyWindow->currentRoute()!=expected) {
+                        if (readyWindow) {
+                            const auto actual=readyWindow->currentRoute();
+                            qWarning("Smoke route mismatch for page %d: expected %d/%d/%d/%d, actual %d/%d/%d/%d",
+                                page,expected.view,expected.category,int(expected.anchor),expected.tab,
+                                actual.view,actual.category,int(actual.anchor),actual.tab);
+                        }
+                        smokeUiOk=false; controller.requestExit(); return;
+                    }
+                    if (!output.isEmpty() && !readyWindow->grab().save(output+QString("/page-%1.png").arg(page))) {
+                        smokeUiOk=false; controller.requestExit(); return;
+                    }
+                    const auto route=readyWindow->currentRoute();
+                    smokePages.append(QJsonObject{{"page",page},{"view",route.view},{"tab",route.tab}});
+                    if (page==6 && !output.isEmpty()) {
+                        auto* search=readyWindow->findChild<QLineEdit*>("settingsSearch");
+                        auto* stack=readyWindow->findChild<QStackedWidget*>("settingsTaskStack");
+                        auto* directory=readyWindow->findChild<QWidget*>("settingsDirectory");
+                        auto* appearance=readyWindow->findChild<QWidget*>("settingsAppearanceRow");
+                        if (!search || !stack || !directory || !appearance || !search->isVisible() ||
+                            stack->currentIndex()!=0 || !directory->isVisible()) {
+                            smokeUiOk=false; controller.requestExit(); return;
+                        }
+                        search->setText(QStringLiteral("外观"));
+                        QKeyEvent enter(QEvent::KeyPress,Qt::Key_Return,Qt::NoModifier);
+                        QApplication::sendEvent(search,&enter);
+                        if (stack->currentIndex()!=0 || !directory->isVisible() ||
+                            !appearance->isVisible() || !appearance->property("located").toBool() ||
+                            !readyWindow->grab().save(output+"/settings-search.png")) {
+                            smokeUiOk=false; controller.requestExit(); return;
+                        }
+                        readyWindow->setPage(0);
+                        readyWindow->setPage(6);
+                        if (readyWindow->currentRoute()!=expected || stack->currentIndex()!=0 ||
+                            !directory->isVisible() || !search->isVisible() ||
+                            !readyWindow->grab().save(output+"/settings-return.png")) {
+                            smokeUiOk=false; controller.requestExit(); return;
+                        }
+                    }
+                    QTimer::singleShot(100,&app,[&,page] { captureSmokePage(page+1); });
+                });
+            };
+            QTimer::singleShot(250,&app,[&] { captureSmokePage(0); });
         }
     });
     controller.initialize(); const int result = app.exec();
     gui.dispose();
     QThreadPool::globalInstance()->waitForDone();
+    if (smoke && !smokeUiOk) return 6;
     return qualification && (!measurement || !measurement->succeeded()) ? 5 : result;
 }

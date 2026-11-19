@@ -4,8 +4,10 @@
 #include "ui/NodeRowModel.h"
 #include "ui/NodeRowView.h"
 #include "ui/ProfileRowDelegate.h"
+#include "ui/ProfileCardDelegate.h"
 #include "ui/TaskWorkspace.h"
 #include "ui/TaskDialog.h"
+#include "ui/YamlFormEditor.h"
 #include "ui/DialogDraftGuard.h"
 #include "ui/ViewIds.h"
 #include "ui/ImportDialog.h"
@@ -27,6 +29,8 @@
 #include <QListView>
 #include <QDialogButtonBox>
 #include <QTabBar>
+#include <QTabWidget>
+#include <QCheckBox>
 #include <QMessageBox>
 #include <QMenu>
 #include <QScrollArea>
@@ -108,6 +112,7 @@ private slots:
         QTemporaryDir root; auto platform=std::make_shared<WorkspacePlatform>(); AppController controller(root.path(),true,nullptr,platform);
         QSignalSpy initialized(&controller,&AppController::initialized); controller.initialize(); QTRY_COMPARE(initialized.size(),1);
         MainWindow window(&controller); window.show(); window.setPage(6); window.findChild<QPushButton*>("settingsCoreRow")->click();
+        auto* update=window.findChild<QPushButton*>("manageCoreUpdate"); QVERIFY(update&&update->isVisible()); update->click();
         for (const auto& theme:{QString("light"),QString("dark")}) for (int scale:{100,120}) {
             UiTheme::setPreferences(theme,scale);
             for (auto size:{QSize(840,560),QSize(1040,720),QSize(1440,900)}) {
@@ -132,15 +137,25 @@ private slots:
         dirty=false; parent->reject(); QCoreApplication::sendPostedEvents(nullptr,QEvent::DeferredDelete); QVERIFY(!workspace.editor("parent")); QVERIFY(!workspace.editor("child"));
         QVERIFY(workspace.configure("two","另一个对象",{},[] {}));
     }
+    void sameProfileRefreshKeepsOnlyRealTaskTabs() {
+        TaskWorkspace workspace; workspace.show();
+        const auto action=[] {};
+        QVERIFY(workspace.configure("profile:p","示例",{{"overview","概览",action},{"rules","规则",action}},action));
+        auto* tabs=workspace.findChild<QTabBar*>("taskTabs"); QVERIFY(tabs); QCOMPARE(tabs->count(),2); QVERIFY(tabs->isHidden());
+        QVERIFY(workspace.configure("profile:p","示例",{{"rules","规则与分流",action},{"dns","DNS",action}},action));
+        QCOMPARE(tabs->count(),2); QCOMPARE(tabs->tabText(0),QString("规则与分流")); QCOMPARE(tabs->tabText(1),QString("DNS"));
+        QVERIFY(workspace.findChild<QPushButton*>("taskBack"));
+    }
     void singleSessionFailureCancelAndHiddenDrafts() {
         QTemporaryDir root; auto platform=std::make_shared<WorkspacePlatform>(); AppController controller(root.path(),true,nullptr,platform);
         QSignalSpy initialized(&controller,&AppController::initialized); controller.initialize(); QTRY_COMPARE(initialized.size(),1);
         MainWindow window(&controller); window.show(); window.setPage(6);
         window.findChild<QPushButton*>("settingsCoreRow")->click();
+        auto* update=window.findChild<QPushButton*>("manageCoreUpdate"); QVERIFY(update&&update->isVisible()); update->click();
         auto* core=window.findChild<CoreUpdateDialog*>(); QVERIFY(core&&core->isVisible()); QVERIFY(!core->isWindow());
         auto* workspace=window.findChild<TaskWorkspace*>(); QVERIFY(workspace); snapshot(&window,"core");
         auto* path=core->findChild<QLineEdit*>("coreUpdatePath"); path->setText("not-a-real-core");
-        for (auto* back:window.findChildren<QPushButton*>("taskBack")) if (back->isVisible()) { back->click(); break; } window.findChild<QPushButton*>("settingsCoreRow")->click();
+        for (auto* back:window.findChildren<QPushButton*>("taskBack")) if (back->isVisible()) { back->click(); break; } update->click();
         QCOMPARE(window.findChildren<CoreUpdateDialog*>().size(),1); QCOMPARE(path->text(),QString("not-a-real-core"));
         for (auto* back:window.findChildren<QPushButton*>("taskBack")) if (back->isVisible()) { back->click(); break; } QVERIFY(DialogDraftGuard::hasDrafts(&window));
         answer(QMessageBox::No); QVERIFY(!window.confirmDiscardEdits());
@@ -174,7 +189,9 @@ private slots:
         for (const auto& member:members) proxies[member.toString()]=QJsonObject{{"type","Shadowsocks"}};
         MainWindow window(&controller); window.show();
         QVERIFY(!window.findChild<QLineEdit*>("nodeSearch")->isVisible());
-        QCOMPARE(window.findChild<QToolButton*>("browseGroup")->toolButtonStyle(),Qt::ToolButtonIconOnly);
+        auto* groupPicker=window.findChild<QToolButton*>("browseGroup");
+        QCOMPARE(groupPicker->toolButtonStyle(),Qt::ToolButtonTextBesideIcon);
+        QVERIFY(groupPicker->text().contains(QStringLiteral("示例组")));
         QTest::qWait(40); snapshot(&window,"home");
         auto* densityNodes=window.findChild<QListView*>("nodeList");
         const auto first=densityNodes->visualRect(densityNodes->model()->index(1,0));
@@ -202,16 +219,45 @@ private slots:
         UiTheme::setPreferences("light",120); window.resize(840,560); window.setMemberView(1);
         auto* searchToggle=window.findChild<QToolButton*>("nodeSearchToggle"); searchToggle->click(); QTest::qWait(30);
         auto* cards=window.findChild<QListView*>("nodeCards"); QVERIFY(cards->viewport()->height()>=cards->gridSize().height());
-        for (int i=0;i<cards->model()->rowCount();++i) QVERIFY(cards->viewport()->rect().contains(cards->visualRect(cards->model()->index(i,0))));
+        for (int i=0;i<cards->model()->rowCount();++i) {
+            const auto card=cards->visualRect(cards->model()->index(i,0));
+            QVERIFY2(cards->viewport()->rect().contains(card),qPrintable(QString("row %1 rect %2,%3 %4x%5 viewport %6x%7 grid %8x%9 scroll %10,%11")
+                .arg(i).arg(card.x()).arg(card.y()).arg(card.width()).arg(card.height())
+                .arg(cards->viewport()->width()).arg(cards->viewport()->height())
+                .arg(cards->gridSize().width()).arg(cards->gridSize().height())
+                .arg(cards->horizontalScrollBar()->value()).arg(cards->verticalScrollBar()->value())));
+        }
         snapshot(&window,"compact-card-search"); searchToggle->click(); window.setMemberView(0); UiTheme::setPreferences("dark",100); window.resize(1040,720);
         proxies["示例组"]=QJsonObject{{"type","Selector"},{"all",members},{"now","JP 日本"}}; controller.proxiesChanged();
         window.setPage(1);
-        auto* list=window.findChild<QListView*>("localProfileList"); const auto index=list->model()->index(0,0); QVERIFY(index.isValid());
-        const auto subtitle=index.data(WindowParts::ProfileRowDelegate::Detail).toString(); QVERIFY(subtitle.contains("本地配置")); QVERIFY(!subtitle.contains(profile.id));
+        auto* list=window.findChild<QListView*>("profileList"); QVERIFY(list);
+        const auto index=list->model()->index(0,0); QVERIFY(index.isValid());
         QVERIFY(!list->findChild<QPushButton*>("emptyStateAction")->isVisible()); snapshot(&window,"profiles");
-        QTest::mouseClick(list->viewport(),Qt::LeftButton,{},list->visualRect(index).center());
-        window.findChild<QPushButton*>("profileDetailsDns")->click(); auto* dns=window.findChild<QDialog*>("dnsDialog"); QVERIFY(dns&&!dns->isWindow());
+        QTest::mouseClick(list->viewport(),Qt::LeftButton,{},ProfileCardDelegate::menu(list->visualRect(index)).center());
+        auto* profileMenu=window.findChild<QMenu*>("profileContextMenu"); QVERIFY(profileMenu);
+        profileMenu->hide(); profileMenu->actions().first()->trigger();
+        auto* profileWorkspace=window.findChild<TaskWorkspace*>("taskWorkspace"); QVERIFY(profileWorkspace);
+        QTRY_VERIFY(profileWorkspace->isVisible()); QVERIFY(profileWorkspace->context().endsWith(":content"));
+        auto* profileTabs=profileWorkspace->findChild<QTabBar*>("taskTabs"); QVERIFY(profileTabs&&profileTabs->isVisible());
+        QCOMPARE(profileTabs->tabText(0),QString("节点与组"));
+        profileTabs->setCurrentIndex(2); auto* dns=window.findChild<QDialog*>("dnsDialog"); QVERIFY(dns&&!dns->isWindow());
+        auto* dnsFields=dns->findChild<YamlFormEditor*>(); QVERIFY(dnsFields); QVERIFY(dnsFields->isHidden());
+        auto* dnsToggle=dns->findChild<QCheckBox*>("dnsOverrideEnabled"); QVERIFY(dnsToggle);
+        dnsToggle->setChecked(true); QVERIFY(dnsFields->isVisible());
+        auto* dnsEditor=dns->findChild<QPlainTextEdit*>("dnsOverrideEditor"); QVERIFY(dnsEditor);
+        dnsEditor->setPlainText("enable: true\n"); snapshot(&window,"profile-dns-editing");
+        profileTabs->setCurrentIndex(1); profileTabs->setCurrentIndex(2);
+        QCOMPARE(dnsEditor->toPlainText(),QString("enable: true\n"));
+        window.setPage(0); QVERIFY(!profileWorkspace->isVisible());
+        window.setPage(1); QVERIFY(profileWorkspace->isVisible());
+        QCOMPARE(dnsEditor->toPlainText(),QString("enable: true\n"));
+        window.resize(840,560); QCoreApplication::processEvents(); snapshot(&window,"profile-dns-compact");
+        dnsEditor->clear(); dnsToggle->setChecked(false);
+        QTimer::singleShot(0,[] { if (auto* box=qobject_cast<QMessageBox*>(QApplication::activeModalWidget())) box->button(QMessageBox::Yes)->click(); });
+        profileWorkspace->findChild<QPushButton*>("taskBack")->click();
+        QTRY_VERIFY(list->isVisible());
         window.setPage(0);
+        QVERIFY(!profileWorkspace->isVisible());
         auto* nodes=window.findChild<QListView*>("nodeList"); QVERIFY(nodes->model()->rowCount()>1);
         for (const auto size:{QSize(840,560),QSize(1040,720),QSize(1440,900)}) {
             window.resize(size); QTest::qWait(40); const auto item=nodes->model()->index(1,0); nodes->scrollTo(item); QCoreApplication::processEvents();

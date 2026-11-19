@@ -20,7 +20,9 @@ public:
         const QRect rect=option.rect;
         if (index.data(NodeRowModel::RowKind).toInt()==0) { paintHeader(p,option,index); p->restore(); return; }
         const bool current=index.data(NodeRowModel::IsCurrent).toBool();
-        if (option.state.testFlag(QStyle::State_MouseOver)) p->fillRect(rect,QColor(UiTheme::Hover));
+        const bool hovered=option.state.testFlag(QStyle::State_MouseOver);
+        const bool highlighted=option.state.testFlag(QStyle::State_Selected);
+        if (hovered || highlighted) p->fillRect(rect,QColor(highlighted?UiTheme::Selection:UiTheme::Hover));
         UiHairline::bottom(p,rect,46,QColor(UiTheme::Separator));
         const QRect badge(rect.left()+12,rect.center().y()-11,22,22);
         const auto name=index.data(Qt::DisplayRole).toString();
@@ -37,7 +39,10 @@ public:
         p->setFont(small); p->setPen(color);
         p->drawText(delayRect(rect).adjusted(3,0,-3,0),Qt::AlignRight|Qt::AlignVCenter,latency.isEmpty()?QStringLiteral("—"):latency);
         if (current) UiIcons::icon(UiIcons::Glyph::Check,UiTheme::Brand).paint(p,QRect(rect.right()-133,rect.center().y()-8,16,16));
-        UiIcons::icon(UiIcons::Glyph::Info,UiTheme::Brand).paint(p,infoRect(rect).adjusted(4,4,-4,-4));
+        // The details action remains a stable hit target, but only becomes
+        // prominent in the row's active context.
+        if (hovered || highlighted || current)
+            UiIcons::icon(UiIcons::Glyph::Info,UiTheme::Secondary).paint(p,infoRect(rect).adjusted(4,4,-4,-4));
         const int left=rect.left()+46, width=qMax(0,delayRect(rect).left()-left-(current?30:8));
         auto title=option.font; title.setBold(current); p->setFont(title); p->setPen(QColor(UiTheme::Ink));
         const int line=QFontMetrics(title).height(),caption=QFontMetrics(small).height(); const int top=rect.center().y()-(line+caption+1)/2;

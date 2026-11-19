@@ -64,6 +64,10 @@ void AppController::startWebsiteTests(const QString& node,const QString& targetI
     if (!websiteTestsVisible_ || !state_.ready || state_.busy || state_.exiting || state_.readOnly || websiteNode(node)!=node || node.isEmpty()) { emit operationFinished(false,"请在测速页选择当前内核中的具体节点，等待内核就绪"); return; }
     websiteTests_.start(node,targetId);
 }
+void AppController::selectWebsiteTestNode(const QString& node) {
+    if (!websiteTestsVisible_ || !state_.ready || state_.exiting || websiteNode(node)!=node || node.isEmpty()) return;
+    websiteTests_.selectNode(node);
+}
 void AppController::cancelWebsiteTests() { websiteTests_.cancel(); }
 void AppController::clearWebsiteTests() { websiteTests_.clear(); }
 void AppController::updateWebsiteTargets(const QJsonArray& targets) {
@@ -73,6 +77,7 @@ void AppController::updateWebsiteTargets(const QJsonArray& targets) {
 }
 void AppController::requestExit() {
     if (state_.exiting) return;
+    groupDelayTests_.cancel();
     if (state_.busy) {
         cancelProfileBatch();
         exitPending_ = true; officialCore_.cancel(); downloader_->cancel(); core_.cancelValidation(); coreVersionProbe_.cancel(); cancelRemoteBackup();

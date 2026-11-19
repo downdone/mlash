@@ -20,6 +20,7 @@
 #include "TunDialog.h"
 #include "UiIcons.h"
 #include "UiTheme.h"
+#include "WidgetStyle.h"
 #include "WindowUiFactories.h"
 #include <QtWidgets>
 #include "ViewIds.h"
@@ -30,7 +31,7 @@ void MainWindow::selectSettingsCategory(int index) {
     // K8：设置页只有一个滚动面，分类不再是页签，只用来把视野滚到对应分组。
     if (index < 0 || index >= settingsSections_.size() || !settingsScroll_) return;
     settingsPage_->setProperty("settingsCategory", index);
-    openSettingsTask(QStringList{"startup","network","core"}.value(index));
+    openSettingsTask(QStringList{"startup","network","engine"}.value(index));
     updateWindowTitle();
 }
 
@@ -102,11 +103,10 @@ QWidget* MainWindow::settingsPage() {
     windowChrome_=new CompactComboBox; windowChrome_->setObjectName("windowChromePreference"); windowChrome_->addItem("系统标题栏","native"); windowChrome_->addItem("应用内标题栏","integrated"); windowChrome_->setFixedWidth(140); settingRow(generalRows,"窗口标题栏","可在两种样式之间切换",windowChrome_,false,{},UiIcons::Glyph::Layers);
     autoStart_ = new ProxySwitch; autoStart_->setObjectName("autoStart"); silentStart_=new ProxySwitch; silentStart_->setObjectName("silentStart"); startCore_=new ProxySwitch; startCore_->setObjectName("startCore"); restoreProxy_=new ProxySwitch; restoreProxy_->setObjectName("restoreProxy"); lightweight_=new ProxySwitch; lightweight_->setObjectName("lightweightMode");
     for (auto* toggle:{autoStart_,silentStart_,startCore_,restoreProxy_,lightweight_}) toggle->setFixedWidth(54);
-    settingRow(generalRows,"登录启动","随 Windows 登录启动 Mlash",autoStart_,false,{},UiIcons::Glyph::Rocket);
     settingRow(generalRows,"启动时隐藏窗口","已有订阅时直接进入托盘",silentStart_,false,{},UiIcons::Glyph::Home);
     settingRow(generalRows,"启动内核","自动运行上次使用的订阅",startCore_,false,{},UiIcons::Glyph::Play);
     settingRow(generalRows,"启动时恢复代理开关","按上次的开关状态恢复，不接管其他程序的代理",restoreProxy_,false,{},UiIcons::Glyph::Refresh);
-    settingRow(generalRows,"关闭窗口时释放界面","释放界面资源；内核与托盘继续运行",lightweight_,false,{},UiIcons::Glyph::Close); lightweight_->setToolTip("托盘打开时重新创建界面；未保存内容会提示确认");
+    lightweight_->setToolTip("托盘打开时重新创建界面；未保存内容会提示确认");
     startupPage_=new CompactComboBox; startupPage_->setObjectName("startupPage"); for (const auto& pair:QList<QPair<QString,int>>{{"首页",0},{"订阅",1},{"节点",2},{"网站测试",7},{"规则",3},{"连接",4},{"日志",5},{"设置",6}}) startupPage_->addItem(pair.first,pair.second); startupPage_->setFixedWidth(120); settingRow(generalRows,"启动页面","首次打开主界面时显示",startupPage_,false,{},UiIcons::Glyph::Home);
     trayClick_=new CompactComboBox; trayClick_->setObjectName("trayClick"); trayClick_->addItem("显示主窗口","show"); trayClick_->addItem("打开节点页","proxy-page"); trayClick_->addItem("切换系统代理","toggle-proxy"); trayClick_->setFixedWidth(120); trayClick_->setToolTip("切换代理不会自动覆盖外部程序的代理"); settingRow(generalRows,"托盘单击","双击始终显示主界面",trayClick_,false,{},UiIcons::Glyph::List);
     auto* hotkeys=new QPushButton("配置…"); hotkeys->setObjectName("configureHotkeys"); settingRow(generalRows,"全局快捷键","从任意应用唤起Mlash",hotkeys,false,{},UiIcons::Glyph::Settings); connect(hotkeys,&QPushButton::clicked,this,[this] { showTool("hotkeys", {}, [this] { return new HotkeysDialog(controller_,this); }); });
@@ -133,12 +133,13 @@ QWidget* MainWindow::settingsPage() {
     auto* data=new QPushButton("打开目录"); settingRow(coreRows,"数据目录","订阅快照与加密状态",data,false,{},UiIcons::Glyph::Folder);
     connect(address, &QPushButton::clicked, this, [this] { QApplication::clipboard()->setText(QString("http://127.0.0.1:%1").arg(controller_->settings().mixedPort)); });
     connect(data, &QPushButton::clicked, this, [this] { openDirectory(controller_->dataRoot()); });
-    auto* toolsMenu=new QMenu(this); auto* environment=toolsMenu->addMenu("复制代理环境变量"); auto* environmentRow=new QWidget; auto* environmentLayout=new QHBoxLayout(environmentRow); environmentLayout->setContentsMargins(0,0,0,0); auto* format=new CompactComboBox; format->addItems({"PowerShell","CMD","sh"}); environmentLayout->addWidget(format); auto* copyEnvironment=button("复制",environmentLayout); environmentRow->setMinimumWidth(180); settingRow(coreRows,"代理环境变量","仅复制，不自动执行",environmentRow,false,{},UiIcons::Glyph::Copy); connect(copyEnvironment,&QPushButton::clicked,this,[this,format] { findChild<QAction*>("copyProxyEnvironment"+format->currentText())->trigger(); });
-    for (const auto& format:QStringList{"PowerShell","CMD","sh"}) { auto* action=environment->addAction(format); action->setObjectName("copyProxyEnvironment"+format); connect(action,&QAction::triggered,this,[this,format] { const auto http=QString("http://127.0.0.1:%1").arg(controller_->settings().mixedPort), socks=QString("socks5://127.0.0.1:%1").arg(controller_->settings().mixedPort); QStringList lines; for (const auto& pair:QList<QPair<QString,QString>>{{"HTTP_PROXY",http},{"HTTPS_PROXY",http},{"ALL_PROXY",socks},{"NO_PROXY","localhost,127.0.0.1,::1"}}) lines.append(format=="PowerShell"?QString("$env:%1=\"%2\"").arg(pair.first,pair.second):format=="CMD"?QString("set \"%1=%2\"").arg(pair.first,pair.second):QString("export %1='%2'").arg(pair.first,pair.second)); QApplication::clipboard()->setText(lines.join('\n')); }); }
-    auto* geo=toolsMenu->addAction("Geo 数据…"); geo->setObjectName("importGeoData"); geo->setToolTip("管理默认快照与运行文件，按需下载或本地导入"); connect(geo,&QAction::triggered,this,[this] { showTool("geo", {}, [this] { return new GeoDataDialog(controller_,this); }); });
-    auto* preview=toolsMenu->addAction("当前激活配置（脱敏）…"); preview->setObjectName("previewActiveConfig"); connect(toolsMenu,&QMenu::aboutToShow,this,[this,preview] { preview->setEnabled(!controller_->settings().activeProfile.isEmpty()); });
+    // Commands back the inline controls; there is no hidden menu to open or refresh.
+    auto* toolsScope=new QObject(this); auto* environment=new QObject(toolsScope); auto* environmentRow=new QWidget; auto* environmentLayout=new QHBoxLayout(environmentRow); environmentLayout->setContentsMargins(0,0,0,0); auto* format=new CompactComboBox; format->addItems({"PowerShell","CMD","sh"}); environmentLayout->addWidget(format); auto* copyEnvironment=button("复制",environmentLayout); environmentRow->setMinimumWidth(180); settingRow(coreRows,"代理环境变量","仅复制，不自动执行",environmentRow,false,{},UiIcons::Glyph::Copy); connect(copyEnvironment,&QPushButton::clicked,this,[this,format] { findChild<QAction*>("copyProxyEnvironment"+format->currentText())->trigger(); });
+    for (const auto& format:QStringList{"PowerShell","CMD","sh"}) { auto* action=new QAction(format,environment); action->setObjectName("copyProxyEnvironment"+format); connect(action,&QAction::triggered,this,[this,format] { const auto http=QString("http://127.0.0.1:%1").arg(controller_->settings().mixedPort), socks=QString("socks5://127.0.0.1:%1").arg(controller_->settings().mixedPort); QStringList lines; for (const auto& pair:QList<QPair<QString,QString>>{{"HTTP_PROXY",http},{"HTTPS_PROXY",http},{"ALL_PROXY",socks},{"NO_PROXY","localhost,127.0.0.1,::1"}}) lines.append(format=="PowerShell"?QString("$env:%1=\"%2\"").arg(pair.first,pair.second):format=="CMD"?QString("set \"%1=%2\"").arg(pair.first,pair.second):QString("export %1='%2'").arg(pair.first,pair.second)); QApplication::clipboard()->setText(lines.join('\n')); }); }
+    auto* geo=new QAction("Geo 数据…",toolsScope); geo->setObjectName("importGeoData"); geo->setToolTip("管理默认快照与运行文件，按需下载或本地导入"); connect(geo,&QAction::triggered,this,[this] { showTool("geo", {}, [this] { return new GeoDataDialog(controller_,this); }); });
+    auto* preview=new QAction("当前激活配置（脱敏）…",toolsScope); preview->setObjectName("previewActiveConfig"); const auto refreshPreview=[this,preview] { preview->setEnabled(!controller_->settings().activeProfile.isEmpty()); }; connect(controller_,&AppController::stateChanged,preview,refreshPreview); refreshPreview();
     connect(preview,&QAction::triggered,this,[this] { const QPointer<MainWindow> window(this); controller_->previewActiveConfig([window](Result result,QString text) { if (!window || !window->isVisible()) return; if (window->configPreview_) window->configPreview_->close(); auto* dialog=new TaskDialog(window); window->configPreview_=dialog; dialog->setObjectName("configPreview"); dialog->setWindowTitle("当前激活配置（脱敏，只读快照）"); dialog->setAttribute(Qt::WA_DeleteOnClose); dialog->resize(620,420); auto* layout=new QVBoxLayout(dialog); auto* content=new QPlainTextEdit(result.ok?text:result.error); content->setReadOnly(true); layout->addWidget(content); auto* buttons=new QDialogButtonBox(QDialogButtonBox::Close); layout->addWidget(buttons); connect(buttons,&QDialogButtonBox::rejected,dialog,&QDialog::reject); window->presentTask(dialog); }); });
-    auto* coreDirectory=toolsMenu->addAction("内核目录"); connect(coreDirectory,&QAction::triggered,this,[this] { openDirectory(QFileInfo(controller_->settings().corePath).absolutePath()); });
+    auto* coreDirectory=new QAction("内核目录",toolsScope); connect(coreDirectory,&QAction::triggered,this,[this] { openDirectory(QFileInfo(controller_->settings().corePath).absolutePath()); });
     for (const auto& pair:QList<QPair<QAction*,QString>>{{geo,"IP 与域名分类库"},{preview,"当前运行配置"},{coreDirectory,"内核目录"}}) { auto* control=new QPushButton(pair.first==coreDirectory?"打开目录":pair.first==geo?"管理…":"查看…"); connect(control,&QPushButton::clicked,pair.first,&QAction::trigger); connect(pair.first,&QAction::changed,control,[control,action=pair.first] { control->setEnabled(action->isEnabled()); }); settingRow(coreRows,pair.second,pair.first==geo?"默认快照、来源及在线更新":pair.first==preview?"脱敏的只读快照":"当前配置的 mihomo 文件位置",control,false,{},pair.first==geo?UiIcons::Glyph::Globe:pair.first==preview?UiIcons::Glyph::Info:UiIcons::Glyph::Folder); }
     auto* logDirectory=new QPushButton("打开目录"); connect(logDirectory,&QPushButton::clicked,this,[this] { openDirectory(controller_->dataRoot()+"/logs"); }); settingRow(coreRows,"日志目录","有界运行记录",logDirectory,false,{},UiIcons::Glyph::Folder);
     auto* backup = new QPushButton("创建备份…"); backup->setObjectName("exportBackup"); connect(backup,&QPushButton::clicked,this,[this] { showTool("backup", "create", [this] { return new BackupDialog(controller_,false,this); }); }); settingRow(coreRows,"本地备份","加密保存订阅、规则和偏好",backup,false,{},UiIcons::Glyph::Save);
@@ -160,9 +161,8 @@ QWidget* MainWindow::settingsPage() {
     auto* scroll = new QScrollArea; scroll->setObjectName("settingsScroll"); scroll->setWidgetResizable(true); scroll->setFrameShape(QFrame::NoFrame); scroll->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
     auto* canvas=new QWidget; canvas->setObjectName("settingsCanvas"); auto* centering=new QHBoxLayout(canvas); centering->setContentsMargins(0,0,0,0); centering->addWidget(page,1,Qt::AlignTop); scroll->setWidget(canvas);
     auto* surface=new QWidget; surface->setObjectName("settingsSurface"); auto* outer=new QVBoxLayout(surface); outer->setContentsMargins(0,0,0,0); outer->setSpacing(8);
-    // 只有检索：分类不再是页签，命中的行直接滚进视野。
-    auto* header=new QHBoxLayout; header->setSpacing(12); header->addStretch(1);
-    auto* locator=new SettingsSearch(page,scroll,surface); locator->setObjectName("settingsLocator"); locator->setMaximumWidth(470); header->addWidget(locator,0,Qt::AlignRight);
+    // 搜索属于设置页本身，不是另一张“全部设置”编辑页。
+    auto* locator=new SettingsSearch(page,scroll); locator->setObjectName("settingsLocator"); locator->setMaximumWidth(640);
     connect(locator,&SettingsSearch::pageRequested,this,&MainWindow::setPage);
     connect(locator,&SettingsSearch::routeRequested,this,&MainWindow::navigate);
     locator->addRoute("订阅 › 来源与更新","订阅 URL provider 来源 更新 用量 subscription",1);
@@ -173,8 +173,7 @@ QWidget* MainWindow::settingsPage() {
     locator->addRoute("连接 › 实时连接与进程","连接 进程 规则 流量 connection process",Route{ViewIds::Data,-1,HomeAnchor::Control,int(ViewIds::DataTab::Connections)});
     locator->addRoute("网站测试 › 响应延迟","网站 测速 目标 YouTube ChatGPT Google",Route{ViewIds::Data,-1,HomeAnchor::Control,int(ViewIds::DataTab::Tests)});
     locator->addRoute("日志 › 筛选与诊断","日志 错误 诊断 脱敏 导出 log",Route{ViewIds::Data,-1,HomeAnchor::Control,int(ViewIds::DataTab::Logs)});
-    outer->addLayout(header); outer->addWidget(scroll,1); outer->addWidget(actions);
-    connect(locator,&SettingsSearch::anchorRequested,surface,[this,locator](QWidget* anchor) { if (settingsScroll_&&anchor&&settingsPage_->isAncestorOf(anchor)) { if (route_.view!=ViewIds::Settings) navigate(Route{ViewIds::Settings}); openSettingsTask("all"); locator->show(); settingsScroll_->ensureWidgetVisible(anchor,8,12); } });
+    outer->addWidget(scroll,1); outer->addWidget(actions);
     settingsSections_={generalCard,networkCard,coreCard}; settingsScroll_=scroll; settingsPage_=page;
     // Preference rows commit immediately; only core-restart rows wait for the explicit action bar.
     const QList<QComboBox*> instantCombos{startupPage_,trayClick_,appearance_,textScale_,windowChrome_};
@@ -186,11 +185,11 @@ QWidget* MainWindow::settingsPage() {
     settingsStack_=new QStackedWidget; settingsStack_->setObjectName("settingsTaskStack");
     settingsDirectory_=new QWidget; settingsDirectory_->setObjectName("settingsDirectory"); auto* directory=new QVBoxLayout(settingsDirectory_); directory->setContentsMargins(0,0,0,10); directory->setSpacing(UiTheme::PanelGap);
     using namespace PrototypeUi; using G=UiIcons::Glyph;
-    auto* appearanceRows=group(directory);
+    auto* appearanceRows=group(directory,"常用");
     const auto choice=[this](QVBoxLayout* rows,const QString& name,const QString& title,G glyph,QComboBox* combo) {
         auto* item=row(rows,name,title,glyph,combo->currentText());
         connect(combo,&QComboBox::currentIndexChanged,item,[item,combo] { item->setValue(combo->currentText()); });
-        connect(item,&QPushButton::clicked,this,[item,combo] { auto* menu=new QMenu(item); menu->setAttribute(Qt::WA_DeleteOnClose); for (int i=0;i<combo->count();++i) { auto* action=menu->addAction(combo->itemText(i)); action->setCheckable(true); action->setChecked(i==combo->currentIndex()); QObject::connect(action,&QAction::triggered,combo,[combo,i] { combo->setCurrentIndex(i); }); } menu->popup(item->mapToGlobal(QPoint(0,item->height()))); }); return item;
+        connect(item,&QPushButton::clicked,this,[item,combo] { auto* menu=new QMenu(item); menu->setAttribute(Qt::WA_DeleteOnClose); for (int i=0;i<combo->count();++i) { auto* action=menu->addAction(combo->itemText(i)); action->setCheckable(true); action->setChecked(i==combo->currentIndex()); QObject::connect(action,&QAction::triggered,combo,[combo,i] { combo->setCurrentIndex(i); }); } WidgetStyle::popupMenu(menu,item->mapToGlobal(QPoint(0,item->height()))); }); return item;
     };
     choice(appearanceRows,"settingsAppearanceRow","外观",G::Moon,appearance_); choice(appearanceRows,"settingsTextSizeRow","文字大小",G::Sliders,textScale_); choice(appearanceRows,"settingsWindowChromeRow","窗口标题栏",G::Layers,windowChrome_);
     const auto taskRow=[this](QVBoxLayout* rows,const QString& name,const QString& title,G glyph,const QString& task,const QString& value=QString()) {
@@ -198,15 +197,16 @@ QWidget* MainWindow::settingsPage() {
     };
     auto* general=group(directory,"通用"); taskRow(general,"settingsStartupRow","启动与托盘",G::Home,"startup");
     auto* keys=row(general,"settingsHotkeysRow","快捷键",G::Settings); connect(keys,&QPushButton::clicked,hotkeys,&QPushButton::click);
-    const auto toggleRow=[&](const QString& name,const QString& title,G glyph,QCheckBox* toggle) { auto* item=row(general,name,title,glyph); item->setFocusPolicy(Qt::NoFocus); item->setTrailingControl(toggle); connect(item,&QPushButton::clicked,toggle,[toggle] { toggle->click(); }); };
-    toggleRow("settingsLightweightRow","关闭窗口时释放界面",G::Layers,lightweight_); toggleRow("settingsAutostartRow","登录启动",G::Rocket,autoStart_);
+    const auto toggleRow=[&](const QString& name,const QString& title,G glyph,QCheckBox* toggle) { auto* item=row(general,name,title,glyph); item->setFocusPolicy(Qt::NoFocus); item->setTrailingControl(toggle); connect(item,&QPushButton::clicked,toggle,[toggle] { toggle->click(); }); return item; };
+    auto* lightweightRow=toggleRow("settingsLightweightRow","关闭窗口时释放界面",G::Layers,lightweight_);
+    auto* autostartRow=toggleRow("settingsAutostartRow","登录启动",G::Rocket,autoStart_);
     auto* network=group(directory,"连接与网络"); auto* local=taskRow(network,"settingsNetworkRow","本地代理",G::Route,"network",QString("端口 %1").arg(controller_->settings().mixedPort));
     connect(controller_,&AppController::stateChanged,local,[this,local] { local->setValue(QString("端口 %1").arg(controller_->settings().mixedPort)); });
     auto* tunRow=row(network,"settingsTunRow","TUN 虚拟网卡",G::Layers); connect(tunRow,&QPushButton::clicked,tun,&QPushButton::click);
     connect(controller_,&AppController::stateChanged,tunRow,[this,tunRow] { tunRow->setValue(controller_->state().tunObserved?"已启用":"未启用"); }); tunRow->setValue(controller_->state().tunObserved?"已启用":"未启用");
     auto* bypassRow=row(network,"settingsBypassRow","系统代理排除",G::Globe); connect(bypassRow,&QPushButton::clicked,bypass,&QPushButton::click);
-    auto* dnsRow=row(network,"settingsDnsRow","DNS 设置",G::Globe,{},"当前使用的配置"); connect(dnsRow,&QPushButton::clicked,this,[this] { const auto id=controller_->state().activeProfile; if (id.isEmpty()) { navigate(Route{ViewIds::Profiles}); return; } navigate(Route{ViewIds::Profiles}); showProfileDetails(id); openProfileTask(id,"dns"); });
-    auto* maintain=group(directory,"维护与数据"); auto* coreTask=row(maintain,"settingsCoreRow","内核管理",G::Layers); connect(coreTask,&QPushButton::clicked,this,[this] { showTool("core-update",{},[this] { return new CoreUpdateDialog(controller_,this); }); });
+    auto* dnsRow=row(network,"settingsDnsRow","DNS 设置",G::Globe,{},"当前使用的配置"); connect(dnsRow,&QPushButton::clicked,this,[this] { const auto id=controller_->state().activeProfile; navigate(Route{ViewIds::Profiles}); if (route_.view!=ViewIds::Profiles || id.isEmpty()) return; showProfileDetails(id); openProfileTask(id,"dns"); });
+    auto* maintain=group(directory,"维护与数据"); taskRow(maintain,"settingsCoreRow","内核管理",G::Layers,"engine");
     auto* appUpdateTask=row(maintain,"settingsAppUpdateRow","Mlash 更新",G::Refresh); connect(appUpdateTask,&QPushButton::clicked,this,[this] { showTool("app-update",{},[this] { return new AppUpdateDialog(controller_,this); }); });
     auto* backupTask=row(maintain,"settingsBackupRow","备份与恢复",G::Folder); connect(backupTask,&QPushButton::clicked,this,[this] { openBackupTask("create"); });
     auto* geoRow=row(maintain,"settingsGeoRow","Geo 数据",G::Globe); connect(geoRow,&QPushButton::clicked,geo,&QAction::trigger);
@@ -219,15 +219,44 @@ QWidget* MainWindow::settingsPage() {
     auto* taskHeader=new QHBoxLayout; auto* backButton=new QPushButton("‹ 返回设置"); backButton->setObjectName("settingsBack"); backButton->setProperty("backLink",true); taskHeader->addWidget(backButton); taskHeader->addStretch(); outer->insertLayout(0,taskHeader);
     settingsTaskTitle_=new QLabel; settingsTaskTitle_->setObjectName("dialogTitle"); outer->insertWidget(1,settingsTaskTitle_);
     connect(backButton,&QPushButton::clicked,this,&MainWindow::returnToSettingsDirectory);
-    // Search is available from the directory without a permanent search bar in the page header.
-    locator->hide(); auto* searchSettings=new QPushButton("搜索设置"); searchSettings->setToolTip("搜索设置 · Ctrl+F"); searchSettings->setObjectName("openSettingsSearch"); searchSettings->setProperty("backLink",true); directory->insertWidget(0,searchSettings,0,Qt::AlignRight);
-    connect(searchSettings,&QPushButton::clicked,this,[this,locator] { openSettingsTask("all"); locator->show(); if (auto* input=locator->findChild<QLineEdit*>("settingsSearch")) input->setFocus(); });
-    auto* directoryFind=new QShortcut(QKeySequence::Find,settingsDirectory_); directoryFind->setContext(Qt::WindowShortcut); connect(directoryFind,&QShortcut::activated,searchSettings,&QPushButton::click);
-    const QHash<QString,QString> directoryAnchors{{"外观","settingsAppearanceRow"},{"文字大小","settingsTextSizeRow"},{"登录启动","settingsAutostartRow"},{"关闭窗口时释放界面","settingsLightweightRow"},{"全局快捷键","settingsHotkeysRow"},{"TUN 虚拟网卡","settingsTunRow"},{"系统代理排除","settingsBypassRow"}};
+    // The grouped directory owns a permanently visible search field. Ctrl+F
+    // focuses it; searching never changes the page until a result is chosen.
+    auto* root=new QWidget; root->setObjectName("settingsRoot"); auto* rootLayout=new QVBoxLayout(root); rootLayout->setContentsMargins(0,0,0,0); rootLayout->setSpacing(0);
+    auto* searchStrip=new QWidget; searchStrip->setObjectName("settingsSearchStrip"); auto* stripLayout=new QHBoxLayout(searchStrip); stripLayout->setContentsMargins(20,8,20,8); stripLayout->setSpacing(8);
+    stripLayout->addWidget(locator,1); rootLayout->addWidget(searchStrip);
+    auto* findShortcut=new QShortcut(QKeySequence::Find,root); findShortcut->setContext(Qt::WidgetWithChildrenShortcut);
+    connect(findShortcut,&QShortcut::activated,locator,[locator] { if (auto* input=locator->findChild<QLineEdit*>("settingsSearch")) { input->setFocus(Qt::ShortcutFocusReason); input->selectAll(); } });
+    const QHash<QString,QString> directoryAnchors{{"外观","settingsAppearanceRow"},{"文字大小","settingsTextSizeRow"},{"窗口标题栏","settingsWindowChromeRow"},{"全局快捷键","settingsHotkeysRow"},{"TUN 虚拟网卡","settingsTunRow"},{"系统代理排除","settingsBypassRow"}};
     for (auto it=directoryAnchors.begin();it!=directoryAnchors.end();++it) locator->remapAnchor(it.key(),settingsDirectory_->findChild<QWidget*>(it.value()));
-    connect(locator,&SettingsSearch::anchorRequested,settingsDirectory_,[this,directoryScroll](QWidget* anchor) { if (anchor&&settingsDirectory_->isAncestorOf(anchor)) { navigate(Route{ViewIds::Settings}); settingsStack_->setCurrentIndex(0); directoryScroll->ensureWidgetVisible(anchor,8,12); anchor->setFocus(Qt::ShortcutFocusReason); } });
+    locator->addAnchor("通用 › 登录启动","登录启动 开机 随 Windows 启动",autostartRow);
+    locator->addAnchor("通用 › 关闭窗口时释放界面","关闭窗口时释放界面 轻量模式 托盘",lightweightRow);
+    connect(locator,&SettingsSearch::anchorRequested,root,[this,directoryScroll](QWidget* anchor) {
+        if (!anchor || settingsApplying_) return;
+        if (route_.view!=ViewIds::Settings) navigate(Route{ViewIds::Settings});
+        if (route_.view!=ViewIds::Settings) return;
+        if (settingsDirectory_->isAncestorOf(anchor)) {
+            if (settingsStack_->currentIndex()!=0) {
+                if (settingsDirty()) { message_->setText("当前设置有未保存修改，请先应用或放弃后再定位其他设置"); return; }
+                settingsTask_.clear(); settingsStack_->setCurrentIndex(0);
+            }
+            directoryScroll->ensureWidgetVisible(anchor,8,12);
+            return;
+        }
+        if (!settingsPage_->isAncestorOf(anchor)) return;
+        const auto name=anchor->property("settingSearchName").toString();
+        const QString task=QStringList{"启动时隐藏窗口","启动内核","启动时恢复代理开关","启动页面","托盘单击","链接导入"}.contains(name)?QString("startup")
+            :QStringList{"本地端口","节点延迟测试地址"}.contains(name)?QString("network")
+            :QStringList{"mihomo 文件","内核更新","当前运行配置","日志等级","IPv6","统一延迟"}.contains(name)?QString("engine")
+            :QStringList{"本地备份","恢复与迁移","自动备份与保护","WebDAV备份"}.contains(name)?QString("backup-settings")
+            :QString("tools");
+        if (!settingsTask_.isEmpty() && settingsTask_!=task && settingsDirty()) { message_->setText("当前设置有未保存修改，请先应用或放弃后再定位其他设置"); return; }
+        if (settingsTask_!=task || settingsStack_->currentIndex()!=1) openSettingsTask(task);
+        if (settingsTask_!=task || !anchor->isVisible()) return;
+        settingsScroll_->ensureWidgetVisible(anchor,8,12);
+    });
     settingsStack_->setCurrentIndex(0);
-    return settingsStack_;
+    rootLayout->addWidget(settingsStack_,1);
+    return root;
 }
 void MainWindow::openBackupTask(const QString& task) {
     auto* workspace=taskWorkspaceFor("backup");
@@ -241,31 +270,30 @@ void MainWindow::openBackupTask(const QString& task) {
 }
 void MainWindow::openSettingsTask(const QString& task) {
     if (!settingsStack_) return;
-    if (task=="core") { showTool("core-update",{},[this] { return new CoreUpdateDialog(controller_,this); }); return; }
     if (task=="backup") { openBackupTask("create"); return; }
-    if (!settingsTask_.isEmpty()&&settingsTask_!=task&&task!="all"&&settingsDirty()) {
+    if (!settingsTask_.isEmpty()&&settingsTask_!=task&&settingsDirty()) {
         if (QMessageBox::question(this,"未保存的修改","放弃尚未应用的网络设置，进入其他设置？",QMessageBox::Yes|QMessageBox::No,QMessageBox::No)!=QMessageBox::Yes) return;
         resetSettingsDraft();
     }
     const QHash<QString,QStringList> fields{
         {"startup",{"启动时隐藏窗口","启动内核","启动时恢复代理开关","启动页面","托盘单击","链接导入"}},
-        {"network",{"本地端口","节点延迟测试地址","日志等级","IPv6","统一延迟"}},
-        {"core",{"mihomo 文件","内核更新","当前运行配置"}},
-        {"backup",{"本地备份","恢复与迁移","自动备份与保护","WebDAV备份"}},
+        {"network",{"本地端口","节点延迟测试地址"}},
+        {"engine",{"mihomo 文件","内核更新","日志等级","IPv6","统一延迟","当前运行配置"}},
+        {"backup-settings",{"本地备份","恢复与迁移","自动备份与保护","WebDAV备份"}},
         {"tools",{"本地代理地址","数据目录","代理环境变量","IP 与域名分类库","当前运行配置","内核目录","日志目录","链接导入"}}
     };
-    const auto allowed=fields.value(task); const QSet<QString> directoryOnly{"外观","文字大小","登录启动","关闭窗口时释放界面","全局快捷键","TUN 虚拟网卡","系统代理排除"};
+    const auto allowed=fields.value(task);
     for (auto* card:settingsSections_) {
         int count=0;
         for (auto* item:card->findChildren<QWidget*>("settingRow")) {
-            const auto name=item->property("settingSearchName").toString(); const bool show=task=="all"?!QStringList{"登录启动","关闭窗口时释放界面"}.contains(name):allowed.contains(name);
+            const auto name=item->property("settingSearchName").toString(); const bool show=allowed.contains(name);
             item->setVisible(show); if (show) ++count;
         }
         card->setVisible(count>0);
         if (auto* title=card->findChild<QLabel*>("sectionTitle")) title->hide();
     }
-    if (task!="all"||!settingsDirty()) settingsTask_=task;
-    const QHash<QString,QString> names{{"startup","启动与托盘"},{"network","本地代理"},{"core","内核管理"},{"backup","备份与恢复"},{"tools","文件与其他工具"},{"all","搜索设置"}};
+    settingsTask_=task;
+    const QHash<QString,QString> names{{"startup","启动与托盘"},{"network","本地代理"},{"engine","内核管理"},{"backup-settings","备份与恢复"},{"tools","文件与其他工具"}};
     settingsTaskTitle_->setText(names.value(task,"设置")); settingsStack_->setCurrentIndex(1); settingsScroll_->verticalScrollBar()->setValue(0); updateActions();
 }
 void MainWindow::returnToSettingsDirectory() {

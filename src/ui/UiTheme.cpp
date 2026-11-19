@@ -104,6 +104,8 @@ QString styleSheet() {
     sheet.replace("@TitlePoints",points(TitlePoints));
     sheet.replace("@PanelBorder",high?QString("1px solid ")+Border:QStringLiteral("none"));
     sheet.replace("@ControlMinimum",QString::number(ControlHeight-8)+"px");
+    // Qt's QPushButton style adds its vertical padding to min-height.
+    sheet.replace("@HomeControlRowMinimum",QString::number(RowHeight+2)+"px");
     sheet.replace("@SettingRowHeight",QString::number(SettingRowHeight)+"px");
     sheet.replace("@PrimaryPressed",PrimaryPressed);
     sheet.replace("@Control",Control); sheet.replace("@Pressed",Pressed);

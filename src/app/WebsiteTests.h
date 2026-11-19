@@ -25,6 +25,7 @@ public:
     WebsiteResult result(const QString& id) const { return results_.value(id); }
     QString node() const { return node_; }
     bool running() const { return !queue_.isEmpty() || !requests_.isEmpty(); }
+    void selectNode(const QString& node);
     void start(const QString& node,const QString& onlyId={});
     void cancel();
     void clear();
@@ -37,6 +38,8 @@ private:
     QList<WebsiteTarget> targets_;
     QList<WebsiteTarget> initialTargets_;
     QHash<QString,WebsiteResult> results_;
+    QHash<QString,QHash<QString,WebsiteResult>> cachedResults_;
+    QStringList cacheOrder_;
     QHash<QString,QPointer<QNetworkReply>> requests_;
     QStringList queue_;
     QString node_;

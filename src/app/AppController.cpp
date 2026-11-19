@@ -38,12 +38,14 @@ AppController::AppController(QString root, bool smoke, QObject* parent, std::sha
     remoteTimer_.setInterval(60000); connect(&remoteTimer_,&QTimer::timeout,this,&AppController::runRemoteMaintenance);
     connect(this,&AppController::proxiesChanged,this,&AppController::updateHomeProbeContext);
     connect(&homeProbe_,&HomeNodeProbe::measured,this,[this](const QString& node,int delay,const QString& error) { recordTrayDelay(node,delay,error); emit nodeDelay(node,delay,error); });
+    connect(&groupDelayTests_,&GroupDelayTests::result,this,[this](const QString& node,int delay,const QString& error,const QString& url) { recordTrayDelay(node,delay,error,url); emit nodeDelay(node,delay,error); });
+    connect(&groupDelayTests_,&GroupDelayTests::changed,this,&AppController::homeGroupTestsChanged);
     connect(hotkeys_.get(),&GlobalHotkeys::activated,this,&AppController::dispatchHotkey);
     connect(&maintenance_, &ProfileMaintenance::workAvailable, this, &AppController::runMaintenance);
     providerTimer_.setInterval(60000); providerTimer_.setTimerType(Qt::VeryCoarseTimer); connect(&providerTimer_,&QTimer::timeout,this,&AppController::runProviderMaintenance);
     connect(&core_, &CoreManager::stateChanged, this, [this](CoreState s) {
         state_.core = s; if (s != CoreState::Running) { state_.ready = false; state_.tunObserved=false; }
-        if (s != CoreState::Running) { outboundDiagnostics_.cancel(); websiteTests_.clear(); cancelTrayTests(); trayDelays_.clear(); cancelConnectionRead(); connectionSession_.reset(); connections_ = {}; connectionError_.clear(); activeRules_ = {}; emit rulesChanged(); emit connectionsChanged(); }
+        if (s != CoreState::Running) { outboundDiagnostics_.cancel(); websiteTests_.clear(); groupDelayTests_.cancel(); cancelTrayTests(); trayDelays_.clear(); cancelConnectionRead(); connectionSession_.reset(); connections_ = {}; connectionError_.clear(); activeRules_ = {}; emit rulesChanged(); emit connectionsChanged(); }
         if (s == CoreState::Running && !smoke_) health_.start(15000); else health_.stop(); publish();
     });
     connect(&core_, &CoreManager::output, this, [this](const QString& output) { for (const auto& line : output.split('\n', Qt::SkipEmptyParts)) diagnostics_.append("core", line); });
@@ -140,6 +142,7 @@ bool AppController::begin(const QString& operation, bool background, bool allowR
         emit operationFinished(false, readOnly_ ? "状态文件不可用，已进入只读保护；请检查数据目录" : "当前操作尚未结束"); return false;
     }
     cancelTrayTests();
+    if (operationId_ != OperationId::MemberSelect) groupDelayTests_.cancel();
     cancelDnsQuery();
     websiteTests_.clear();
     changeBackupDone_=false;
@@ -147,7 +150,11 @@ bool AppController::begin(const QString& operation, bool background, bool allowR
     // 事务把当前操作标识带进 finish()：调用点只需在 begin 之后表态，不必在每条异步
     // 回调里重复传 id（P4.1 反馈路由）。
     transactionOperation_ = operationId_;
-    state_.busy = true; ++state_.generation; state_.lastError.clear(); publish(); if (!background) emit operationStarted(operation, transactionOperation_); return true;
+    state_.busy = true; ++state_.generation;
+    // A member switch changes selection, not the tested node definitions.
+    // Keep completed delay evidence from the independent home group test.
+    if (operationId_ == OperationId::MemberSelect && groupDelayTests_.running()) trayCacheGeneration_=state_.generation;
+    state_.lastError.clear(); publish(); if (!background) emit operationStarted(operation, transactionOperation_); return true;
 }
 void AppController::finish(Result r) {
     if (!sourceUpdateId_.isEmpty()) {

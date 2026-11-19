@@ -18,13 +18,31 @@
 #include <QTabWidget>
 #include <QVBoxLayout>
 #include <QSet>
+#include <QPainter>
 namespace mlash {
+namespace {
+class EntriesListWidget final : public QListWidget {
+public:
+    using QListWidget::QListWidget;
+protected:
+    void paintEvent(QPaintEvent* event) override {
+        QListWidget::paintEvent(event);
+        if (count() != 0) return;
+        QPainter painter(viewport());
+        painter.setPen(palette().color(QPalette::PlaceholderText));
+        painter.drawText(viewport()->rect().adjusted(16,16,-16,-16),Qt::AlignCenter|Qt::TextWordWrap,
+                         property("emptyHint").toString());
+    }
+};
+}
 ProxyEditorDialog::ProxyEditorDialog(AppController* controller,const QString& id,QWidget* parent):TaskDialog(parent),controller_(controller),id_(id) {
     const bool running=controller->state().ready&&controller->state().activeProfile==id;
     QString name; bool pending=false; for (const auto& profile:controller->profiles()) if (profile.id==id) { saved_=draft_=profile.proxyEdits; sourceExpected_={{"candidate",profile.candidate},{"active",profile.active}}; name=profile.name; editVersion_=running?profile.active:profile.candidate; pending=profile.active!=profile.candidate; }
     setAttribute(Qt::WA_DeleteOnClose); setObjectName("proxyEditorDialog"); setWindowTitle("节点与策略组 · "+name); resize(650,480);
     auto* layout=new QVBoxLayout(this); auto* note=new QLabel(running?QString("编辑运行版本，保存后重载。")+(pending?QString("不影响待应用更新。"):QString()):QString("编辑候选版本，保存后需手动使用。")); note->setObjectName("proxyEditScope"); note->setWordWrap(true); layout->addWidget(note);
-    tabs_=new QTabWidget; nodes_=new QListWidget; groups_=new QListWidget; nodes_->setObjectName("editableNodes"); groups_->setObjectName("editableGroups"); tabs_->setObjectName("proxyEditorTabs"); tabs_->addTab(nodes_,"节点"); tabs_->addTab(groups_,"策略组"); layout->addWidget(tabs_,1);
+    tabs_=new QTabWidget; nodes_=new EntriesListWidget; groups_=new EntriesListWidget; nodes_->setObjectName("editableNodes"); groups_->setObjectName("editableGroups");
+    nodes_->setProperty("emptyHint","正在读取节点…"); groups_->setProperty("emptyHint","正在读取策略组…");
+    tabs_->setObjectName("proxyEditorTabs"); tabs_->addTab(nodes_,"节点"); tabs_->addTab(groups_,"策略组"); layout->addWidget(tabs_,1);
     auto* row=new WrapLayout; add_=new QPushButton("新增…"); import_=new QPushButton("导入链接…"); import_->setObjectName("importNodeLinks"); edit_=new QPushButton("编辑…"); remove_=new QPushButton("移除"); restore_=new QPushButton("还原此项"); reset_=new QPushButton("全部沿用订阅");
     add_->setObjectName("addProxyEntry"); edit_->setObjectName("editProxyEntry"); remove_->setObjectName("removeProxyEntry"); restore_->setObjectName("restoreProxyEntry"); reset_->setObjectName("resetProxyEdits");
     for (auto* button:{add_,import_,edit_,remove_,restore_,reset_}) row->addWidget(button); layout->addLayout(row);
@@ -38,7 +56,7 @@ ProxyEditorDialog::ProxyEditorDialog(AppController* controller,const QString& id
     connect(restore_,&QPushButton::clicked,this,[this] { if (!list()->currentItem()) return; const auto name=list()->currentItem()->data(Qt::UserRole).toString(); auto entries=draft_.value(key()).toObject(); entries.remove(name); change(key(),entries); const auto removeKey=key()=="nodes"?"remove_nodes":"remove_groups"; auto removed=draft_.value(removeKey).toArray(); for (int i=removed.size()-1;i>=0;--i) if (removed[i].toString()==name) removed.removeAt(i); change(removeKey,removed); refresh(); });
     connect(reset_,&QPushButton::clicked,this,[this] { draft_={}; refresh(); }); connect(tabs_,&QTabWidget::currentChanged,this,[this] { updateActions(); });
     for (auto* view:{nodes_,groups_}) { connect(view,&QListWidget::itemSelectionChanged,this,[this] { updateActions(); }); connect(view,&QListWidget::itemDoubleClicked,this,[this] { if (edit_->isEnabled()) edit(false); }); }
-    const QPointer<ProxyEditorDialog> guard(this); controller_->inspectProxyEntries(id,[guard](Result result) { if (!guard) return; guard->loaded_=result.ok; if (result.ok) { guard->source_=result.data; guard->hint_->setText("双击编辑定义；错误会保留草稿。重命名请新增并修改引用，再移除旧项。"); guard->refresh(); } else guard->hint_->setText(result.error); guard->updateActions(); }); updateActions();
+    const QPointer<ProxyEditorDialog> guard(this); controller_->inspectProxyEntries(id,[guard](Result result) { if (!guard) return; guard->loaded_=result.ok; if (result.ok) { guard->source_=result.data; guard->hint_->setText("双击编辑定义；错误会保留草稿。重命名请新增并修改引用，再移除旧项。"); guard->nodes_->setProperty("emptyHint","此配置没有节点。可新增或导入链接。"); guard->groups_->setProperty("emptyHint","此配置没有策略组。可新增策略组。"); guard->refresh(); } else { guard->hint_->setText(result.error); guard->nodes_->setProperty("emptyHint","读取节点失败，原配置未改变。"); guard->groups_->setProperty("emptyHint","读取策略组失败，原配置未改变。"); guard->nodes_->viewport()->update(); guard->groups_->viewport()->update(); } guard->updateActions(); }); updateActions();
     DialogDraftGuard::protect(this,[this] { return draft_!=saved_; },[this] { return saving_||analyzing_; });
 }
 QString ProxyEditorDialog::key() const { return tabs_->currentIndex()==0?"nodes":"groups"; }

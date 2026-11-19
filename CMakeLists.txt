@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.24)
-project(Mlash VERSION 1.20.0 LANGUAGES C CXX)
+project(Mlash VERSION 1.21.0 LANGUAGES C CXX)
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_AUTOMOC ON)
@@ -56,7 +56,7 @@ add_library(mlash_engine STATIC
     src/app/ProtocolLink.h src/app/ProtocolLink.cpp src/app/ProtocolInbox.h src/app/ProtocolInbox.cpp
     src/app/OutboundDiagnostics.h src/app/OutboundDiagnostics.cpp
     src/app/ServiceDiagnostics.h src/app/ServiceDiagnostics.cpp
-    src/app/WebsiteTests.h src/app/WebsiteTests.cpp
+    src/app/WebsiteTests.h src/app/WebsiteTests.cpp src/app/GroupDelayTests.h src/app/GroupDelayTests.cpp
     src/core/CoreDtos.h src/core/CoreDtos.cpp src/core/CoreApi.h src/core/MihomoClient.h src/core/MihomoClient.cpp src/core/MihomoEndpoints.cpp src/core/CoreManager.h src/core/CoreManager.cpp
     src/core/CoreUpdate.h src/core/CoreUpdate.cpp src/core/OfficialCoreSource.h src/core/OfficialCoreSource.cpp
     src/core/TunPolicy.h src/core/TunPolicy.cpp src/core/TunSession.h src/core/TunSession.cpp src/core/TunApiGate.h src/core/TunApiGate.cpp
@@ -96,7 +96,7 @@ else()
     target_compile_options(mlash_engine PRIVATE -Wall -Wextra -Wpedantic)
 endif()
 
-add_library(mlash_ui STATIC src/ui/Route.h src/ui/Route.cpp src/ui/ViewIds.h src/ui/ViewIds.cpp src/ui/StatusSentence.h src/ui/StatusSentence.cpp src/ui/FeedbackSync.h src/ui/FeedbackSync.cpp src/ui/PageLifecycle.h src/ui/PageLifecycle.cpp src/ui/ToolWindowRegistry.h src/ui/ToolWindowRegistry.cpp src/ui/StatusShape.h src/ui/StatusShape.cpp src/ui/SkeletonBlock.h src/ui/SkeletonBlock.cpp src/ui/UsageDelegate.h src/ui/UsageDelegate.cpp src/ui/MenuSection.h src/ui/ContextNote.h src/ui/SettingsSearch.h src/ui/SettingsSearch.cpp src/ui/CompactSpinBox.h src/ui/MainWindow.h src/ui/MainWindow.cpp src/ui/MainWindowChrome.cpp src/ui/MainWindowData.cpp src/ui/MainWindowFeedback.cpp src/ui/MainWindowState.cpp src/ui/MainWindowNavigation.cpp src/ui/MainWindowHome.cpp src/ui/MainWindowSettings.cpp src/ui/MainWindowProxy.cpp src/ui/MainWindowProfiles.cpp src/ui/DashboardCardButton.h src/ui/ChevronToolButton.h src/ui/MenuPushButton.h src/ui/WindowUiFactories.h src/ui/SettingRow.h src/ui/ProfileRowDelegate.h src/ui/GroupCardDelegate.h src/ui/NodeNameDelegate.h src/ui/NodeCardDelegate.h src/ui/NodeCardView.h src/ui/ProxySwitch.h src/ui/DetailsDrawer.h src/ui/NodeRowModel.h src/ui/NodeRowDelegate.h src/ui/NodeRowView.h src/ui/WindowChrome.h src/ui/NodeFilter.cpp
+add_library(mlash_ui STATIC src/ui/Route.h src/ui/Route.cpp src/ui/ViewIds.h src/ui/ViewIds.cpp src/ui/StatusSentence.h src/ui/StatusSentence.cpp src/ui/FeedbackSync.h src/ui/FeedbackSync.cpp src/ui/PageLifecycle.h src/ui/PageLifecycle.cpp src/ui/ToolWindowRegistry.h src/ui/ToolWindowRegistry.cpp src/ui/StatusShape.h src/ui/StatusShape.cpp src/ui/SkeletonBlock.h src/ui/SkeletonBlock.cpp src/ui/UsageDelegate.h src/ui/UsageDelegate.cpp src/ui/MenuSection.h src/ui/ContextNote.h src/ui/SettingsSearch.h src/ui/SettingsSearch.cpp src/ui/CompactSpinBox.h src/ui/MainWindow.h src/ui/MainWindow.cpp src/ui/MainWindowChrome.cpp src/ui/MainWindowData.cpp src/ui/MainWindowFeedback.cpp src/ui/MainWindowState.cpp src/ui/MainWindowNavigation.cpp src/ui/MainWindowHome.cpp src/ui/MainWindowSettings.cpp src/ui/MainWindowProxy.cpp src/ui/MainWindowProfiles.cpp src/ui/DashboardCardButton.h src/ui/ChevronToolButton.h src/ui/MenuPushButton.h src/ui/WindowUiFactories.h src/ui/SettingRow.h src/ui/ProfileRowDelegate.h src/ui/ProfileCardDelegate.h src/ui/GroupCardDelegate.h src/ui/NodeNameDelegate.h src/ui/NodeCardDelegate.h src/ui/NodeCardView.h src/ui/ProxySwitch.h src/ui/DetailsDrawer.h src/ui/NodeRowModel.h src/ui/NodeRowDelegate.h src/ui/NodeRowView.h src/ui/WindowChrome.h src/ui/NodeFilter.cpp
     src/ui/ProviderDefinitionDialog.h src/ui/YamlFormEditor.h src/ui/YamlFormEditor.cpp
     src/ui/ConnectionDetailsDialog.h src/ui/ConnectionDetailsDialog.cpp src/ui/ProviderDefinitionDialog.cpp src/ui/ProviderPolicyDialog.cpp
     src/ui/TaskWorkspace.h src/ui/TaskWorkspace.cpp
@@ -122,7 +122,7 @@ add_library(mlash_ui STATIC src/ui/Route.h src/ui/Route.cpp src/ui/ViewIds.h src
     src/ui/HomeMetricsView.h src/ui/HomeMetricsView.cpp
     src/ui/OutboundDialog.h src/ui/OutboundDialog.cpp
     src/ui/HotkeysDialog.h src/ui/HotkeysDialog.cpp
-    src/ui/ConnectionOptions.h src/ui/ConnectionOptions.cpp
+    src/ui/ConnectionOptions.h src/ui/ConnectionOptions.cpp src/ui/ConnectionColumnsPopup.h src/ui/ConnectionColumnsPopup.cpp
     src/ui/ActivityTableModel.h src/ui/ActivityTableModel.cpp resources/brand.qrc resources/flags.qrc
     src/ui/ImportDialog.h src/ui/ImportDialog.cpp src/ui/ProxyTableModel.h src/ui/ProxyTableModel.cpp
     src/ui/NodePresentation.h src/ui/NodePresentation.cpp
@@ -216,13 +216,29 @@ if(BUILD_TESTING)
     set_tests_properties(navigation_contract_tests PROPERTIES TIMEOUT 30 ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
     add_test(NAME ui_interactions COMMAND mlash_ui_tests currentGroupSelectionAndNativePreview -o "${CMAKE_BINARY_DIR}/ui-tests.xml,xml")
     set_tests_properties(ui_interactions PROPERTIES TIMEOUT 30 ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
+    add_test(NAME profile_rename_ui COMMAND mlash_ui_tests subscriptionCardEditingAndReturnPreserveObject -o "${CMAKE_BINARY_DIR}/profile-rename-ui.xml,xml")
+    add_test(NAME subscription_cards_ui COMMAND mlash_ui_tests subscriptionCardsRouteActionsWithoutChangingUse subscriptionOrderKeepsSelectedObject subscriptionRollbackRequiresExplicitConfirmation -o "${CMAKE_BINARY_DIR}/subscription-cards-ui.xml,xml")
+    set_tests_properties(subscription_cards_ui PROPERTIES TIMEOUT 20 ENVIRONMENT "QT_QPA_PLATFORM=offscreen" LABELS "ui")
+    set_tests_properties(profile_rename_ui PROPERTIES TIMEOUT 20 ENVIRONMENT "QT_QPA_PLATFORM=offscreen" LABELS "ui")
+    add_test(NAME profile_navigation_ui COMMAND mlash_ui_tests subscriptionCardReturnRestoresGridPosition changingSectionRestoresNetworkSettingsDraft settingsSearchDoesNotRearrangeDirtyNetworkTask changingSectionRestoresEmbeddedTaskDraft settingsSearchKeepsDirtyTaskVisible -o "${CMAKE_BINARY_DIR}/profile-navigation-ui.xml,xml")
+    set_tests_properties(profile_navigation_ui PROPERTIES TIMEOUT 25 ENVIRONMENT "QT_QPA_PLATFORM=offscreen" LABELS "ui")
+    add_test(NAME node_view_navigation_ui COMMAND mlash_ui_tests nodeViewSwitchAndBookmarkUseVisibleSelection -o "${CMAKE_BINARY_DIR}/node-view-navigation-ui.xml,xml")
+    set_tests_properties(node_view_navigation_ui PROPERTIES TIMEOUT 15 ENVIRONMENT "QT_QPA_PLATFORM=offscreen" LABELS "ui")
+    add_test(NAME profile_import_ui COMMAND mlash_ui_tests fileProfileOffersSourceSyncAndReplacement -o "${CMAKE_BINARY_DIR}/profile-import-ui.xml,xml")
+    set_tests_properties(profile_import_ui PROPERTIES TIMEOUT 25 ENVIRONMENT "QT_QPA_PLATFORM=offscreen" LABELS "ui")
+    add_test(NAME settings_inline_ui COMMAND mlash_ui_tests desktopPreferencesAndEnvironmentCopy settingsRowsShowCurrentValue -o "${CMAKE_BINARY_DIR}/settings-inline-ui.xml,xml")
+    set_tests_properties(settings_inline_ui PROPERTIES TIMEOUT 25 ENVIRONMENT "QT_QPA_PLATFORM=offscreen" LABELS "ui")
+    add_test(NAME tray_quick_menu_ui COMMAND mlash_ui_tests trayQuickSubscriptionsKeepCurrentAndBoundMenu -o "${CMAKE_BINARY_DIR}/tray-quick-menu-ui.xml,xml")
+    set_tests_properties(tray_quick_menu_ui PROPERTIES TIMEOUT 20 ENVIRONMENT "QT_QPA_PLATFORM=offscreen" LABELS "ui")
+    add_test(NAME log_pause_clear_ui COMMAND mlash_ui_tests logPauseClearAndDiagnosticPrivacy -o "${CMAKE_BINARY_DIR}/log-pause-clear-ui.xml,xml")
+    set_tests_properties(log_pause_clear_ui PROPERTIES TIMEOUT 20 ENVIRONMENT "QT_QPA_PLATFORM=offscreen" LABELS "ui" RESOURCE_LOCK system_clipboard)
     add_test(NAME ui_components COMMAND mlash_ui_tests
-        compactNodeDelayDoesNotSelectAndProfileBrowseDoesNotApply popupSurfacesWithoutMainWindow desktopPreferencesAndEnvironmentCopy responsivePageGeometry
+        compactNodeDelayDoesNotSelectAndProfileBrowseDoesNotApply popupSurfacesWithoutMainWindow groupPickerSearchKeepsStablePopupAndSelection desktopPreferencesAndEnvironmentCopy responsivePageGeometry
         historyReadingAndDraftFeedback logPauseClearAndDiagnosticPrivacy profilePolicyDialogPersistsOnlyOnSave
         providerAndCompatibilityDialogsRespectVersions
         trayGroupDwellCacheAndSelection trayAppearancePriorityAndResources lightweightLifecycleAndQuickReopen
         importValidationAndSecretVisibility failedImportRetainsDraftUntilExplicitRetry unchangedSnapshotsPreserveRowsAndChoices refinedTaskGeometryAndSemantics refinedContextFitsAutomaticGroupsAndLargeText emptyStateCannotIssueInvalidCommands fileProfileOffersSourceSyncAndReplacement
-        coherentActionsAndBilingualRuleTokens nodeLocationHints dashboardTabsAndSettingsFocus quietMouseFocusAndGroupedSettings
+        coherentActionsAndBilingualRuleTokens nodeLocationHints dashboardTabsAndSettingsFocus quietMouseFocusAndGroupedSettings emptyStatesOfferFocusableNextStep
         -o "${CMAKE_BINARY_DIR}/ui-components.xml,xml")
     # 该系统剪贴板是进程外共享资源：并行 ctest 时与其他用例互相覆盖。
     # 用 RESOURCE_LOCK 串行化，而不是放宽断言。
@@ -328,6 +344,12 @@ if(BUILD_TESTING)
     target_link_libraries(mlash_connection_view_tests PRIVATE mlash_ui Qt6::Test)
     add_test(NAME connection_view_tests COMMAND mlash_connection_view_tests -o "${CMAKE_BINARY_DIR}/connection-view-tests.xml,xml")
     set_tests_properties(connection_view_tests PROPERTIES TIMEOUT 30 ENVIRONMENT "QT_QPA_PLATFORM=offscreen" RESOURCE_LOCK system_clipboard)
+    add_test(NAME connection_return_ui COMMAND mlash_connection_view_tests returningToConnectionsRestoresFilterSelectionAndPosition -o "${CMAKE_BINARY_DIR}/connection-return-ui.xml,xml")
+    set_tests_properties(connection_return_ui PROPERTIES TIMEOUT 20 ENVIRONMENT "QT_QPA_PLATFORM=offscreen" LABELS "ui")
+    add_test(NAME log_commands_ui COMMAND mlash_connection_view_tests logCommandsHaveOneVisibleEntryAndCopySelection -o "${CMAKE_BINARY_DIR}/log-commands-ui.xml,xml")
+    set_tests_properties(log_commands_ui PROPERTIES TIMEOUT 20 ENVIRONMENT "QT_QPA_PLATFORM=offscreen" LABELS "ui" RESOURCE_LOCK system_clipboard)
+    add_test(NAME connection_columns_ui COMMAND mlash_connection_view_tests optionalColumnsAndLegacyPreferences searchFlagsErrorsAndColumnPersistence -o "${CMAKE_BINARY_DIR}/connection-columns-ui.xml,xml")
+    set_tests_properties(connection_columns_ui PROPERTIES TIMEOUT 15 ENVIRONMENT "QT_QPA_PLATFORM=offscreen" LABELS "ui")
     target_link_libraries(mlash_hotkey_tests PRIVATE mlash_ui Qt6::Test)
     if(WIN32)
         target_sources(mlash_hotkey_tests PRIVATE src/platform/windows/HotkeyTestSupport.cpp)

@@ -1,6 +1,152 @@
 # 验证报告
 
+## 2026-11-19：1.21.0 订阅优先预发布候选
+
+本轮以 [U22 设计](design/u22-config-rethink.md)与 [ADR 0057](adr/0057-subscription-first-unified-list.md)为验收依据。远程/本地共用配置卡片，来源位按域名/文件名展示；使用、单项更新、候选预览与应用分区命中；菜单进入实际内容/来源工作区；来源维护可确认回滚，列表支持按稳定 ID 排序。规则编辑为左侧新建、右侧现有项的双区任务。返回保持所选对象与列表位置；节点/连接与设置路径按 U22 操作链复核。
+
+首轮全量测试 62 组中两组失败：`flat_workspace_tests`、`ui_components` 的 840×560、120% 字号节点卡片裁切。失败几何为第二张卡片 `0,52 572×52`、视口 `576×64`，根因是节点区按 220 DIP 估列数、卡片按约 300 DIP 实际排一列。两处改用真实网格列数，视口重排时更新高度；原失败组定向复测 2/2 通过。随后 `scripts/test.ps1 -Preset windows-mingw` 完整复跑：**61 组通过、0 失败、1 组 `system_test_guard` 按默认系统写入门禁跳过**，耗时 475.78 秒。此轮没有写用户系统代理/TUN。
+
+包内空态视觉复核发现零/单配置时无意义的“排序”行，以及重复“导入配置”动作。按事前设计只在至少两张卡片时显示排序，空态只保留页首地址/文件导入；为原先未纳入 CTest 的空态用例更新当前入口并加入 `ui_components`。最终增量构建通过；`subscription_cards_ui|ui_components` 定向复测 **2/2 通过**。因这两处仅改变配置空态和列表工具可见性，未再次运行全部 62 组；完整测试结果对应其前一个构建，最终代码的受影响路径由上述定向复测覆盖。
+
+最终 `scripts/package.ps1` 生成 `dist/Mlash-1.21.0-windows-x64-portable.zip`；35 文件白名单、逐文件完整性、CLI/PE 版本及锁定内核校验通过。`ci_release_check.py --build build/windows-mingw --package dist/Mlash-1.21.0-windows-x64-portable` 通过，ZIP SHA-256 为 `27daee4138e9a8e3e172f6bfd5ab2f6f345a1f7037a85415e1b25cee6e5b179b`，EXE SHA-256 为 `0619ae816aa8f9748771a9944b40a01b82c5df3bdb1d8a6b53cb7d94692d87a4`，内核 SHA-256 为 `951bfd2f513ac7de486e53f2bbf1bf804e0a903bb19b237a744d11ca49023755`。最终包执行 `scripts/ci_smoke.ps1` 通过：包内隔离启动、Schannel TLS、八个路由身份和设置搜索往返；人工查看首页、配置空态和设置目录截图，未见结构性遮挡。证据位于忽略的 `build/ci-evidence-1.21.0-*`。
+
+本机验证支持 **Windows x64 预发布**。原生鼠标/读屏、Windows 10/干净机器、真实系统代理与 TUN 写入、72 小时长稳和性能预算未由这次隔离测试证明；用户已允许本轮跳过虚拟机及 72 小时验收。`release_qualified=false`，不得把该包或 CI 结果写作正式发行资格。GitHub 提交、标签、远端流水线和公开发布另记，尚不计入本段本机验证。
+
+## 2026-11-18：U22 配置工作台设计重置
+
+按用户新截图重新审视：现行一级导航为 184 DIP 宽、32 DIP 项高、6 DIP 间隔；配置列表→详情目录→检查器仍重复呈现功能入口。先写[无约束方案与硬约束对照](design/u22-config-rethink.md)，再制作[交互原型](design/u22-config-rethink.html)。首版三列样片显示只有少量配置时来源列占去过多正文空间，遂改为把来源列表融入左侧栏的两列结构。最终原型已在本机 Chromium 无界面渲染并查看 1440×900 的节点内容图和 840×700 的 DNS 图：宽图为两大列、直接呈现组和节点，窄图无横向溢出或遮挡主要控件；JavaScript 语法检查通过。静态初始状态与响应式排版不能证明点击全链、原生 Qt 行为或运行 UI。尚未实施，也未重建上一次便携包；此前包不能代表此设计。
+
+用户随后明确订阅列表和更新才是最常用操作，第一版“默认显示节点内容”的任务优先级错误。读取本地 Clash Verge Rev 的订阅页与卡片实现后，第二版[订阅优先原型](design/u22-subscription-first.html)把“点击卡片使用”“独立刷新图标”“来源/更新时间/流量信息”作为主要动线，保留 Mlash 的候选显式应用；将长上下文菜单与大型规则模态编辑排除。Chromium 无界面渲染并查看了 1440×900 默认列表、840×700 候选状态及宽窗短菜单三态，修正候选状态下同时显示“当前使用”的标识。独立 Chrome CDP 操作链 8/8 通过：初始列表、切换使用、刷新不切换、候选不生效、五项菜单、打开内容、返回列表、显式应用。脚本位于忽略的 `build/test-temp/`，测试对象仅是 HTML 模拟状态；没有验证 Controller、Qt Widgets、系统写入或便携包。
+
+用户继续要求本地与远程不分区、卡片来源位显示本地文件名，并重审菜单层级。修订[同一原型](design/u22-subscription-first.html)后，1440×900 默认页与 840×700 四项远程菜单图已渲染并目视核对：三张卡位于一个列表，第三张来源位为 `local-example.yaml`；源文件绑定的本地卡片也有独立刷新。更新后的 Chrome CDP 12/12 操作链通过：同一列表/文件名、切换使用、刷新不切换、候选不生效、远程四项菜单、查看内容/返回、资料编辑独立工作区、本地三项菜单、本地更新、显式应用。此为设计模拟，不替代 Controller、Qt 或真实文件变更验证。
+
+继续审视“查看配置内容”落点后发现旧原型只有泛化占位文字，候选“查看”仍指向已删除的旧视角。先在[设计第 7 节](design/u22-config-rethink.md#7-配置内容页重审直达内容单层返回)明确对象、版本、内容与返回合同，再修改 HTML 原型：顶栏为配置名称；首屏直接为组/节点可搜索行；规则区分覆盖和来源，DNS 按需展开；候选查看进入已保存版/候选版对比；返回恢复原卡片动作焦点与列表滚动。新 Chrome CDP 操作链 17/17 通过，覆盖内容落点、搜索、规则、DNS、候选对比和焦点返回。1440×900 内容页、840×700 内容页与候选对比图已渲染并目视检查，无主要控件遮挡。原型行数与比较摘要是示例数据，不证明真实 YAML、草稿保存、Controller 状态或原生 Qt 行为；这些仍待实施和验证。
+
+## 2026-11-18：U22 首页单行控制区与用户任务原则
+
+用户反馈将首页控制卡收敛为连接/当前节点、路由模式、当前策略组测速三条等高单行任务。移除「内核已停止」「尚未测试」及测试进度次行；成员列表继续显示测速结果，全局状态栏和就近失败反馈保留必要的异常。开关不再依赖 `state.ready` 才可操作：存在有效活动配置且没有写入、退出或只读限制时，Controller 的既有事务负责准备内核、回读和回滚。`DashboardCardButton` 的自动最小高度与 Qt 按钮样式曾把路由行独自缩为 28 DIP，按三个控件的实际高度统一后为 36 DIP。原则已写入[当前交互契约](ui-interactions.md)，实施前设计及状态边界见[U22 重审](design/u22-daymark-page-reaudit.md)。
+
+`scripts/build.ps1 -Preset windows-mingw-open` 通过。`workflow_depth_tests`、`ui_components`、`home_control_tests`、`home_probe_tests` 在允许隔离本机回环的运行中各自通过；`appearance_prefs_tests` 与 `appearance_tests` 通过，后者新增 100%/120% 字号、浅/深主题及三种窗口尺寸下的三行等高断言。曾在中间版本检测到 36/28 和 36/42 DIP 的不等高，修复并复测为通过，不将中间失败抹去。受限沙盒最初阻断本机回环/端口身份，随后同机受控复测通过；所有这些测试均使用临时数据，未写系统代理/TUN。
+
+`scripts/package.ps1 -Preset windows-mingw-open -OutputName Mlash-1.20.0-windows-x64-u22-one-line-controls-preview` 的 35 文件白名单与逐文件完整性通过；ZIP SHA256 为 `8f29ae57f009ca8770583982f279c7c2220d2cb2339c3f9fe42388aa94704c53`。从该包运行 `scripts/ci_smoke.ps1` 通过，八个实际路由截图和设置搜索操作链均在新证据目录生成；已人工查看首页、配置和设置离屏图。原生鼠标/150% DPI、实际系统代理/TUN 写入、长期运行及正式发行资格未验，`release_qualified=false`。U22 其余配置编辑工作区统一和逐页人工验收继续进行。
+
+随后继续配置工作区审计：已挂载编辑器在同一配置复入时保持对象和草稿，但「概览」被放在页签中并执行返回，页签语义不成立；配置候选状态变化时旧声明页签也不会移除。现由工作区按当前任务声明更新未挂载的页签及标题，挂载草稿保持到用户明确离开；配置任务列表去掉「概览」，只从返回控件回详情。`flat_workspace_tests`、`prototype_ui_tests`、`profile_navigation_ui` 为 3/3 通过，新增同对象任务声明更新和真实配置 DNS 页签断言。扩大验证的 `tun_tests` 最初因旧断言寻找已删除的首页技术状态行而失败；将其改为检查代理开关与全局状态栏后，同机隔离伪平台复测通过。该变化发生在上一段预览包之后，须以更新的包作为本轮最终候选。
+
+用户指出 DNS 任务页仍有多层导航及未启用时的大块空表单，配置页也应按设置目录和 Daymark 的就近编辑方式组织。源码审计确认配置详情本已分组，但任务编辑替换整个内容区，DNS 内又叠加四个页签与「常用字段/高级 YAML」。先按[事前设计](design/u22-daymark-page-reaudit.md#dns-工作区信息收敛)完成配置垂直片：详情分为使用/内容/来源维护；任务检查器在宽窗与详情并列，窄窗覆盖内容区，关闭后恢复详情、焦点和原滚动，草稿留在同一对象。DNS 默认只显示来源状态和自定义选择，未开启时隐藏空字段；来源 DNS、已保存配置和解析测试由当前页菜单打开。开启自定义后才扩展编辑，提示明确区分「当前沿用」和「保存后使用」。截图首次发现 720 DIP 检查器压住目录行，随后限制为宽窗不超过半幅且最大 440 DIP，并给目录真实预留宽度；第二次发现未编辑时留下整面空白，改为 240 DIP 紧凑态。新增断言覆盖并列边界、宽窄切换、关闭/重开、草稿和辅助视角。宽窄截图由真实配置夹具生成并人工查看。
+
+最终 `scripts/build.ps1 -Preset windows-mingw-open` 通过。允许隔离本机回环/端口观测后，`scripts/test.ps1 -Preset windows-mingw-open -TestRegex '^(flat_workspace_tests|profile_navigation_ui|prototype_ui_tests|yaml_forms_tests|appearance_tests|dns_tests)$'` 为 6/6 通过、0 失败（60.46 秒）；默认受限环境的前一次扩大尝试中 `appearance_tests` 两项端口/代理观测断言失败，复测结果不抹除该记录。测试使用临时数据，未运行系统代理/TUN 写入门禁。`scripts/package.ps1 -Preset windows-mingw-open -OutputName Mlash-1.20.0-windows-x64-u22-profile-inspector-preview` 生成 35 文件白名单并逐文件验证的便携包，ZIP SHA256 为 `e126c234182081353257c60bde2a597f4dd2a777f1a6da2512070a5355e27a5d`；从该包执行 `scripts/ci_smoke.ps1` 通过，八个实际路由、设置搜索前后与返回截图在新证据目录生成，已查看配置空态与设置目录图。原生鼠标/150% DPI、真实系统写入、其余配置任务的逐项密度审查和正式发行资格未验，`release_qualified=false`。
+
+随后扩大到 `workflow_depth_tests`、`ui_components`、`proxy_chain_tests`、`proxy_edits_tests`、`provider_edits_tests` 和 `rules_tests`，6/6 通过、0 失败（83.78 秒）。补充的配置检查器断言覆盖跨分区返回保留草稿、关闭后恢复详情焦点、宽窄布局和 DNS 辅助视角切换；单独复测 `flat_workspace_tests` 通过。规则、节点与组、拨号链编辑器已在真实配置夹具中打开并截取样片，但其复杂字段的密度与原生输入体验仍须继续复核，不能从功能回归通过推断视觉精修完成。
+
+## 2026-11-18：U22 可见状态与扩展 UI 回归
+
+按逐页事前设计收敛连接页摘要：没有速率、累计和活动连接时，隐藏整条无意义的「—」及禁用的“断开全部”；有当前活动连接时恢复摘要与危险动作，仍按真实连接集合而非搜索结果判断。首页 TUN 实际接管从不可见行的 tooltip 提升为可见状态，且优先于“系统代理由其他程序管理”；失败、未就绪和只读仍保持各自优先级。配置右键测试固定从实际打开的本地菜单取动作，避免同名远端菜单误操作；待回收的旧详情编辑器不再当成当前编辑器。外观测试只测当前可见的页面/任务滚动区，隐藏浮层另在打开后测量。日志、规则和节点卡片书签旧用例按本轮已确认的空态与可见视图语义校正。
+
+`scripts/build.ps1 -Preset windows-mingw-open` 通过。空连接摘要单项 `coherentActionsAndBilingualRuleTokens` 为 3/3，含活动连接与本地右键对象身份的 `currentGroupSelectionAndNativePreview` 为 3/3；首页状态单项 `homeModeRulesMetricsAndTunMeaning` 为 3/3，数据空态单项 `logAndRuleRegionsDistinguishStates` 为 3/3。完整 `appearance_tests` 在允许本机回环的非沙盒运行中为 12/12、0 失败；其先前两项内核/节点失败是受限沙盒拒绝本机回环访问，不能据此定性为产品缺陷。修正旧断言后，`scripts/test.ps1 -Preset windows-mingw-open` 选取 27 个与 UI、页面操作、配置、连接、网站及外观相关的 CTest 组复跑，**27/27 通过，0 失败**（148 秒）；`ui_components`、`appearance_prefs_tests`、`workflow_depth_tests`、`connection_view_tests` 均在其中。以上均为隔离临时数据与离屏 Qt 测试，未写系统代理/TUN；原生鼠标/150% DPI、真实托盘与正式发行资格不由这些测试证明。
+
+## 2026-11-18：U22 功能归属与页面大纲首片
+
+按 [Daymark 方法逐页重审](design/u22-daymark-page-reaudit.md)先列功能族、唯一主工作区与四分区导航，再规定各页职能、信息焦点、动线和空/忙/错状态，视觉修订放在其后。代码首片收敛了首页无配置时的重复导入入口及状态句、规则无配置时的空编辑器、数据页签对齐、日志重复工具带/遮盖实际记录的空态、网站测速重复顶行。设置目录现在将「本地代理」限定为端口与测试地址，将日志等级、IPv6、统一延迟与内核文件/更新归入「内核管理」；登录启动和释放界面开关只有目录中的一个控件实例，搜索按所属任务定位。配置页的批量更新只在存在外部来源时出现。本片未把设计表中的其他页面标为完成。
+
+`scripts/build.ps1 -Preset windows-mingw-open` 通过。定向运行 `mlash_ui_tests.exe settingsDirectoryOwnsNetworkAndCoreTasks quietMouseFocusAndGroupedSettings`，2/2 用例通过；`mlash_flat_workspace_tests.exe embeddedTasksFitNarrowWindowsAndTextScales singleSessionFailureCancelAndHiddenDrafts`，2/2 通过；`mlash_website_tests.exe cardLayoutAtSupportedSizes customTargetEditorPersistenceAndReset`，2/2 通过。后三个可执行文件均以隔离的工作区临时目录及离屏 Qt 插件运行，无系统代理写入。`scripts/test.ps1 -Preset windows-mingw-open -TestRegex '^(settings_value_tests|flat_workspace_tests|prototype_ui_tests)$'` 为 3/3 通过。开发构建的 `Mlash.exe --smoke-test` 使用隔离数据目录，进程退出码 0，八个页面路由清单与截图已生成；离屏设置目录图已人工查看，常驻搜索与分组行可见。
+
+扩大的早期尝试中，`ui_interactions` 在现有 `tests/UiTests.cpp` 内核监听端口身份断言失败；`website_tests` 全套达到 30 秒门限。网站卡片与目标编辑两项在隔离临时目录重跑通过，不把它记作网站全套通过。尚未核对本轮所有页面的原生鼠标/键盘、150% DPI、浅深色、完整配置对象夹具和系统托盘；不代表全页 UI/UX 完成或正式发行资格。
+
+配置页新增的本地快照用例先失败：列表刷新把“更新订阅”隐藏，随后 `updateActions` 又按“任意配置存在”将它显示。追到这两个写入点后，把可见性与可用性统一放入 `updateActions`，按非空外部来源计算。再次构建通过；`profileRenameStaysWithItsDetails`（仅本地快照）和 `batchUpdatesPreserveVersionsContinueFailuresAndStopQueue`（可更新来源）单项分别通过，验证入口在两类状态下的差异。首次失败保留在记录中，不能以最终通过掩盖原断点。
+
+最后一次相关回归 `scripts/test.ps1 -Preset windows-mingw-open -TestRegex '^(settings_value_tests|flat_workspace_tests|prototype_ui_tests|profile_navigation_ui)$'` 4/4 通过。文档链接 128 篇、隐私检查 135 项、`git diff --check` 均无发现。此轮没有生成新的便携包。
+
+连接页复核中，内核未就绪时汇总行有“前往首页启动”，空表内又有“启动内核”；无活动配置时后一个按钮实际跳配置，与文案不符。按事前审计移除汇总行的重复动作，空态保留唯一按钮，并按活动配置有无分别显示“选择配置”或“启动内核”。`taskEntryPointsAndSettingsStayCoherent` 单项通过，覆盖无配置时按钮文案、唯一入口与路由；新开发构建的隔离冒烟八个路由均匹配清单，连接页离屏截图显示单一“选择配置”入口。未执行真实内核启动或系统代理写入。
+
+网站测试页也发现无配置时“请先启动内核 / 前往首页”多跳一步；改为“请先选择配置 / 选择配置”直达配置。已有活动配置但内核未就绪时，同一就近按钮执行内核启动命令，忙碌与只读时不可操作。`taskEntryPointsAndSettingsStayCoherent` 再次单项通过，覆盖无配置路由；新开发构建的隔离冒烟退出码 0，测速页截图已核对文案与按钮位置。实际内核启动路径未在此用例中触发。
+
+继续核对内核意图与观察状态，发现“有活动配置但 API 尚未就绪”会把已在启动/确认的内核再次表示为“启动内核”。连接和网站测试页现在仅在内核停止或失败时给启动动作；启动中、运行待确认及停止中显示对应等待状态，触发回调再次检查状态。网站测试按节点暂存结果的现行行为已同步到交互契约，移除旧文档的“切节点清空”矛盾。`scripts/build.ps1 -Preset windows-mingw-open` 通过；`taskEntryPointsAndSettingsStayCoherent` 单项通过，覆盖无配置、运行待确认和停止三态；相关 4 组 CTest（`settings_value_tests|flat_workspace_tests|prototype_ui_tests|profile_navigation_ui`）4/4 通过。
+
+扩展运行 `appearance_tests` 全组为 9 通过、3 失败：840×560、120% 字号下 `connectionColumnScroll` 横向溢出 7 px；节点手动选择用例未向模拟 API 发出预期写入；真实内核响应卡用例被监听端口身份校验拒绝。本次等待态修改不经过这些失败路径，新增的页面状态用例单项已通过。三项继续列为 U22 待处理，未产生新的便携包或发行资格。
+
+第一项追到外观测试自身：它在首页遍历了**隐藏**的连接列浮层内部滚动区，该区尚未经过 `openBelow` 的测量与锚定，7 DIP 是初始几何，不是可见首页溢出。已调整验收为页面仅检查可见滚动区，另外在 840×560、120% 文字下实际打开连接列浮层后检查其无横向溢出；`groupedSettingsAndPopulatedPagesRemainUsable` 单项为 3 通过、0 失败。节点模拟写入与真实内核端口身份两项仍待分别定位，不能由此宣称完整 `appearance_tests` 通过。
+
+节点写入用例的进一步探针确认行点击信号已发出，夹具当时的 `AppState.busy` 为真；直接把它设为假后模拟写入仍为 0，说明还存在第二个未定位的守卫/上下文条件。试探性夹具修改已撤回，保留原失败与源码证据，不能只凭一处 `busy` 观察宣称根因已定。
+
+## 2026-11-18：UI 操作链与包内冒烟门禁复核
+
+用户指出应从设置搜索的前后样式不一致举一反三检查工作方式。审计确认旧实现由搜索入口切入另一套全量表单；此前只验证修改后的构建截图及定向测试，未以同一用户操作链复核入口、搜索、返回和实际交付包。进一步对上次包内冒烟截图逐张查看，发现 `page-6.png` 与 `page-7.png` 都显示数据测试页：旧冒烟使用相互重叠的切页/截图定时器，脚本只检查图片数量，因而错误放行。旧包的“八页截图齐全”记录只证明文件数，不再作为八个页面身份均正确的证据。
+
+已把 UI 路径验收和包身份要求固定到 [工程方法](engineering.md)，U22 事前复核见[操作链设计](design/u22-page-operation-flows.md)。冒烟改为切页、确认路由、截图、进入下一页的串行流程，写出 `page-routes.json`；`ci_smoke.ps1` 校验八个旧入口映射的视图/页签，并拒绝非空证据目录。设置 UI 用例增加搜索前目录可见、搜索定位后目录仍可见、离页再入仍保持同一目录与常驻搜索的检查。构建通过；`scripts/test.ps1 -Preset windows-mingw-open -TestRegex '^(profile_navigation_ui|settings_value_tests|prototype_ui_tests)$'` 为 3/3 通过。
+
+从新包 `dist/Mlash-1.20.0-windows-x64-u22-flow-verified-preview` 运行 `scripts/ci_smoke.ps1` 通过：包内隔离启动、TLS/Schannel、八个截图及路由清单一致；第 6 张是设置目录，第 7 张是数据测试。复用同一非空证据目录被脚本按预期拒绝。35 文件白名单及完整性验证通过，ZIP SHA256 为 `529f0e99c6cef33b76fcdef142b3fa12223b259857a1c6dbc553a705cd28fbcb`。先前修补串行回调时出现一次悬空引用导致进程异常退出，改为值捕获后重建并复测通过。文档导航 128/0、隐私检查 135/0、`git diff --check` 通过。旧同版本预览包仍存在，但不再作为本轮交付候选。尚未进行原生鼠标/DPI 人工验收、扩大全套测试或正式发行验收；`release_qualified=false`。
+
+随后将设置入口的包内操作链补入冒烟：`page-6.png` 为搜索前目录，键入“外观”并触发 Enter 后目录仍可见，`settings-search.png` 为搜索后状态；离开设置再进入，目录和搜索仍可见，保存 `settings-return.png`。从 `dist/Mlash-1.20.0-windows-x64-u22-settings-chain-preview` 隔离运行 `scripts/ci_smoke.ps1` 通过，八个路由条目及新增两张操作截图均存在；搜索前后只改变搜索栏区域，搜索后与返回截图逐像素相同。35 文件白名单与完整性通过；本轮最终交付候选 ZIP SHA256 为 `8d29bcf52cfe345fe4b2365a79d81d4d64330c8ecc58cbd1bef857cc44c10e80`，取代上段较早候选。此检查不替代原生鼠标、DPI、读屏或全量回归。
+
+另以 `Start-Process -Wait` 运行不带截图参数的普通 `--smoke-test`，退出码 0。PowerShell 直接调用 GUI 程序后 `$LASTEXITCODE` 未提供可靠结果，因此验证脚本统一显式等待进程；该调用方式已写入工程方法。最终定向三组 UI 测试 3/3 通过，文档导航 128/0、隐私 135/0、`git diff --check` 通过。
+
+## 2026-11-18：设置搜索布局与目录一致性
+
+两张设置截图的差异由搜索入口立即调用 `openSettingsTask("all")` 造成：目录行与全量表单使用不同组件，搜索框还被放在独立任务顶栏右侧。用户明确选择分组目录、行尾菜单和常驻搜索框。现在进入设置即可输入，Ctrl+F 只聚焦该输入；选中结果才定位目录行或打开对应字段任务。去掉“全部设置”混合任务，编辑任务与目录共用搜索栏；带未保存网络草稿时跨任务定位被拒绝。视觉复核了 `build/u22-search-review/settings-directory-search.png` 和 `settings-search.png` 的 840×560 测试截图：搜索栏直接可见，目录分组没有被全量表单替换。
+
+`scripts/build.ps1 -Preset windows-mingw-open` 通过；`scripts/test.ps1 -Preset windows-mingw-open -TestRegex '^(profile_navigation_ui|settings_value_tests|prototype_ui_tests)$'` 3/3 通过，新增“无需点击搜索入口即可输入并定位外观行”的回归；`settingsSearchLocatesWithoutEditingOrDiscardingDrafts` 单项通过。`scripts/package.ps1 -Preset windows-mingw-open -OutputName Mlash-1.20.0-windows-x64-u22-search-field-preview` 生成 35 文件的非正式预览包，白名单和逐文件完整性验证通过；ZIP SHA256 为 `6cf06855531709b116c8219b58b55e35a71a87e86d0fee3675198a3bc2122c46`，`release_qualified=false`。扩大的 `workflow_depth_tests` 仍有 4 项非本搜索链失败；`appearance_tests` 有 3 项失败，其中布局用例定位到首页 `connectionColumnScroll` 在 840×560、120% 字号下横向溢出 7 px，其余为写入/内核监听身份测试。以上未计为本片通过，也未执行原生 DPI 人工验收。
+
 本文只记录实际结果，区分本轮执行、历史匿名汇总与尚未验证的资格。原始配置、私人环境、真实订阅及原始诊断不进入公开文档。
+
+## P05：U22 Windows 便携预览包（2026-11-18）
+
+从当前未提交工作树运行 `scripts/build.ps1 -Preset windows-mingw-open`，构建成功且无需增量编译。运行 `scripts/package.ps1 -Preset windows-mingw-open -OutputName Mlash-1.20.0-u22-preview-windows-x64-portable` 生成 ZIP 和暂存目录。包内 CLI 版本为 1.20.0，固定内核 SHA256 为 `951bfd2f513ac7de486e53f2bbf1bf804e0a903bb19b237a744d11ca49023755`，与发布内核锁及 manifest 一致。白名单及逐文件校验通过：34 个有效载荷文件，加 `package-manifest.json` 共 35 个 ZIP 文件；解压读取全部条目并逐项比对 manifest 的 SHA256 通过。ZIP 大小 52,806,758 字节，SHA256 为 `075688553ebca55c19dbbb59bc58ab05d826445a5531d6654f8bc2d59f2f66a9`，与侧车文件一致。
+
+对暂存目录运行 `scripts/ci_smoke.ps1`：隔离数据启动成功，Qt 6.10.2、Schannel TLS 可用，八页截图齐全。本次只生成便携预览包，`release_qualified=false`；没有执行真实系统代理/TUN、干净机器部署、原生人工 UI 验收或正式发行门禁。
+
+## U22：逐页操作链（2026-11-17—18，进行中）
+
+11 月 18 日按用户确认的操作语义继续：首页当前节点名称为纯展示；「连通性测试」改为当前浏览策略组的有界并发延迟测试，测试期间可切换节点，停止/内核退出会取消；网站测试按节点保留至多 8 个其他节点的内存结果，显式清空或配置写事务清除。配置名称未保存时阻止隐式切对象，设置搜索不能把脏网络任务重排成目录。连接页离开前保存滚动和选中 ID，切回后在新快照出现时恢复；筛选/活动结束页签保留，旧详情不重开。日志删除隐藏的复制/清空按钮和导出菜单影子动作，复制、清空、换行、目录归入单一菜单，脱敏导出保留一个顶栏入口。事前决策和验收见 [U22 设计](design/u22-page-operation-flows.md)。
+
+`scripts/build.ps1 -Preset windows-mingw-open` 最终构建通过。`connection_return_ui` 先暴露模型重置后选中行会把滚动值带回所选行，改为先恢复选中、最后恢复滚动；跨主分区与切数据页签两条路径通过。`log_commands_ui` 核对单一命令入口、无隐藏按钮和选择文本复制，2/2 通过。`profile_navigation_ui|website_tests|home_control_tests|home_probe_tests|flat_workspace_tests|navigation_contract_tests|connection_return_ui` 7/7 通过，约 27 秒；`trayGroupDwellCacheAndSelection` 单项回归验证整组测速期间切当前成员后继续完成。上述模拟网络用例在受限沙盒首次运行时 `home_probe_tests` 失败、`website_tests` 30 秒超时，允许本机回环模拟 HTTP 后通过。没有执行系统代理或 TUN 写入。原生鼠标/150% DPI、托盘真实交互、跨页编辑工作区统一及先前扩大套件的失败归因仍未验收，U22 保持进行中。
+
+继续源码级核对目标编辑后确认它已由 `TaskWorkspace` 页内承载，并非实际模态弹窗；在现有 `customTargetEditorPersistenceAndReset` 增加可见工作区、嵌入属性、取消后返回测速页断言。增量构建通过，本机回环权限下 `website_tests` 全套再次通过（10.99 秒）。没有为已经符合页内工作区契约的编辑器再造一层界面。
+
+日志继续发现暂停视图的独立 UI 快照未随「清空视图」清除；修复后 `log_pause_clear_ui` 隔离测试通过（0.58 秒），覆盖暂停后清空、保持暂停、新日志到来仍不显示、恢复后仅显示新日志。最终再次运行 `scripts/build.ps1 -Preset windows-mingw-open` 通过；无系统代理/TUN 写入。
+
+按 [U22 事前设计与逐页审计](design/u22-page-operation-flows.md) 对照 Daymark 源码中的 `navigateSafely`、行主动作与菜单锚定，修复配置列表 Ctrl/Shift 多选被详情跳转抢占、同一详情重复激活重建、跨分区返回配置跳回列表、右键触发时选中行改变造成错对象、卡片 Enter 读取隐藏行列表，以及活动任务/网络设置/规则草稿跨页不恢复上下文。配置页的“导入…”行保留三来源菜单，隐藏重复顶栏 `+`；首页快捷添加仍在。设置搜索结果改用显示前锚定菜单。没有改内核、OS 代理或数据格式。
+
+`scripts/build.ps1 -Preset windows-mingw-open` 最终构建通过。`scripts/test.ps1 -Preset windows-mingw-open -TestRegex '^(profile_navigation_ui|profile_rename_ui|flat_workspace_tests|navigation_contract_tests|home_control_tests|page_lifecycle_tests|settings_value_tests|ui_model_tests)$'` 8/8 通过。新增回归覆盖配置详情跨页恢复与滚动、重复激活保留名称草稿、Ctrl 多选、右键锁定配置 ID、网络设置跨页恢复及活动工作区草稿跨页恢复。设置搜索的原有操作链 `settingsSearchLocatesWithoutEditingOrDiscardingDrafts` 单独运行通过，证明带网络设置草稿进入规则再返回的契约仍成立。
+
+11 月 18 日续做规则页、设置搜索与首页节点的对象链：两个规则页签的“前往订阅”都到来源配置详情；连接详情定位组仅在路由到达首页后生效；设置搜索不能在提交中或脏任务未处理时把任务隐藏，却仍给不可见行标为已定位；行/卡片切换、书签与子组入口按可见节点同步选中；节点右键只针对成员，节点和连接详情规则菜单使用展示前锚定。配置遗留动作也统一从菜单打开时固定的 ID 取对象。最终 `scripts/build.ps1 -Preset windows-mingw-open` 通过；`scripts/test.ps1` 选择 `node_view_navigation_ui|profile_navigation_ui|navigation_contract_tests|settings_value_tests|home_control_tests|ui_model_tests|flat_workspace_tests|profile_rename_ui|page_lifecycle_tests` 9/9 通过，新增节点视图/右键、规则两个页签与脏设置目录搜索回归。`settingsSearchLocatesWithoutEditingOrDiscardingDrafts` 单独复跑通过。连接视图中规则建议、安全快照、失效上下文与右键固定 ID 的四项单独运行通过。文档导航 128 篇、隐私 135 项与 `git diff --check` 均无发现。
+
+扩大的 `workflow_depth_tests` 套件运行时有 3 项失败：`perGroupDelayUrlsDoNotShareCachedResults` 未读到预期延迟、`groupDelayUsesBoundedParallelRequestsAndCancels` 未收到预期请求数、`optInSelectionOnlyClosesPreexistingAffectedConnections` 的操作结果失败；同套件设置搜索用例通过。这 3 项不经过本片修改的页面事件代码，尚未归因或复测，不将 8/8 定向结果写成全套件通过。卡片 Enter 尚未做真实内核节点切换专项验收。原生鼠标、屏幕阅读器、系统托盘、连接深链和全部页面的完整操作链均未完成；本片不代表 UI/UX 全面完成或发行资格。
+
+11 月 18 日连接视图全套按既有 30 秒门限运行时超时；中途 XML 显示 `connectionRuleCarriesDraftAndCancelKeepsParentText` 因 `connectionsCurrent()` 为 false 等待约 19 秒失败，其余尚未完成。此项依赖连接快照/模拟网络，未由新增菜单锚定触发；仍需单独归因，不计入通过。`flat_workspace_tests`、`profile_rename_ui`、`page_lifecycle_tests` 3/3 通过。未做原生 150% DPI 的菜单弹出人工复核。
+
+## U21：Windows 字体栅格精修（2026-11-17）
+
+事前根因审视与方案见[U21 设计](design/u21-windows-font-rasterization.md)。本机原生 Qt 6.10.2/Windows 探针读到 DPR 1.5、逻辑 DPI 96、Noto Sans SC 9.5pt 对应 13 逻辑像素；没有额外 Qt 缩放环境变量或 Windows DPI 兼容性覆盖。相同 Widgets 文本区域，默认引擎的强色差边缘为 2,121/3,209 个非白像素，显式 FreeType 为 0/3,063。`QFont::NoSubpixelAntialias` 的默认引擎样片逐像素不变，Noto、微软雅黑及 Segoe UI 均有彩边。此对照只说明本机渲染栈。
+
+按设计在 Windows GUI 启动入口选择 FreeType，保留显式平台覆盖与离屏测试。`scripts/build.ps1 -Preset windows-mingw-open` 通过；`mlash_appearance_tests allPagesAndDialogsAcrossAppearances -platform windows:fontengine=freetype` 原生通过，字族及字形回读均为 Noto Sans SC、DPR 1.5。修复版 Mlash 默认配置页与显式 FreeType 页面逐像素相同；旧版默认页面与修复版有 7,735 个不同像素。显式 `QT_QPA_PLATFORM=offscreen` 的 Mlash GUI 冒烟退出码 0、八页齐全，证明隔离模式仍可覆盖。改动后生成 `Mlash-1.20.0-u21-font-preview-windows-x64-portable.zip`，SHA256 为 `feb0c67fe364ff3aa4a931b0e0a73c6a0a94c350427dc6959621a2e438490726`；35 文件白名单与完整性通过，包内隔离冒烟退出码 0、八页截图齐全，包内配置页与开发构建修复版逐像素相同。此为便携预览候选，`release_qualified=false`。
+
+离屏定向回归中 `flat_workspace_tests` 通过，`ui_interactions` 因受限环境无法核对模拟核心端口身份失败；`appearance_tests` 的其他场景通过，但 `groupedSettingsAndPopulatedPagesRemainUsable` 在设置页有 7px 横向滚动断言失败。后一场景在原生 FreeType 单独重跑也以同一 7px 失败。两者均运行独立测试可执行文件，未进入本次仅修改的 `Mlash.exe` 启动入口；未把失败计作通过，也未扩大本次字体切片修复范围。尚未验证其他显卡、Windows 10、用户屏幕人工读屏和完整 Windows 回归。
+
+## P04：U20 Windows 便携预览包（2026-11-17）
+
+对当前工作树运行 `scripts/build.ps1 -Preset windows-mingw-open`，构建成功且无需增量编译；使用固定 `v1.19.32-halfclose.1` 内核运行 `scripts/package.ps1 -Preset windows-mingw-open -OutputName Mlash-1.20.0-u20-preview-windows-x64-portable`。CLI/PE 版本均为 1.20.0，内核 SHA256 与锁文件一致。`package_payload.py verify` 确认便携白名单 35 文件；独立核对 ZIP 内 35 项与 manifest 的路径、逐文件 SHA256 一致，ZIP SHA256 与侧车一致：`2727fd0aa1fece65bdc15bcbd229e893fa1dbc41895d90f5217844a6a7d0852f`。ZIP 大小 52,784,257 字节。
+
+对暂存目录运行 `scripts/ci_smoke.ps1`，包内 `Mlash.exe` 在隔离数据下成功退出，Qt 6.10.2、Schannel TLS 可用，八页截图齐全；抽看首页、配置和设置页，无明显缺字或布局截断。预览包来自未提交的当前工作树，未生成源码附件；未运行真实系统代理/TUN、干净机器部署或正式发行资格门禁，manifest 为 `release_qualified=false`。
+
+## U20：菜单与就近操作设计审视（2026-11-17）
+
+静态阅读 Mlash `src/ui` 的菜单、导入、工作区、托盘和样式实现，并对照 Daymark 的菜单、组合框、导航分组/行、任务行/摘要、锚定编辑、编辑会话及安全导航。确认主窗口导入通过 `TaskWorkspace::mount` 作为页面内任务承载。最初分析偏重控件；补充 Daymark 的对象操作闭环、上下文连续、草稿保护、条件信息密度和键盘可达性，并映射至 Mlash 五条用户任务链，见[U20 方案](design/u20-contextual-menus-and-surfaces.md)。
+
+第一片实现：首页路由与连接右键菜单从阻塞 `exec()` 改为显示前测量的 `popup()`；连接菜单按打开时连接 ID 回查，避免刷新换行误操作；连接搜索三个开关移出列菜单。`scripts/build.ps1 -Preset windows-mingw-open` 通过；`home_control_tests`、`ui_components`、`connection_view_tests` 最终 3/3 通过。新增回归核对菜单首帧圆角、60 ms 几何稳定、屏幕边缘限高、互斥勾选以及旧连接消失后不复制新行。离屏样片检查了路由菜单、30 项滚动菜单及连接工具带，未发现首帧方角或表头挤压。首次受限沙盒运行 `ui_components` 在真实内核端口身份读取处失败、`connection_view_tests` 等待采样超时；允许只读端口观测后完整复测通过。未执行系统代理/TUN 写入、原生人工读屏或发行验收；本设计其余项仍未实施。
+
+第二片实现：节点五项筛选从 `QWidgetAction` 迁出为工具按钮旁的持久浮层，显示前完成定位，收起不清空条件。回归覆盖首帧透明圆角、60 ms 几何稳定、Esc、换页和主窗移动关闭。审计配置右键发现“重新加载当前版本”动作被误命名为回滚且错误调用 `activateProfile(id,true)`；现在重载调用当前候选版本、回滚才调用 lastGood，空配置下两者分别禁用。离屏样片 `build/u20-menu-samples/node-filter.png` 已目视复核。离屏平台不支持抓取真实键盘，Esc 用例通过向焦点控件发送 Qt 按键事件验证浮层逻辑；真实系统键盘/读屏仍未验。`scripts/build.ps1 -Preset windows-mingw-open` 通过，允许只读端口观测后运行 `scripts/test.ps1 -Preset windows-mingw-open -TestRegex '^(ui_components|home_control_tests|connection_view_tests)$'`，3/3 通过；受限沙盒下另一次运行的 `ui_components` 端口身份读取失败、`connection_view_tests` 超时不代表产品回归。
+
+配置重命名移到详情页后，新增独立 `profile_rename_ui`：使用隔离数据、不运行内核，验证右键动作直达编辑、没有单字段模态框、未保存返回确认取消、取消不写入、保存后配置 ID 不变且名称更新。最终 `scripts/build.ps1 -Preset windows-mingw-open` 通过；受限环境内 `flat_workspace_tests`、`navigation_contract_tests`、`profile_rename_ui`、`home_control_tests` 4/4 通过。旧 `ui_interactions` 在启动真实内核时因无法核对监听端口身份而提前失败，未执行到重命名链；尝试申请只读端口观测时自动审批系统因用量限制未完成审查，命令未执行，未绕过审查。此轮重命名链的实际验证范围以独立隔离测试为准；原生键盘、读屏及完整发行回归未验。文档导航（包含两份尚未跟踪的设计文档）130 文件 0 问题，隐私 0 问题；UI token 0 命中，`git diff --check` 通过。
+
+连接列选择改为锚定的限高滚动浮层，固定名称列，连续勾选、默认列/顺序、Esc、换页/主窗移动关闭由隔离 UI 用例覆盖；离屏样片 `build/u20-final-screenshots/connection-columns.png` 目视检查圆角和布局。配置导入入口改为三来源短菜单，进入原页内任务并隐藏重复的内部标题，配置右键收敛至对象高频动作，原编程动作身份保留。托盘快选缩至五组/每组六节点、五个订阅，完整列表入口仍在；独立 `tray_quick_menu_ui` 在七个配置中验证当前订阅优先、最多五项及完整列表入口。设置不再用不可见 `toolsMenu` 承载行内动作，预览可用性按实际状态刷新；设置单值菜单使用显示前定位。最终源码构建 `scripts/build.ps1 -Preset windows-mingw-open` 通过；`scripts/test.ps1 -Preset windows-mingw-open -TestRegex '^(tray_quick_menu_ui|settings_inline_ui|profile_import_ui|profile_rename_ui|connection_columns_ui|flat_workspace_tests|navigation_contract_tests|home_control_tests|gui_smoke)$'` 9/9 通过。离屏导入来源菜单样片 `build/u20-final-screenshots/profile-import-source.png` 已查看，三项可见、圆角未闪烁；离屏抓图不足以证明原生鼠标体验。文档链接 128/0、隐私 135/0、UI token 0 命中，`git diff --check` 通过。组/节点容量断言已加入原真实内核用例，但本环境端口身份门禁使该用例未在此轮跑到断言；本段不声称托盘手工/全量验证。
+
+## U19：Daymark 组件秩序对照精修（2026-11-17）
+
+按[U19 事前设计与复核](design/u19-daymark-ui-alignment.md)调整四分区导航、首页节点区、节点行状态、搜索组浮层、设置目录首组及共用空状态。组浮层在显示前确定大小和锚点；新增测试覆盖筛选、键盘选择、首帧圆角透明像素与稳定几何。连接空状态新增“说明与按钮紧邻、内容簇居中”的窗口尺寸回归。业务命令、配置格式与系统代理/TUN 写入未改变。
+
+`scripts/build.ps1 -Preset windows-mingw-open` 最终构建通过。此前 UI 定向 10 项（`gui_smoke`、`flat_workspace_tests`、`prototype_ui_tests`、`navigation_contract_tests`、`ui_interactions`、`ui_components`、`menu_section_tests`、`home_control_tests`、`appearance_prefs_tests`、`appearance_tests`）10/10 通过；共用空状态布局改动后，`ui_components`、`connection_view_tests`、`appearance_tests` 3/3 通过。最后收紧空态文字内边距后重新构建，并单独通过原生 Windows 外观用例，生成 52 张明暗/不同窗口样片；平台回报 DPR 1.5，Noto Sans SC 已解析。查看首页、数据连接及设置样片，空状态动作已与说明居中，未见明显遮挡。`check_ui_tokens.py` 为 0 命中，文档导航检查 128 份/0 问题，隐私检查 135 项/0 问题，`git diff --check` 无空白错误。
+
+本轮属于本机自动交互与样片复核，未进行人工读屏、Windows 10、真实系统代理/TUN 写入或正式发行完整回归；`release_qualified=false`。未生成或发布新版安装包。
 
 ## P03：验证与发布流程收敛（2026-11-17）
 

@@ -4,8 +4,10 @@ namespace mlash { class AppController; }
 #include <QWidget>
 #include <QSortFilterProxyModel>
 #include <QTimer>
-class QTableView; class QLineEdit; class QToolButton; class QLabel; class QAction;
+#include <QVector>
+class QTableView; class QLineEdit; class QToolButton; class QLabel; class QAction; class QCheckBox;
 namespace mlash {
+class ConnectionColumnsPopup;
 class ConnectionOptions final : public QWidget {
     Q_OBJECT
 public:
@@ -31,6 +33,8 @@ private:
     QLineEdit* search_;
     QLabel* error_;
     QToolButton *case_,*word_,*regex_;
+    ConnectionColumnsPopup* columnsPopup_=nullptr;
+    QVector<QCheckBox*> columnChecks_;
     QMap<int,int> widths_;
     QTimer debounce_;
     bool applying_=true,custom_=false,dirty_=false;

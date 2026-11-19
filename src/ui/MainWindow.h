@@ -19,7 +19,7 @@ class QAction; class QTabWidget; class QMenu; class QDialog;
 class QToolButton; class QStatusBar;
 class QTabBar; class QHBoxLayout; class QScrollArea;
 class QDragEnterEvent; class QDropEvent;
-namespace mlash { class AppController; class WebsiteTestsPage; class ImportDialog; class NodeRowModel; class ProfileRowModel; class ProfileKindFilter; }
+namespace mlash { class AppController; class WebsiteTestsPage; class ImportDialog; class NodeRowModel; class ProfileRowModel; }
 namespace mlash { class ConnectionOptions; }
 namespace mlash {
 // 抽屉组件只在使用它的实现文件中包含完整定义。
@@ -65,6 +65,7 @@ private:
     void applyAppearance();
     void updateRulesProfiles(); void loadRuleDraft();
     void rebuildRuleList(); void updateConnections();
+    void rememberConnectionPosition();
     void updateHome();
     void updateHomeOutbound(bool capture=false);
     void showOutboundDiagnostics();
@@ -86,6 +87,7 @@ private:
     ToolWindowRegistry toolWindows_;
     QStackedWidget* contentStack_=nullptr;
     QHash<int,TaskWorkspace*> workspaces_;
+    QHash<int,QPointer<TaskWorkspace>> suspendedWorkspaces_;
     QHash<QString,TaskWorkspace*> taskFamilies_;
     TaskWorkspace* taskWorkspace();
     TaskWorkspace* taskWorkspaceFor(const QString& family);
@@ -100,13 +102,15 @@ private:
     void applyHomeAnchor(HomeAnchor anchor);
     void updateActions(); void updateCurrentMember(); void chooseSelectedNode(); void selectNodeInHome(const QModelIndex& index); void selectNodeInHomeFromCards(const QModelIndex& index); void commitMemberSelection(const QString& name); void locateCurrentNode();
     void showNodeDetails(const QString& name);   // 行尾信息按钮：只读说明 + 手动组的切换入口
-    // K7：配置页两张列表共用的模型、行点击分流与详情抽屉。
-    QAbstractItemModel* profileRows(const QString& kind) const;
+    // Subscription cards retain one ordered model; actions pin the profile ID.
     static QString profileAt(const QModelIndex& index);
     void selectProfile(const QString& id);
+    bool canOpenProfile(const QString& id);
     void showProfileDetails(const QString& id);
     void shareProfileScheme();
-    void wireProfileList(QListView* list, const QString& kind);
+    void wireProfileList(QListView* list);
+    void showProfileMenu(const QString& id, const QPoint& globalPoint);
+    void updateProfileGrid();
     QStringList selectedProfileIds() const;
     void updateNodeCount();                      // 标题行的成员计数
     void editProfilePolicy();
@@ -115,6 +119,7 @@ private:
     void importPayload(const QString& input);
     void showProfileBatch(bool start);
     void showProviders(const QString& id, const QString& kind = {});
+    void showProfileCompatibility(const QString& id);
     bool logMatches(const QString& line) const;
     void rebuildRecentMenu();
     void connectionDetails(bool copy=false);
@@ -134,10 +139,10 @@ private:
     QWidget* settingsDirectory_ = nullptr;
     QString settingsTask_;
     QLabel* settingsTaskTitle_ = nullptr;
-    QStackedWidget* profileStack_ = nullptr;
-    QPointer<QWidget> profileDetailsPage_;
     QString profileDetailId_;
+    int profileListReturnScroll_ = 0;
     void selectGroup(QString group, bool nested = false); void enterSelectedGroup();
+    QString selectedVisibleNode() const;
     AppController* controller_;
     bool trayAvailable_ = false, updating_ = false;
     bool hasDisplayedSettings_ = false;
@@ -174,7 +179,7 @@ private:
     OperationId noticeOperation_ = OperationId::Unspecified;
     QLabel *homeSelection_, *proxyProfileHint_, *statusDot_;
     QComboBox* profilesCombo_;
-    QLabel *proxyLabel_, *message_, *groupHint_, *overviewTitle_;
+    QLabel *message_, *groupHint_, *overviewTitle_;
     // 节点区标题行（H3 / 原型 01）：标题、计数、分组说明。
     QLabel *nodeHeadingTitle_ = nullptr, *nodeCount_ = nullptr;
     // 构造顺序敏感：这些指针在页面构造里赋值，updateActions 会在构造中调用，
@@ -186,22 +191,16 @@ private:
         *backGroup_ = nullptr, *enterGroup_ = nullptr, *memberSort_ = nullptr;
     QPushButton *closeConnection_, *connectionPause_;
     QPushButton *proxyMasterSwitch_ = nullptr;   // 更多运行信息里的代理总开关（ADR 0048）
-    QLabel* homeConnectivityResult_ = nullptr;   // 控制区第三行：连通性结果
     QLabel* homeControlHint_ = nullptr;          // 控制区：代理开关/切换的对象内结果
     QLabel* nodeGroupHint_ = nullptr;            // 节点区：选中策略组的选路说明
     // 首页控制区（H1）：三行的标签与动作，文案由 updateHome 统一写入。
-    QLabel* homeCurrentMember_ = nullptr;        // 第 1 行：当前代理
-    QLabel* homeCurrentMeta_ = nullptr;          // 第 1 行：订阅 · 选择方式
-    QLabel* homeStateLine_ = nullptr;            // 第 1 行：内核 / 接管 / 可达 状态句
     QLabel* homeRouteValue_ = nullptr;           // 第 2 行：当前路由方式
     QPushButton* homeRouteRow_ = nullptr;        // 第 2 行：整行点击弹出路由方式浮层
-    QLabel* homeConnectivityCaption_ = nullptr;  // 第 3 行：结果或测试目标
     QLabel* homeInlineStat_ = nullptr;           // 列表底部一行摘要
     QToolButton* homeCoreToggle_ = nullptr;      // 抽屉：内核单独启停
     QLabel* homeRuntimeHead_ = nullptr;          // 抽屉：内核 / 接管 / 运行版本明细
     QPointer<QWidget> rulesSkeleton_;            // 内核实际规则读取中的骨架占位
     QPushButton* homeConnectivityButton_ = nullptr;
-    QToolButton* homeConnectivityLink_ = nullptr;
     QToolButton *coreButton_, *cancelTestButton_, *connectionDetailsButton_, *connectionCopyButton_;
     QLabel *nodeEmpty_, *connectionEmpty_, *logEmpty_ = nullptr;
     QAction *connectionDetailsAction_ = nullptr, *connectionCopyAction_ = nullptr;
@@ -223,12 +222,10 @@ private:
     NodeFilter filter_;
     QComboBox *nodeRegion_=nullptr,*nodeProtocol_=nullptr,*nodeHealth_=nullptr,*nodeMaximum_=nullptr;
     QCheckBox* nodeFavoritesOnly_=nullptr;
-    // K7：配置页两张列表（远程订阅 / 本地配置），行模型是 controller_->profiles() 的过滤视图。
+    // One visible list for URL and file profiles; source capability remains in the model.
     ProfileRowModel* profileRowsModel_ = nullptr;
-    QListView* remoteProfiles_ = nullptr;
-    QListView* localProfiles_ = nullptr;
-    ProfileKindFilter remoteProfileFilter_{this};
-    ProfileKindFilter localProfileFilter_{this};
+    QListView* profiles_ = nullptr;
+    QMenu* profileContextMenu_ = nullptr;
     QPointer<QWidget> profileDrawer_;
     QAction* importFilesAction_ = nullptr;   // 标题行「导入文件」
     QAction* updateAllAction_ = nullptr;     // 标题行「更新全部」
@@ -256,6 +253,8 @@ private:
     QPushButton* saveRules_ = nullptr;
     QLabel *rulesHint_, *connectionsHint_;
     QTableView* connectionsTable_;
+    int connectionReturnScroll_ = -1;
+    QString connectionReturnSelection_;
     ConnectionOptions* connectionOptions_=nullptr;
     QString connectionSearchError_;
     QTabBar* connectionView_;
@@ -280,6 +279,7 @@ private:
     QPointer<QScrollArea> settingsScroll_;
     QPointer<QWidget> settingsPage_;
     bool settingsSyncing_ = false;
+    QWidget* connectionSummary_ = nullptr;
     QLabel* connectionStats_;
     QAction* closeAllConnections_ = nullptr;
     QPointer<QDialog> connectionDetail_;

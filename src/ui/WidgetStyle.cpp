@@ -103,7 +103,7 @@ protected:
             widget->resize(qMin(available.width(),qMax(combo_->width(),content)),widget->height());
             widget->move(qBound(available.left(),widget->x(),qMax(available.left(),available.right()-widget->width()+1)),qBound(available.top(),widget->y(),qMax(available.top(),available.bottom()-widget->height()+1)));
         }
-        if (auto* menu=qobject_cast<QMenu*>(widget); menu && event->type()==QEvent::Show) {
+        if (auto* menu=qobject_cast<QMenu*>(widget); menu && event->type()==QEvent::Show && !menu->property("mlashPopupMeasured").toBool()) {
             auto* screen=QApplication::screenAt(menu->pos()); if (!screen) screen=menu->screen(); const auto available=screen->availableGeometry().adjusted(4,4,-4,-4);
             menu->setMaximumHeight(qMin(720,available.height())); menu->resize(menu->width(),qMin(menu->height(),menu->maximumHeight()));
             menu->move(qBound(available.left(),menu->x(),qMax(available.left(),available.right()-menu->width()+1)),qBound(available.top(),menu->y(),qMax(available.top(),available.bottom()-menu->height()+1)));
@@ -223,5 +223,24 @@ void WidgetStyle::prepareCombo(QComboBox* combo) {
     if (auto* list=qobject_cast<QListView*>(view)) { list->setUniformItemSizes(true); list->setSpacing(0); }
     view->setVerticalScrollMode(QAbstractItemView::ScrollPerPixel); view->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff); view->setMouseTracking(true); view->setFrameShape(QFrame::NoFrame);
     view->setItemDelegate(new ComboItemDelegate(combo,view)); preparePopup(view->window(),false,combo);
+}
+void WidgetStyle::popupMenu(QMenu* menu, const QPoint& globalAnchor) {
+    if (!menu) return;
+    menu->ensurePolished();
+    auto* screen=QApplication::screenAt(globalAnchor);
+    if (!screen) screen=menu->screen();
+    if (!screen) screen=QApplication::primaryScreen();
+    if (!screen) { menu->popup(globalAnchor); return; }
+    const QRect available=screen->availableGeometry().adjusted(4,4,-4,-4);
+    menu->setMaximumHeight(qMin(480,available.height()));
+    const QSize wanted=menu->sizeHint().boundedTo(available.size());
+    menu->resize(wanted);
+    const int x=qBound(available.left(),globalAnchor.x(),qMax(available.left(),available.right()-wanted.width()+1));
+    const int below=globalAnchor.y();
+    const int above=globalAnchor.y()-wanted.height();
+    const int y=below+wanted.height()<=available.bottom()+1 ? below :
+        (above>=available.top() ? above : qBound(available.top(),below,available.bottom()-wanted.height()+1));
+    menu->setProperty("mlashPopupMeasured",true);
+    menu->popup(QPoint(x,y));
 }
 }

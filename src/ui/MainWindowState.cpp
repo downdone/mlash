@@ -7,6 +7,7 @@
 #include "NodeRowView.h"
 #include "StatusShape.h"
 #include "SkeletonBlock.h"
+#include <algorithm>
 #include <QDragEnterEvent>
 #include <QDropEvent>
 #include <QMimeData>
@@ -88,10 +89,7 @@ void MainWindow::updateState() {
         statusButton_->setAccessibleDescription(sentence.line1 + " " + sentence.line2);
     }
     if (state.core == CoreState::Starting) model_.clearDelays();
-    // 首页控制区的当前代理行只读观测：系统代理归属 + TUN 观测（不含意图字段），
-    // 内核状态由状态句 homeStateLine_ 承载，避免同一事实三处。coreLabel_ 已随 H1 删除
-    // （内核状态只剩状态句一处），这里不再写它。
-    proxyLabel_->setText("系统代理：" + (state.proxy==ProxyState::External?QString("由其他程序管理"):proxyStateText(state.proxy)) + " · TUN：" + (state.tunObserved ? QString("已接管") : QString("未接管")));
+    // 运行细节统一由固定状态栏和诊断入口承载，不塞进首页控制行。
     QString title = state.ready ? "内核运行中" : state.core==CoreState::Running ? "正在确认内核" : "内核已停止";
     if (state.core == CoreState::Starting) title = "正在启动内核…";
     if (state.core == CoreState::Failed) title = "内核启动或运行失败";
@@ -108,9 +106,11 @@ void MainWindow::updateState() {
     statusDot_->setToolTip(title); statusDot_->setAccessibleName(StatusShape::accessibleName(dotState));
     for (auto* widget : mutations_) widget->setEnabled(!state.busy && !state.exiting && !state.readOnly);
     nodeList_->setEnabled(!state.exiting); nodeCards_->setEnabled(!state.exiting);
-    // 首页 TUN 开关已移除（H1，回归 ui-layered-design.md:169「TUN 开关不放首页」）：
-    // TUN 的观测结果在状态句里报告，启用入口在「设置 › 网络与内核」。
-    proxyEnabled_->setEnabled(!state.busy && (state.ready || state.proxy == ProxyState::Owned));
+    // 连接是用户意图；Controller 在必要时自行启动内核并处理回滚。
+    const bool activeProfileExists=std::any_of(controller_->profiles().cbegin(),controller_->profiles().cend(),
+        [&state](const Profile& profile) { return profile.id==state.activeProfile; });
+    proxyEnabled_->setEnabled(!state.busy && !state.exiting && !state.readOnly
+        && (activeProfileExists || state.proxy==ProxyState::Owned || state.tunObserved));
     { const QSignalBlocker block(proxyEnabled_); proxyEnabled_->setChecked(state.proxy == ProxyState::Owned || state.tunObserved); }
     proxyEnabled_->setToolTip("代理总开关：接管系统代理（必要时先启动内核）；只影响遵循系统代理设置的应用。外部代理/PAC 需要确认接管。");
     autoStart_->setToolTip(!state.autoStartKnown ? "系统自启状态无法确认；应用设置时重新读取" : state.autoStartConflict ? "系统自启项指向其他路径，修改会被拒绝" : state.autoStartEnabled ? "系统当前已启用 Mlash 自启；勾选修改后点击应用" : "系统当前未启用 Mlash 自启；勾选修改后点击应用");
@@ -135,11 +135,15 @@ void MainWindow::updateActions() {
         if (statusDetails) statusDetails->setVisible(!message_->text().isEmpty());
     }
     const auto& state = controller_->state(); const bool idle = !state.busy && !state.exiting && !state.readOnly;
+    const auto& profiles=controller_->profiles();
+    const bool batchAvailable=std::count_if(profiles.cbegin(),profiles.cend(),
+        [](const Profile& profile) { return !profile.source.isEmpty(); }) > 1;
     enable("exportDiagnostics", !state.busy&&!state.exiting);
     enable("nodePreferences", idle&&!selectedGroup_.isEmpty()&&profilesCombo_->currentData().toString()==state.activeProfile);
     enable("ruleProviders", !state.busy&&!state.exiting&&!rulesProfiles_->currentData().toString().isEmpty());
     if (auto* objectActions=findChild<QWidget*>("profileObjectActions")) objectActions->setVisible(!selectedProfile().isEmpty());
-    if (auto* batch=findChild<QPushButton*>("batchProfiles")) batch->setVisible(!controller_->profiles().isEmpty());
+    if (auto* batch=findChild<QPushButton*>("batchProfiles")) batch->setVisible(batchAvailable);
+    if (auto* order=findChild<QToolButton*>("profileOrder")) order->setVisible(profiles.size()>1);
     const auto draftError=ruleDraftError();
 if (saveRules_)     saveRules_->setEnabled(idle && !rulesProfiles_->currentData().toString().isEmpty() && rulesDirty_ && draftError.isEmpty());
     saveRules_->setToolTip(!draftError.isEmpty()?draftError:rulesDirty_?"校验并保存所选订阅的规则":"规则没有未保存修改");
@@ -155,7 +159,6 @@ if (rulesProfiles_)     rulesProfiles_->setEnabled(!rulesSaving_ && !state.exiti
     if (auto* control=findChild<QComboBox*>("ruleType")) control->setEnabled(ruleDraftAvailable); ruleTarget_->setEnabled(ruleDraftAvailable); enable("addCustomRule", ruleDraftAvailable);
     enable("advancedRules", ruleDraftAvailable && !state.busy);
     if (auto* match=findChild<QLineEdit*>("ruleMatch")) match->setEnabled(ruleDraftAvailable && findChild<QComboBox*>("ruleType")->currentData().toString()!="MATCH");
-    if (auto* next=findChild<QPushButton*>("connectionNextStep")) next->setVisible(!state.ready);
     const bool actualRules=rulesTabs_->currentIndex()==1;
     if (rulesProfiles_) rulesProfiles_->setVisible(!actualRules); if (auto* label=findChild<QLabel*>("rulesProfileLabel")) label->setVisible(!actualRules); if (auto* providers=findChild<QPushButton*>("ruleProviders")) providers->setVisible(!actualRules);
     auto* runtimeContext=findChild<QLabel*>("rulesRuntimeContext"); runtimeContext->setVisible(actualRules); QString runtimeName; for (const auto& profile:controller_->profiles()) if (profile.id==state.activeProfile) runtimeName=profile.name;
@@ -263,7 +266,7 @@ if (proxyMasterSwitch_)         proxyMasterSwitch_->setEnabled(usable);
     enable("profileUpdatePolicy", valid);
     if (auto* action = findChild<QAction*>("replaceProfileSource")) action->setEnabled(valid && profile->sourceType == "file");
     // K7：配置页的动作全在行详情抽屉里，顶部只剩三个与选择无关的按钮。
-    if (auto* batch = findChild<QPushButton*>("batchProfiles")) batch->setEnabled(!controller_->profiles().isEmpty() && !state.busy && !state.exiting && !state.readOnly);
+    if (auto* batch = findChild<QPushButton*>("batchProfiles")) batch->setEnabled(batchAvailable && idle);
     // 页面级反馈（P4.1）：订阅页最近一次更新/激活/批量更新的结论。空串表示没有待说明的结果。
     if (auto* hint = findChild<QLabel*>("profileSubmitHint"); hint && pageFeedback_.size() > 1) {
         const bool show = route_.view == ViewIds::Profiles && !pageFeedback_[1].isEmpty();
@@ -283,12 +286,19 @@ if (homeControlHint_)         homeControlHint_->setVisible(show);
     const bool connectionSelected=!connectionsTable_->selectionModel()->selectedRows().isEmpty();
     if (connectionDetailsAction_) connectionDetailsAction_->setEnabled(connectionSelected);
     if (connectionCopyAction_) connectionCopyAction_->setEnabled(connectionSelected);
-        if (closeAllConnections_) closeAllConnections_->setEnabled(idle && state.ready && controller_->connectionsCurrent() && !controller_->connections().isEmpty());
+    const auto connectionTotals=controller_->connectionTotals();
+    const bool hasConnectionMetrics=connectionTotals.value("uploadTotal").isDouble() || connectionTotals.value("downloadTotal").isDouble()
+        || connectionTotals.value("_uploadTotal_rate").isDouble() || connectionTotals.value("_downloadTotal_rate").isDouble();
+    const bool canCloseAll=state.ready && controller_->connectionsCurrent() && !controller_->connections().isEmpty() && connectionView_->currentIndex()==0;
+    if (closeAllConnections_) closeAllConnections_->setEnabled(idle && canCloseAll);
+    if (auto* closeAllButton=findChild<QToolButton*>("closeAllConnectionsButton")) closeAllButton->setVisible(canCloseAll);
+    if (connectionStats_) connectionStats_->setVisible(hasConnectionMetrics);
+    if (connectionSummary_) connectionSummary_->setVisible(hasConnectionMetrics || canCloseAll);
     if (connectionPause_) connectionPause_->setEnabled(!state.exiting&&state.ready&&!state.busy&&controller_->connectionsVisible());
     if (connectionEmpty_) connectionEmpty_->setVisible(connectionsFilter_.rowCount()==0);
     connectionEmpty_->setText(!controller_->connectionError().isEmpty()
         ? (controller_->connectionsStale() ? QString("刷新失败 · 下方保留上次快照") + QChar(10) + QString("详情见状态栏或日志页") : QString("连接读取失败"))
-        : !state.ready ? QString("内核未就绪")
+        : !state.ready ? (state.activeProfile.isEmpty()?QString("请先选择配置"):state.core==CoreState::Starting?QString("正在启动内核…"):state.core==CoreState::Running?QString("正在确认内核…"):state.core==CoreState::Stopping?QString("正在停止内核…"):QString("内核未就绪"))
         : connectionsModel_.rowCount()>0 ? QString("没有匹配的连接") + QChar(10) + QString("请调整搜索条件")
         : connectionView_->currentIndex()==1 ? QString("内核已就绪，暂无已结束的连接")
         : controller_->connectionsPaused() ? QString("已暂停") + QChar(10) + QString("恢复刷新后继续采样")
@@ -297,11 +307,12 @@ if (homeControlHint_)         homeControlHint_->setVisible(show);
     // 连接空态：失败给「查看日志」，无匹配给「清除筛选」，未就绪说明缺什么（R7）。
     {
         const bool failed = !controller_->connectionError().isEmpty(), noMatch = connectionsModel_.rowCount() > 0;
-        const QString text = connectionsFilter_.rowCount()>0 ? QString() : failed ? QString("查看日志") : noMatch ? QString("清除筛选") : !state.ready ? QString("启动内核") : QString("刷新");
+        const bool canStartCore=state.core==CoreState::Stopped || state.core==CoreState::Failed;
+        const QString text = connectionsFilter_.rowCount()>0 ? QString() : failed ? QString("查看日志") : noMatch ? QString("清除筛选") : !state.ready ? (state.activeProfile.isEmpty()?QString("选择配置"):canStartCore?QString("启动内核"):QString()) : QString("刷新");
         setEmptyStateAction(connectionsTable_, text, [this, failed, noMatch] {
             if (failed) navigate(Route{ViewIds::Data, kNoCategory, HomeAnchor::Control, int(ViewIds::DataTab::Logs)});
             else if (noMatch) connectionsFilter_.setFilterFixedString({});
-            else if (!controller_->state().ready) { const auto& st = controller_->state(); if (st.activeProfile.isEmpty()) navigate(Route{ViewIds::Profiles}); else controller_->startCore(); }
+            else if (!controller_->state().ready) { const auto& st = controller_->state(); if (st.activeProfile.isEmpty()) navigate(Route{ViewIds::Profiles}); else if (st.core==CoreState::Stopped || st.core==CoreState::Failed) controller_->startCore(); }
             else controller_->refresh();
         });
     }}
@@ -311,12 +322,12 @@ void MainWindow::updateLogs() {
     QStringList filtered; for (const auto& line : all) if (logMatches(line)) filtered.append(line);
     if (logEmpty_) {
         QString reason;
-        if (!controller_->state().ready) reason = QString("内核未就绪") + QChar(10) + QString("启动内核后才会收到日志");
-        else if (filtered.isEmpty() && !all.isEmpty()) reason = QString("没有匹配的日志") + QChar(10) + QString("请调整搜索或级别");
+        if (filtered.isEmpty() && !all.isEmpty()) reason = QString("没有匹配的日志") + QChar(10) + QString("请调整搜索或级别");
+        else if (filtered.isEmpty() && !controller_->state().ready) reason = QString("内核未就绪") + QChar(10) + QString("启动内核后才会收到内核日志");
         else if (filtered.isEmpty() && logsPaused_) reason = QString("已暂停") + QChar(10) + QString("恢复显示后继续接收");
         else if (filtered.isEmpty()) reason = QString("还没有日志");
-if (logEmpty_)         logEmpty_->setText(reason);
-if (logEmpty_)         logEmpty_->setVisible(!reason.isEmpty());
+        logEmpty_->setText(reason);
+        logEmpty_->setVisible(!reason.isEmpty());
         if (!reason.isEmpty()) {
             logEmpty_->setGeometry(QRect(QPoint(0, 0), logView_->viewport()->size()));
             logEmpty_->raise();

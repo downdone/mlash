@@ -10,7 +10,13 @@ public:
 protected:
     bool event(QEvent* event) override {
         const auto handled=QPushButton::event(event);
-        if ((event->type()==QEvent::LayoutRequest||event->type()==QEvent::FontChange||event->type()==QEvent::StyleChange)&&layout()) { const int height=layout()->minimumSize().height(); if (height>0&&minimumHeight()!=height) setMinimumHeight(height); }
+        // A caller's fixed height is an explicit layout contract. Recalculating only
+        // its minimum would silently undo that contract and make sibling rows uneven.
+        if ((event->type()==QEvent::LayoutRequest||event->type()==QEvent::FontChange||event->type()==QEvent::StyleChange)
+            && layout() && !property("controlRow").toBool() && minimumHeight()!=maximumHeight()) {
+            const int height=layout()->minimumSize().height();
+            if (height>0 && minimumHeight()!=height) setMinimumHeight(height);
+        }
         return handled;
     }
 };

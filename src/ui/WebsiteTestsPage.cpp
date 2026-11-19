@@ -36,23 +36,25 @@
 namespace mlash {
 WebsiteTestsPage::WebsiteTestsPage(AppController* controller,QWidget* parent):QWidget(parent),controller_(controller) {
     auto* layout=new QVBoxLayout(this); layout->setContentsMargins(0,0,0,0); layout->setSpacing(6);
-    auto* heading=new QHBoxLayout; heading->addStretch(); auto* diagnostic=new QPushButton("出口诊断…"); diagnostic->setObjectName("websiteDiagnostics"); heading->addWidget(diagnostic); connect(diagnostic,&QPushButton::clicked,this,&WebsiteTestsPage::diagnosticsRequested); auto* edit=new QPushButton("编辑目标"); edit->setObjectName("editWebsiteTargets"); heading->addWidget(edit); layout->addLayout(heading); connect(edit,&QPushButton::clicked,this,[this] { presentTaskDialog(new WebsiteTargetsDialog(controller_,this)); });
     auto* controls=new QFrame; controls->setObjectName("panel"); auto* controlLayout=new QVBoxLayout(controls); controlLayout->setContentsMargins(12,8,12,8); controlLayout->setSpacing(6);
     auto* row=new QHBoxLayout; row->setSpacing(8); row->addWidget(new QLabel("测试节点")); nodes_=new CompactComboBox; nodes_->setPlaceholderText("选择节点"); nodes_->setObjectName("websiteNode"); nodes_->setAccessibleName("网站测试节点"); nodes_->setSizePolicy(QSizePolicy::Ignored,QSizePolicy::Fixed); row->addWidget(nodes_,1);
     start_=new QPushButton("开始测试"); start_->setObjectName("startWebsiteTests"); start_->setProperty("primary",true); row->addWidget(start_);
     clear_=new QPushButton("清空结果"); clear_->setObjectName("clearWebsiteTests"); row->addWidget(clear_); controlLayout->addLayout(row);
-    layout->addWidget(controls); auto* scope=new QLabel("测试所选节点到网站的响应延迟"); scope->setObjectName("websiteScope"); scope->setProperty("secondary",true); layout->addWidget(scope);
+    layout->addWidget(controls);
     auto* scroll=new QScrollArea; scroll->setObjectName("websiteScroll"); scroll->setWidgetResizable(true); scroll->setFrameShape(QFrame::NoFrame); scroll->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
     cards_=new QWidget; cards_->setObjectName("websiteSurface"); cards_->setAttribute(Qt::WA_StyledBackground); grid_=new QGridLayout(cards_); grid_->setContentsMargins(0,0,0,0); grid_->setSpacing(8); scroll->setWidget(cards_);
-    auto* summary=new QHBoxLayout; progress_=new ElidedLabel; progress_->setObjectName("websiteProgress"); progress_->setAccessibleName("测试进度或未能开始的原因"); progress_->setProperty("secondary",true); progress_->setSizePolicy(QSizePolicy::Ignored,QSizePolicy::Preferred); summary->addWidget(progress_,1); auto* next=new QPushButton("前往首页"); next->setObjectName("websiteNextStep"); summary->addWidget(next); connect(next,&QPushButton::clicked,this,[this] { emit pageRequested(0); }); lastTestIcon_=new QLabel; lastTestIcon_->setFixedSize(16,16); summary->addWidget(lastTestIcon_); lastTest_=new QLabel; lastTest_->setObjectName("lastWebsiteTest"); lastTest_->setProperty("secondary",true); summary->addWidget(lastTest_); layout->addLayout(summary); layout->addWidget(scroll,1);
+    auto* summary=new QHBoxLayout; progress_=new ElidedLabel; progress_->setObjectName("websiteProgress"); progress_->setAccessibleName("测试进度或未能开始的原因"); progress_->setProperty("secondary",true); progress_->setSizePolicy(QSizePolicy::Ignored,QSizePolicy::Preferred); summary->addWidget(progress_,1); auto* next=new QPushButton; next->setObjectName("websiteNextStep"); summary->addWidget(next); connect(next,&QPushButton::clicked,this,[this] { const auto& state=controller_->state(); if (state.activeProfile.isEmpty()) emit pageRequested(1); else if (state.core==CoreState::Stopped || state.core==CoreState::Failed) controller_->startCore(); }); lastTestIcon_=new QLabel; lastTestIcon_->setFixedSize(16,16); summary->addWidget(lastTestIcon_); lastTest_=new QLabel; lastTest_->setObjectName("lastWebsiteTest"); lastTest_->setProperty("secondary",true); summary->addWidget(lastTest_);
+    auto* diagnostic=new QPushButton("出口诊断…"); diagnostic->setObjectName("websiteDiagnostics"); diagnostic->setProperty("quiet",true); summary->addWidget(diagnostic); connect(diagnostic,&QPushButton::clicked,this,&WebsiteTestsPage::diagnosticsRequested);
+    auto* edit=new QPushButton("编辑目标"); edit->setObjectName("editWebsiteTargets"); edit->setProperty("quiet",true); summary->addWidget(edit); connect(edit,&QPushButton::clicked,this,[this] { presentTaskDialog(new WebsiteTargetsDialog(controller_,this)); });
+    layout->addLayout(summary); layout->addWidget(scroll,1);
     scroll->viewport()->installEventFilter(this); rebuildCards();
     connect(controller_->websiteTests(),&WebsiteTests::targetsChanged,this,&WebsiteTestsPage::rebuildCards);
-    auto* method=new QToolButton; method->setObjectName("websiteMethod"); method->setProperty("quiet",true); method->setText("?"); method->setFixedSize(26,26); method->setToolTip("测试说明"); method->setAccessibleName("查看测试说明"); heading->addWidget(method);
-    auto* explanation=new QLabel("通过受控内核的指定节点测试 HTTP 响应。已响应不代表解锁、登录可用或带宽；离页停止采样，已发请求可能持续至超时。"); explanation->setObjectName("websiteExplanation"); explanation->setWordWrap(true); explanation->setProperty("secondary",true); explanation->hide(); layout->insertWidget(1,explanation);
+    auto* method=new QToolButton; method->setObjectName("websiteMethod"); method->setProperty("quiet",true); method->setText("?"); method->setFixedSize(26,26); method->setToolTip("测试说明"); method->setAccessibleName("查看测试说明"); summary->addWidget(method);
+    auto* explanation=new QLabel("通过受控内核的指定节点测试 HTTP 响应。已响应不代表解锁、登录可用或带宽；离页停止采样，已发请求可能持续至超时。"); explanation->setObjectName("websiteExplanation"); explanation->setWordWrap(true); explanation->setProperty("secondary",true); explanation->hide(); layout->insertWidget(2,explanation);
     method->setCheckable(true); connect(method,&QToolButton::toggled,explanation,&QWidget::setVisible);
     connect(start_,&QPushButton::clicked,this,[this] { if (controller_->websiteTests()->running()) controller_->cancelWebsiteTests(); else controller_->startWebsiteTests(nodes_->currentData().toString()); });
     connect(clear_,&QPushButton::clicked,controller_,&AppController::clearWebsiteTests);
-    connect(nodes_,&QComboBox::activated,this,[this] { userPicked_=true; controller_->clearWebsiteTests(); updateResults(); });
+    connect(nodes_,&QComboBox::activated,this,[this] { userPicked_=true; controller_->selectWebsiteTestNode(nodes_->currentData().toString()); updateResults(); });
     connect(controller_,&AppController::stateChanged,this,&WebsiteTestsPage::updateNodes); connect(controller_,&AppController::proxiesChanged,this,&WebsiteTestsPage::updateNodes);
     connect(controller_->websiteTests(),&WebsiteTests::changed,this,&WebsiteTestsPage::updateResults);
     connect(UiTheme::notifier(),&UiTheme::AppearanceNotifier::changed,this,[this] { clear_->setIcon(UiIcons::icon(UiIcons::Glyph::Clear)); updateResults(); reflow(); });
@@ -117,8 +119,11 @@ void WebsiteTestsPage::updateResults() {
     start_->setText(running?"停止测试":"开始测试"); start_->setIcon(UiIcons::icon(running?UiIcons::Glyph::Close:UiIcons::Glyph::Play,running?UiTheme::Secondary:UiTheme::OnPrimary));
     start_->setMinimumWidth(start_->fontMetrics().horizontalAdvance("开始测试")+48);
     if (start_->property("primary").toBool()==running) { start_->setProperty("primary",!running); start_->style()->unpolish(start_); start_->style()->polish(start_); }
-    findChild<QPushButton*>("websiteNextStep")->setVisible(!state.ready);
-    const QString reason=!state.ready?"请先启动内核":nodes_->currentIndex()<0?"请选择节点":state.readOnly?"只读模式":state.busy?"等待当前操作完成":QString();
+    const bool canStartCore=state.core==CoreState::Stopped || state.core==CoreState::Failed;
+    auto* next=findChild<QPushButton*>("websiteNextStep"); next->setVisible(!state.ready && (state.activeProfile.isEmpty() || canStartCore));
+    next->setText(state.activeProfile.isEmpty()?"选择配置":"启动内核");
+    next->setEnabled(!state.busy&&!state.exiting&&!state.readOnly);
+    const QString reason=!state.ready?(state.activeProfile.isEmpty()?"请先选择配置":state.core==CoreState::Starting?"正在启动内核…":state.core==CoreState::Running?"正在确认内核…":state.core==CoreState::Stopping?"正在停止内核…":"请先启动内核"):nodes_->currentIndex()<0?"请选择节点":state.readOnly?"只读模式":state.busy?"等待当前操作完成":QString();
     if (resultDetails_&&!resultDetails_->property("evidenceNode").toString().isEmpty()&&resultDetails_->property("evidenceNode").toString()!=tests->node()) resultDetails_->close();
     int completed=0,responded=0,cancelled=0; QDateTime last;
     for (const auto& card:cardWidgets_) {

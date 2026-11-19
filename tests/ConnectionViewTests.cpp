@@ -24,10 +24,14 @@
 #include <QLineEdit>
 #include <QLabel>
 #include <QToolButton>
+#include <QCheckBox>
+#include <QKeyEvent>
 #include <QAction>
 #include <QPushButton>
 #include <QJsonDocument>
 #include <QScrollBar>
+#include <QMenu>
+#include <QContextMenuEvent>
 using namespace mlash;
 class ViewPlatform final : public PlatformServices {
 public:
@@ -48,6 +52,66 @@ class ConnectionViewTests final : public QObject {
     Q_OBJECT
 private slots:
     void initTestCase() { WidgetStyle::install(); }
+    void returningToConnectionsRestoresFilterSelectionAndPosition() {
+        QTemporaryDir root; auto platform=std::make_shared<ViewPlatform>(); AppController c(root.path(),true,nullptr,platform);
+        QSignalSpy initialized(&c,&AppController::initialized); c.initialize(); QTRY_COMPARE(initialized.size(),1);
+        MainWindow window(&c); window.resize(850,540); window.show(); window.setPage(4);
+        auto* table=window.findChild<QTableView*>("connectionsTable");
+        auto* search=window.findChild<QLineEdit*>("connectionsSearch");
+        auto* tabs=window.findChild<QTabBar*>("dataTabs");
+        QVERIFY(table && search && tabs && c.connectionsVisible());
+        QJsonArray snapshot;
+        for (int i=0;i<60;++i)
+            snapshot.append(QJsonObject{{"id",QString("connection-%1").arg(i)},
+                {"metadata",QJsonObject{{"host",QString("match-%1.example").arg(i)},
+                    {"destinationPort",443}}}});
+        const auto refresh=[&] { const_cast<QJsonArray&>(c.connections())=snapshot; c.connectionsChanged(); };
+        search->setText("match-"); refresh();
+        QTRY_COMPARE(table->model()->rowCount(),60);
+        auto* scroll=table->verticalScrollBar(); QTRY_VERIFY(scroll->maximum()>0);
+        table->selectRow(20);
+        const auto selected=table->selectionModel()->selectedRows().first().data(Qt::UserRole).toString();
+        scroll->setValue(qMin(250,scroll->maximum())); const int position=scroll->value(); QVERIFY(position>0);
+        window.setPage(0); QVERIFY(!c.connectionsVisible());
+        window.setPage(4); QVERIFY(c.connectionsVisible()); refresh();
+        QCOMPARE(search->text(),QString("match-")); QCOMPARE(scroll->value(),position);
+        QCOMPARE(table->selectionModel()->selectedRows().first().data(Qt::UserRole).toString(),selected);
+        scroll->setValue(qMin(330,scroll->maximum())); const int tabPosition=scroll->value();
+        tabs->setCurrentIndex(3); QVERIFY(!c.connectionsVisible());
+        tabs->setCurrentIndex(1); QVERIFY(c.connectionsVisible()); refresh();
+        QCOMPARE(scroll->value(),tabPosition);
+        QCOMPARE(search->text(),QString("match-"));
+        QVERIFY(!window.findChild<QDialog*>("connectionDetails"));
+        QCOMPARE(platform->writes,0);
+    }
+    void logCommandsHaveOneVisibleEntryAndCopySelection() {
+        QTemporaryDir root; auto platform=std::make_shared<ViewPlatform>(); AppController c(root.path(),true,nullptr,platform);
+        QSignalSpy initialized(&c,&AppController::initialized); c.initialize(); QTRY_COMPARE(initialized.size(),1);
+        MainWindow window(&c); window.show(); window.setPage(5);
+        auto* view=window.findChild<QPlainTextEdit*>("logView");
+        auto* menu=window.findChild<QMenu*>("logOptionsMenu");
+        auto* exportButton=window.findChild<QToolButton*>("exportDiagnosticsButton");
+        QVERIFY(view && menu && exportButton && exportButton->isVisible());
+        // The export belongs to the same local toolbar as the log filters.
+        QVERIFY(window.findChild<QWidget*>("logToolbar")->isAncestorOf(exportButton));
+        c.diagnostics()->append("app", "Log page remains readable before core startup");
+        QTRY_VERIFY(view->toPlainText().contains("Log page remains readable"));
+        QVERIFY(!window.findChild<QLabel*>("logEmptyState")->isVisible());
+        QVERIFY(!window.findChild<QToolButton*>("clearLogViewButton"));
+        QAction* copy=nullptr; int clearCount=0, exportCount=0;
+        for (auto* action:menu->actions()) {
+            if (action->text()=="复制选中") copy=action;
+            if (action->text()=="清空视图") ++clearCount;
+            if (action->text().contains("导出")) ++exportCount;
+        }
+        QVERIFY(copy); QCOMPARE(clearCount,1); QCOMPARE(exportCount,0);
+        view->setPlainText("line one\nline two");
+        auto cursor=view->textCursor(); cursor.movePosition(QTextCursor::Start); cursor.movePosition(QTextCursor::EndOfLine,QTextCursor::KeepAnchor); view->setTextCursor(cursor);
+        QVERIFY(copy->isEnabled());
+        const auto old=QApplication::clipboard()->text(); const auto restore=qScopeGuard([old] { QApplication::clipboard()->setText(old); });
+        copy->trigger(); QCOMPARE(QApplication::clipboard()->text(),QString("line one"));
+        QCOMPARE(platform->writes,0);
+    }
     void ruleSuggestionsUseOnlySafeObservedFields() {
         const auto suggestions=ConnectionDetailsDialog::ruleSuggestions({{"metadata",QJsonObject{{"host","Example.TEST."},{"destinationIP","2001:db8::1"},{"processPath","C:\\Apps\\browser.exe"}}}});
         QCOMPARE(suggestions.size(),3); QCOMPARE(suggestions[0].toObject().value("payload").toString(),QString("example.test")); QCOMPARE(suggestions[1].toObject().value("type").toString(),QString("IP-CIDR6")); QCOMPARE(suggestions[1].toObject().value("payload").toString(),QString("2001:db8::1/128")); QCOMPARE(suggestions[1].toObject().value("option").toString(),QString("no-resolve")); QCOMPARE(suggestions[2].toObject().value("payload").toString(),QString("browser.exe"));
@@ -86,6 +150,25 @@ private slots:
         QTemporaryDir root; auto platform=std::make_shared<ViewPlatform>(); AppController c(root.path(),true,nullptr,platform); QSignalSpy init(&c,&AppController::initialized); c.initialize(); QTRY_COMPARE(init.size(),1);
         const QString path="C:/"+QString(900,'x')+"/browser.exe"; QPointer<ConnectionDetailsDialog> dialog=new ConnectionDetailsDialog(&c,{{"metadata",QJsonObject{{"processPath",path}}}},{},{}); const auto old=QApplication::clipboard()->text(); const auto restore=qScopeGuard([old] { QApplication::clipboard()->setText(old); }); dialog->findChild<QToolButton*>("copyConnection_processPath")->click(); QCOMPARE(QApplication::clipboard()->text(),path); dialog->reject(); QTRY_VERIFY(dialog.isNull()); QCOMPARE(platform->writes,0);
     }
+    void connectionContextMenuKeepsItsOriginalIdentity() {
+        QTemporaryDir root; auto platform=std::make_shared<ViewPlatform>(); AppController c(root.path(),true,nullptr,platform);
+        QSignalSpy initialized(&c,&AppController::initialized); c.initialize(); QTRY_COMPARE(initialized.size(),1);
+        const QString first=newId(), second=newId();
+        auto row=[](const QString& id,const QString& host) { return QJsonObject{{"id",id},{"metadata",QJsonObject{{"host",host}}},{"_active",true}}; };
+        MainWindow window(&c); window.resize(900,600); window.show(); window.setPage(4);
+        auto* table=window.findChild<QTableView*>("connectionsTable"); QVERIFY(table);
+        auto* filter=qobject_cast<QSortFilterProxyModel*>(table->model()); QVERIFY(filter);
+        auto* model=static_cast<ActivityTableModel*>(filter->sourceModel()); QVERIFY(model);
+        model->setRows(QJsonArray{row(first,"first.example")}); QTRY_COMPARE(table->model()->rowCount(),1);
+        const QPoint at=table->visualRect(table->model()->index(0,0)).center();
+        QContextMenuEvent event(QContextMenuEvent::Mouse,at,table->viewport()->mapToGlobal(at)); QApplication::sendEvent(table->viewport(),&event);
+        QPointer<QMenu> menu=table->findChild<QMenu*>("connectionContextMenu"); QVERIFY(menu); QTRY_VERIFY(menu->isVisible());
+        QCOMPARE(menu->actions().first()->text(),QString("详情"));
+        const QString previous=QApplication::clipboard()->text(); QApplication::clipboard()->setText("unchanged");
+        model->setRows(QJsonArray{row(second,"second.example")}); QCoreApplication::processEvents();
+        menu->actions().at(1)->trigger(); QCOMPARE(QApplication::clipboard()->text(),QString("unchanged"));
+        QApplication::clipboard()->setText(previous); if (menu) menu->close(); QCOMPARE(platform->writes,0);
+    }
     void connectionRuleCarriesDraftAndCancelKeepsParentText() {
         QTemporaryDir root; auto platform=std::make_shared<ViewPlatform>(); ProfileStore store(root.path(),platform); QVERIFY(store.load().result.ok); Settings settings; settings.startCore=false; Profile p; p.id=newId(); p.name="Fixture"; p.sourceType="file";
         const auto prepared=store.prepare(p,"proxies: [{name: Leaf, type: http, server: 127.0.0.1, port: 9}]\nproxy-groups: [{name: G, type: select, proxies: [Leaf, DIRECT]}]\nrules: ['MATCH,G']\n",settings,19090,QString(64,'a')); QVERIFY2(prepared.result.ok,qUtf8Printable(prepared.result.error)); auto profile=prepared.profile; profile.active=prepared.version; settings.activeProfile=p.id; QVERIFY(store.save(settings,{profile}).ok);
@@ -103,7 +186,7 @@ private slots:
         AppController c(root.path(),true,nullptr,platform); QSignalSpy init(&c,&AppController::initialized); c.initialize(); QTRY_COMPARE(init.size(),1); QSignalSpy finished(&c,&AppController::operationFinished);
         ActivityTableModel model(true); const auto row=QJsonObject{{"id",newId()},{"metadata",QJsonObject{{"destinationIP","2001:db8::1"},{"destinationPort",443},{"sourceIP","::1"},{"sourcePort",1234},{"processPath","C:\\Apps\\browser.exe"}}},{"upload",2048},{"download",100},{"_upload_rate",1500},{"start","2026-10-17T01:02:03Z"}}; auto unknown=row; unknown["id"]=newId(); unknown["metadata"]=QJsonObject{}; unknown["start"]="bad time"; unknown["upload"]=10; unknown["_upload_rate"]=QJsonValue(); model.setRows({row,unknown}); QCOMPARE(model.columnCount(),int(ConnectionColumns::Count)); QCOMPARE(model.index(0,0).data().toString(),QString("[2001:db8::1]:443")); QCOMPARE(model.index(0,ConnectionColumns::Process).data().toString(),QString("browser.exe")); QCOMPARE(model.index(0,ConnectionColumns::Source).data().toString(),QString("[::1]:1234")); QVERIFY(model.index(0,0).data(Qt::ToolTipRole).toString().contains("来源：[::1]:1234")); QVERIFY(model.index(0,ConnectionColumns::Started).data(Qt::UserRole+1).toLongLong()>0); QCOMPARE(model.index(1,ConnectionColumns::Process).data().toString(),QString("—")); QCOMPARE(model.index(1,ConnectionColumns::Started).data().toString(),QString("—"));
         QSortFilterProxyModel filter; filter.setSourceModel(&model); filter.setSortRole(Qt::UserRole+1); filter.sort(ConnectionColumns::Upload,Qt::AscendingOrder); QCOMPARE(filter.index(0,0).data(Qt::UserRole).toString(),unknown.value("id").toString());
-        QWidget host; QTableView table(&host); table.setModel(&filter); QLineEdit search(&host); QLabel error(&host); ConnectionOptions options(&c,&table,&filter,&search,&error,&host); QCOMPARE(table.horizontalHeader()->logicalIndex(1),3); QCOMPARE(table.columnWidth(3),231); QVERIFY(table.isColumnHidden(4)); for (int id=7;id<ConnectionColumns::Count;++id) QVERIFY(table.isColumnHidden(id)); QCOMPARE(options.preferences().value("columns").toArray().size(),int(ConnectionColumns::Count)); QVERIFY(validateConnectionView(options.preferences()).ok); options.findChild<QAction*>("connectionColumn7")->setChecked(true); QVERIFY(!table.isColumnHidden(7)); options.flushPreferences(); QTRY_COMPARE(finished.size(),1); QVERIFY(finished[0][0].toBool()); QCOMPARE(c.settings().connectionView,options.preferences()); const auto reloaded=store.load(); QVERIFY(reloaded.result.ok); QCOMPARE(reloaded.settings.connectionView,options.preferences());
+        QWidget host; QTableView table(&host); table.setModel(&filter); QLineEdit search(&host); QLabel error(&host); ConnectionOptions options(&c,&table,&filter,&search,&error,&host); QCOMPARE(table.horizontalHeader()->logicalIndex(1),3); QCOMPARE(table.columnWidth(3),231); QVERIFY(table.isColumnHidden(4)); for (int id=7;id<ConnectionColumns::Count;++id) QVERIFY(table.isColumnHidden(id)); QCOMPARE(options.preferences().value("columns").toArray().size(),int(ConnectionColumns::Count)); QVERIFY(validateConnectionView(options.preferences()).ok); options.findChild<QCheckBox*>("connectionColumn7")->setChecked(true); QVERIFY(!table.isColumnHidden(7)); options.flushPreferences(); QTRY_COMPARE(finished.size(),1); QVERIFY(finished[0][0].toBool()); QCOMPARE(c.settings().connectionView,options.preferences()); const auto reloaded=store.load(); QVERIFY(reloaded.result.ok); QCOMPARE(reloaded.settings.connectionView,options.preferences());
         auto partial=options.preferences(); auto columns=partial.value("columns").toArray(); columns.removeLast(); partial["columns"]=columns; QVERIFY(!validateConnectionView(partial).ok); QCOMPARE(platform->writes,0);
     }
     void suspendedSessionStartsANewRateAndDisappearanceBaseline() {
@@ -126,9 +209,19 @@ private slots:
     }
     void searchFlagsErrorsAndColumnPersistence() {
         QTemporaryDir root; auto platform=std::make_shared<ViewPlatform>(); AppController c(root.path(),true,nullptr,platform); QSignalSpy initialized(&c,&AppController::initialized),finished(&c,&AppController::operationFinished); c.initialize(); QTRY_COMPARE(initialized.size(),1); ActivityTableModel model(true); QJsonArray rows; for (const auto& host:QStringList{"alpha.example","AlphaBeta.example","beta.example"}) rows.append(QJsonObject{{"id",newId()},{"metadata",QJsonObject{{"host",host},{"destinationPort",443},{"process","browser.exe"}}},{"upload",0},{"download",0}}); model.setRows(rows); QSortFilterProxyModel filter; filter.setSourceModel(&model); filter.setFilterKeyColumn(0); filter.setFilterRole(Qt::UserRole+2);
-        QWidget host; host.resize(700,400); auto* table=new QTableView(&host); table->setModel(&filter); table->resize(680,240); auto* search=new QLineEdit(&host); auto* error=new QLabel(&host); ConnectionOptions options(&c,table,&filter,search,error,&host); host.show(); UiTheme::setPreferences("light",120); QCoreApplication::processEvents(); QVERIFY(table->columnWidth(6)>=table->fontMetrics().horizontalAdvance("暂停快照")+12); QVERIFY(!options.preferences().contains("columns")); UiTheme::setPreferences("system",100); QCoreApplication::processEvents(); search->setText("alpha"); QCOMPARE(filter.rowCount(),2); options.findChild<QToolButton*>("connectionCase")->click(); QCOMPARE(filter.rowCount(),1); options.findChild<QToolButton*>("connectionCase")->click(); options.findChild<QToolButton*>("connectionWholeWord")->click(); QCOMPARE(filter.rowCount(),1); options.findChild<QToolButton*>("connectionRegex")->click(); search->setText("^beta"); QCOMPARE(filter.rowCount(),1); search->setText("["); QVERIFY(error->isVisible()); QCOMPARE(filter.rowCount(),1); search->setText("(*ACCEPT)"); QVERIFY(error->isVisible()); QCOMPARE(filter.rowCount(),1); search->setText("alpha"); QVERIFY(!error->isVisible()); QCOMPARE(filter.rowCount(),1);
-        auto* header=table->horizontalHeader(); header->moveSection(header->visualIndex(3),1); table->setColumnWidth(3,230); options.findChild<QAction*>("connectionColumn4")->setChecked(false); QVERIFY(table->isColumnHidden(4)); QVERIFY(!options.findChild<QAction*>("connectionColumn0")->isEnabled()); const auto desired=options.preferences(); QVERIFY(validateConnectionView(desired).ok); const auto generation=c.state().generation; options.flushPreferences(); QTRY_COMPARE(finished.size(),1); QVERIFY(finished[0][0].toBool()); QCOMPARE(c.settings().connectionView,desired); QCOMPARE(c.state().generation,generation); QByteArray bytes; QVERIFY(readFile(root.path()+"/state.dat",bytes).ok); QVERIFY(!bytes.contains("alpha.example"));
-        auto* restoredTable=new QTableView(&host); restoredTable->setModel(&filter); auto* restoredSearch=new QLineEdit(&host); auto* restoredError=new QLabel(&host); ConnectionOptions restored(&c,restoredTable,&filter,restoredSearch,restoredError,&host); QCOMPARE(restoredTable->horizontalHeader()->logicalIndex(1),3); QCOMPARE(restoredTable->columnWidth(3),230); QVERIFY(restoredTable->isColumnHidden(4)); QVERIFY(restored.findChild<QToolButton*>("connectionRegex")->isChecked()); QVERIFY(restoredSearch->text().isEmpty()); restored.findChild<QAction*>("resetConnectionColumns")->trigger(); QVERIFY(!restored.preferences().contains("columns")); restored.flushPreferences(); QTRY_COMPARE(finished.size(),2); QVERIFY(finished[1][0].toBool()); QVERIFY(!c.settings().connectionView.contains("columns")); QCOMPARE(platform->writes,0);
+        QWidget host; host.resize(700,400); auto* table=new QTableView(&host); table->setModel(&filter); table->resize(680,240); auto* search=new QLineEdit(&host); auto* error=new QLabel(&host); ConnectionOptions options(&c,table,&filter,search,error,&host); options.show(); host.show(); UiTheme::setPreferences("light",120); QCoreApplication::processEvents(); QVERIFY(options.findChild<QToolButton*>("connectionCase")->isVisible()); QVERIFY(options.findChild<QToolButton*>("connectionWholeWord")->isVisible()); QVERIFY(options.findChild<QToolButton*>("connectionRegex")->isVisible()); auto* chooser=options.findChild<QWidget*>("connectionColumnsPopup"); QVERIFY(chooser); QCOMPARE(chooser->findChildren<QCheckBox*>().size(),int(ConnectionColumns::Count)); QVERIFY(table->columnWidth(6)>=table->fontMetrics().horizontalAdvance("暂停快照")+12); QVERIFY(!options.preferences().contains("columns")); UiTheme::setPreferences("system",100); QCoreApplication::processEvents(); search->setText("alpha"); QCOMPARE(filter.rowCount(),2); options.findChild<QToolButton*>("connectionCase")->click(); QCOMPARE(filter.rowCount(),1); options.findChild<QToolButton*>("connectionCase")->click(); options.findChild<QToolButton*>("connectionWholeWord")->click(); QCOMPARE(filter.rowCount(),1); options.findChild<QToolButton*>("connectionRegex")->click(); search->setText("^beta"); QCOMPARE(filter.rowCount(),1); search->setText("["); QVERIFY(error->isVisible()); QCOMPARE(filter.rowCount(),1); search->setText("(*ACCEPT)"); QVERIFY(error->isVisible()); QCOMPARE(filter.rowCount(),1); search->setText("alpha"); QVERIFY(!error->isVisible()); QCOMPARE(filter.rowCount(),1);
+        auto* columnsButton=options.findChild<QToolButton*>("connectionColumns"); QVERIFY(columnsButton); columnsButton->click();
+        QTRY_VERIFY(chooser->isVisible()); QVERIFY(chooser->height()<=480);
+        QCOMPARE(chooser->grab().toImage().pixelColor(0,0).alpha(),0);
+        const auto position=chooser->geometry(); QTest::qWait(60); QCOMPARE(chooser->geometry(),position);
+        if (const auto output=qEnvironmentVariable("MLASH_UI_SCREENSHOTS"); !output.isEmpty()) { QVERIFY(QDir().mkpath(output)); QVERIFY(chooser->grab().save(output+"/connection-columns.png")); }
+        auto* column7=options.findChild<QCheckBox*>("connectionColumn7"); auto* column8=options.findChild<QCheckBox*>("connectionColumn8"); QVERIFY(column7 && column8);
+        column7->setChecked(true); column8->setChecked(true); QVERIFY(chooser->isVisible()); QVERIFY(!table->isColumnHidden(7) && !table->isColumnHidden(8));
+        QKeyEvent escape(QEvent::KeyPress,Qt::Key_Escape,Qt::NoModifier); QCoreApplication::sendEvent(column7,&escape); QVERIFY(!chooser->isVisible());
+        columnsButton->click(); QTRY_VERIFY(chooser->isVisible()); QVERIFY(column7->isChecked() && column8->isChecked());
+        host.move(host.pos()+QPoint(5,0)); QTRY_VERIFY(!chooser->isVisible());
+        auto* header=table->horizontalHeader(); header->moveSection(header->visualIndex(3),1); table->setColumnWidth(3,230); options.findChild<QCheckBox*>("connectionColumn4")->setChecked(false); QVERIFY(table->isColumnHidden(4)); QVERIFY(!options.findChild<QCheckBox*>("connectionColumn0")->isEnabled()); const auto desired=options.preferences(); QVERIFY(validateConnectionView(desired).ok); const auto generation=c.state().generation; options.flushPreferences(); QTRY_COMPARE(finished.size(),1); QVERIFY(finished[0][0].toBool()); QCOMPARE(c.settings().connectionView,desired); QCOMPARE(c.state().generation,generation); QByteArray bytes; QVERIFY(readFile(root.path()+"/state.dat",bytes).ok); QVERIFY(!bytes.contains("alpha.example"));
+        auto* restoredTable=new QTableView(&host); restoredTable->setModel(&filter); auto* restoredSearch=new QLineEdit(&host); auto* restoredError=new QLabel(&host); ConnectionOptions restored(&c,restoredTable,&filter,restoredSearch,restoredError,&host); QCOMPARE(restoredTable->horizontalHeader()->logicalIndex(1),3); QCOMPARE(restoredTable->columnWidth(3),230); QVERIFY(restoredTable->isColumnHidden(4)); QVERIFY(restored.findChild<QToolButton*>("connectionRegex")->isChecked()); QVERIFY(restoredSearch->text().isEmpty()); restored.findChild<QPushButton*>("resetConnectionColumns")->click(); QVERIFY(!restored.preferences().contains("columns")); restored.flushPreferences(); QTRY_COMPARE(finished.size(),2); QVERIFY(finished[1][0].toBool()); QVERIFY(!c.settings().connectionView.contains("columns")); QCOMPARE(platform->writes,0);
     }
     void queuedSaveFailureAndSchemaBounds() {
         QTemporaryDir root; auto platform=std::make_shared<ViewPlatform>(); AppController c(root.path(),true,nullptr,platform); QSignalSpy initialized(&c,&AppController::initialized),finished(&c,&AppController::operationFinished); c.initialize(); QTRY_COMPARE(initialized.size(),1); const QJsonObject preferences{{"regex",true},{"whole_word",false},{"case_sensitive",true}}; c.updateWebsiteTargets(QJsonArray{QJsonObject{{"id","fixture"},{"name","Fixture"},{"url","https://example.test/"},{"mark","F"}}}); QVERIFY(c.state().busy); c.updateConnectionView(preferences); QTRY_COMPARE_WITH_TIMEOUT(finished.size(),2,5000); QVERIFY(finished[0][0].toBool()); QVERIFY(finished[1][0].toBool()); QCOMPARE(c.settings().connectionView,preferences); platform->failSeal=true; auto next=preferences; next["regex"]=false; QByteArray before,after; QVERIFY(readFile(root.path()+"/state.dat",before).ok); c.updateConnectionView(next); QTRY_COMPARE(finished.size(),3); QVERIFY(!finished[2][0].toBool()); QCOMPARE(c.settings().connectionView,preferences); QVERIFY(readFile(root.path()+"/state.dat",after).ok); QCOMPARE(after,before);
@@ -137,20 +230,20 @@ private slots:
     void logAndRuleRegionsDistinguishStates() {
         QTemporaryDir root; AppController c(root.path(),true,nullptr,std::make_shared<ViewPlatform>()); QSignalSpy init(&c,&AppController::initialized); c.initialize(); QTRY_COMPARE(init.size(),1);
         MainWindow window(&c); window.resize(940,620); window.show(); QCoreApplication::processEvents();
-        // 日志页：未就绪时不得是空白面板。
+        // 日志页：已有应用日志时正文优先；真正无记录时才展示空态。
         window.setPage(5); QCoreApplication::processEvents();
         auto* logEmpty=window.findChild<QLabel*>("logEmptyState"); QVERIFY(logEmpty);
-        QTRY_VERIFY(logEmpty->isVisible()); QVERIFY(logEmpty->text().contains("未就绪"));
-        // 规则页：内核实际规则在未就绪时有说明，而不是空表。
+        auto* logView=window.findChild<QPlainTextEdit*>("logView"); QVERIFY(logView);
+        QVERIFY((logEmpty->isVisible() && !logEmpty->text().isEmpty()) || !logView->toPlainText().isEmpty());
+        // 无配置时规则页只提供导入路径，不展示不可用的规则编辑器。
         window.setPage(3); QCoreApplication::processEvents();
-        auto* rulesTabs=window.findChild<QTabWidget*>("rulesTabs"); QVERIFY(rulesTabs); rulesTabs->setCurrentIndex(1); QCoreApplication::processEvents();
-        auto* runtimeEmpty=window.findChild<QLabel*>("rulesRuntimeEmpty"); QVERIFY(runtimeEmpty);
-        QTRY_VERIFY(runtimeEmpty->isVisible()); QCOMPARE(runtimeEmpty->text(),QString("内核未就绪"));
-        // 连接页：未就绪空态给出原因与动作。
+        auto* rulesNoProfile=window.findChild<QWidget*>("rulesNoProfile"); QVERIFY(rulesNoProfile); QVERIFY(rulesNoProfile->isVisible());
+        auto* rulesTabs=window.findChild<QTabWidget*>("rulesTabs"); QVERIFY(rulesTabs); QVERIFY(!rulesTabs->isVisible());
+        // 连接页：没有配置时的唯一下一步直达配置。
         window.setPage(4); QCoreApplication::processEvents();
         auto* connectionsEmpty=window.findChild<QTableView*>("connectionsTable"); QVERIFY(connectionsEmpty);
         auto* emptyLabel=connectionsEmpty->viewport()->findChild<QLabel*>("emptyState"); QVERIFY(emptyLabel);
-        QTRY_VERIFY(emptyLabel->isVisible()); QVERIFY(emptyLabel->text().contains("未就绪"));
+        QTRY_VERIFY(emptyLabel->isVisible()); QVERIFY(emptyLabel->text().contains("选择配置"));
         QSignalSpy exited(&c,&AppController::exitReady); c.requestExit(); QTRY_COMPARE(exited.size(),1);
     }
 };

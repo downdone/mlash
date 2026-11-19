@@ -41,12 +41,26 @@ void WebsiteTests::cancel() {
     for (const auto& reply:requests) if (reply) reply->abort();
     emit changed();
 }
-void WebsiteTests::clear() { cancel(); results_.clear(); node_.clear(); emit changed(); }
+void WebsiteTests::clear() { cancel(); results_.clear(); cachedResults_.clear(); cacheOrder_.clear(); node_.clear(); emit changed(); }
+void WebsiteTests::selectNode(const QString& node) {
+    if (running() || node.isEmpty() || node.size()>512 || node_==node) return;
+    // Results belong to the tested node, not to the currently selected proxy.
+    // Keep only a small in-memory working set; mutations and target edits call
+    // clear() so evidence from another core configuration cannot leak through.
+    if (!node_.isEmpty() && !results_.isEmpty()) {
+        cachedResults_.insert(node_,results_);
+        cacheOrder_.removeAll(node_); cacheOrder_.append(node_);
+    }
+    results_=cachedResults_.take(node);
+    cacheOrder_.removeAll(node);
+    while (cacheOrder_.size()>8) cachedResults_.remove(cacheOrder_.takeFirst());
+    node_=node; emit changed();
+}
 void WebsiteTests::start(const QString& node,const QString& onlyId) {
     if (running() || node.isEmpty() || node.size()>512) return;
     if (!onlyId.isEmpty()) { bool found=false; for (const auto& t:targets_) found|=t.id==onlyId; if (!found) return; }
-    if (node_!=node) clear();
-    node_=node; ++generation_;
+    if (node_!=node) selectNode(node);
+    ++generation_;
     for (const auto& target:targets_) if (onlyId.isEmpty() || target.id==onlyId) { WebsiteResult result; result.status=WebsiteResult::Queued; results_[target.id]=result; queue_.append(target.id); }
     emit changed(); dispatch();
 }

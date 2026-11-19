@@ -1,5 +1,7 @@
 # Mlash 架构与详细设计
 
+Windows GUI 入口在创建 `QApplication` 前选择 Qt Windows 插件的 FreeType 字体引擎（仅未显式指定 `QT_QPA_PLATFORM` 时）；这是全应用文字栅格策略，不改变系统 DPI、字体族/字阶或 Controller 状态。其他平台及明确指定的平台插件保留原选择，见 [U21 字体栅格设计](design/u21-windows-font-rasterization.md)。
+
 当前总体契约；功能的有界字段、计划与取消细则见 [功能模块契约](development/feature-contracts.md)。需求偏差由 [ADR](adr/README.md) 解释，实际验证由 [验证报告](verification-report.md) 记录。
 
 ## 1. 进程与依赖图
@@ -35,6 +37,8 @@ Mlash.exe 的 FileDescription 和 ProductName 均为 Mlash。mihomo 仍是 QProc
 普通模式使用 Windows Job 管理生命周期；TUN 模式由单独 SCM 权限服务拥有 Job。服务保留安装但核心绑定客户端心跳/管道，不能脱离客户端无限运行。任务管理器分组显示不是父子进程契约。
 界面不持有 Windows 句柄、文件事务或子进程；所有动作通过 Controller 方法。一级导航按首页/配置/数据/设置组织，内部使用五个主视图与数据四页签，历史八页入口由 ViewIds 适配；规则属于配置详情，跨页导航同步页签及分区，不增加持久化字段。
 
+U22 配置入口使用一个 `ProfileRowModel` 与 `ProfileCardDelegate` 绘制远程/本地同列卡片。委托只绘制及计算独立命中区，`MainWindow` 将卡片使用、来源更新、候选查看/应用和对象菜单映射为 Controller 命令或所属工作区；内容工作区按配置 ID 组织节点、规则、DNS、拨号链、规则源和兼容性，同级切换不改变运行对象。列表排序属于列表级工具，版本回滚属于来源维护。规则编辑的左侧新建与右侧现有规则共享一份未提交草稿，由 Controller 校验保存。
+
 U18：整组延迟由 Controller 有界队列调度 12 个异步请求，MihomoClient 使用两条独立本地 HTTP 连接池突破单池连接数限制；代次与取消仍由 Controller 统一处理，不产生每节点一个 OS 线程。窗口标题栏是纯偏好 `window_chrome=native|integrated`，应用内栏复用页面顶栏；Win32 边缘命中测试仅在 `platform/windows`，UI 只消费 Qt 事件与平台适配结果。应用在线更新由 `AppUpdateSource` 只读检查固定 GitHub Release，Controller 在有界 worker 校验大小/SHA-256 并原子保存独立候选包；运行 EXE 与内核不被覆盖，UI 显式打开候选包。发布策略与限制见 [U18 设计](design/u18-fast-tests-window-chrome-update.md)。
 
 `mlash_domain` 是独立静态库，提供通用状态类型与不触发 I/O 的校验；`mlash_engine` 依赖它。原 `app/Types.h`、`app/ConnectionColumns.h` 转发头已移除，消费者直接包含 domain 契约。`CoreApi` 描述现有核心能力；`MihomoClient` 是唯一特化，在 `MihomoEndpoints.cpp` 集中定义 REST 方法与路径。版本、运行配置和代理组响应用 `CoreDtos` 严格解析；其他端点保留有界 `Result`/JSON。Controller 持有具体实现并负责业务回读，进程管理和只读采样依赖能力接口。UI 控件、节点模型和委托分别在所属头文件中；原 `MainWindowParts.h`、`WindowUiBasics.h`、`WindowUiIncludes.h` 聚合头已移除，主窗口实现按外壳、数据、反馈、状态、导航和各页面分文件。`PageRouter` 以 `QPointer` 观察由主窗口持有的页面生命周期对象，销毁后不再调用悬空指针。`ui/design` 提供只读语义规格与 Shadowrocket 取值，`UiTheme` 是 Qt 外观适配和兼容桥，页面分组仍由布局与交互契约定义，见 [ADR 0056](adr/0056-independent-ui-design-system.md)。此结构仍保留单个 `AppController` 状态写入者及现有轻量销毁语义，见 [ADR 0055](adr/0055-domain-contracts-and-ui-components.md)。
@@ -48,7 +52,8 @@ UI 公开头只前向声明 `AppController`，在需要调用命令的实现文�
 | domain | Types / ConnectionColumns / WebsiteTargets / TunOptions / HotkeyBindings | 值对象与纯校验；独立 `mlash_domain` 静态库，不访问 UI/进程/OS |
 | app | AppController / Types / Async | 命令 → 观测状态、operationFinished、profilesChanged |
 | app | ProfileMaintenance | 有界到期/文件变化 → Controller 维护命令；不写业务索引 |
-| app | WebsiteTests | 指定叶子/内置目标 → 有界响应延迟会话；Controller 命令控制，GUI释放清空，无磁盘历史 |
+| app | WebsiteTests | 指定叶子/内置目标 → 有界响应延迟会话；最多暂存 8 个其他节点的内存结果，配置写入/目标变化/明确清空时失效，无磁盘历史 |
+| app | GroupDelayTests | 首页当前策略组 → 最多 12 个并发只读延迟请求、独立取消与进度；节点选择写事务可并行，其他写入或内核停机取消；不持久化结果 |
 | app | ConnectionSession | 可见快照/单调时间 → 有界活动/离开行、真实累计/差值速率；不写磁盘 |
 | core | CoreManager | 启停/校验 → 真实生命周期、就绪、崩溃 |
 | core | TunSession / TunPolicy / TunApiGate | 受限服务会话、受控配置、允许列表 API 转发；原生特权实现留在 platform/windows |

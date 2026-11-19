@@ -32,6 +32,8 @@
 #include <QLabel>
 #include <QLineEdit>
 #include <QListWidget>
+#include <QListView>
+#include <QScrollBar>
 #include <QMessageBox>
 #include <QPlainTextEdit>
 #include <QPushButton>
@@ -90,15 +92,45 @@ void MainWindow::navigate(Route route) {
     // 旧编号只允许出现在 setPage()/GuiHost 这类整数入口，那里已经过 fromLegacyPage()。
     // 这里不能再按 view==2 猜测「首页节点」：K 版起 2 是规则视图，按数字归一化会把规则页吞掉。
     if (!isRoutableView(route)) return;
+    if (route.view != route_.view) {
+        // Daymark's safe navigation keeps a draft in its owning task. Only an
+        // in-flight write blocks navigation; switching sections never discards.
+        if (settingsApplying_ || rulesSaving_) { syncSectionNavigation(route_); return; }
+        if (contentStack_ && contentStack_->currentIndex() != 0) {
+            if (auto* workspace = qobject_cast<TaskWorkspace*>(contentStack_->currentWidget())) {
+                if (DialogDraftGuard::hasPending(workspace)) {
+                    workspace->note("当前提交尚未结束，请稍后再切换页面。");
+                    syncSectionNavigation(route_); return;
+                }
+                if (DialogDraftGuard::hasDrafts(workspace)) suspendedWorkspaces_[route_.view] = workspace;
+            }
+        }
+        if (auto* workspace=workspaces_.value(ViewIds::Profiles); workspace && workspace->isVisible() && workspace->context().startsWith("profile:")) {
+            if (DialogDraftGuard::hasPending(workspace)) { workspace->note("当前提交尚未结束，请稍后再切换页面。"); syncSectionNavigation(route_); return; }
+            if (DialogDraftGuard::hasDrafts(workspace)) suspendedWorkspaces_[ViewIds::Profiles]=workspace;
+            else suspendedWorkspaces_.remove(ViewIds::Profiles);
+            workspace->hide();
+        }
+    }
+    if (route!=route_) {
+        if (homeRouteRow_) for (auto* menu:homeRouteRow_->findChildren<QMenu*>("routeModeMenu")) menu->close();
+        if (connectionsTable_) for (auto* menu:connectionsTable_->findChildren<QMenu*>("connectionContextMenu")) menu->close();
+        if (auto* filters=findChild<QWidget*>("nodeFilterPopup")) filters->close();
+        if (auto* columns=findChild<QWidget*>("connectionColumnsPopup")) columns->close();
+    }
+    if (route_.view == ViewIds::Data && currentDataTab() == int(ViewIds::DataTab::Connections)
+        && (route.view != ViewIds::Data || (route.tab >= 0 && route.tab != int(ViewIds::DataTab::Connections))))
+        rememberConnectionPosition();
     if (contentStack_) contentStack_->setCurrentIndex(0);
-    if (route.view==ViewIds::Profiles&&route_.view!=ViewIds::Profiles&&profileStack_) { profileStack_->setCurrentIndex(0); profileDetailId_.clear(); }
+    // Returning from another section resumes the profile object. The explicit
+    // “返回配置” control is the only normal path back to the profile list.
     if (route.view!=route_.view) if (auto* drawer=qobject_cast<DetailsDrawer*>(detailsDrawer_.data())) drawer->closeDrawer();
     // 设置分类只在调用方显式给出时应用；kNoCategory 表示沿用当前分类。
     // K8 起分类不再是页签：域内只把视野滚到对应分组，窗口标题仍带分类名。
     if (route.view == ViewIds::Settings) {
         // kNoCategory 表示「沿用当前分类」：路由里留下的是实际生效的分类，
         // 否则同一视图内的下一次导航会把视野拨回顶部，标题也会丢掉分类名。
-        if (route.category<0 && settingsStack_) { settingsStack_->setCurrentIndex(0); if (!settingsDirty()) settingsTask_.clear(); }
+        if (route.category<0 && settingsStack_ && !settingsDirty()) { settingsStack_->setCurrentIndex(0); settingsTask_.clear(); }
         if (route.category >= 0 && route.category < settingsSections_.size()) {
             selectSettingsCategory(route.category);
             // 分组都在同一个滚动面里，几何要等这一轮布局结束才有效：
@@ -125,6 +157,10 @@ void MainWindow::navigate(Route route) {
     if (route.view != ViewIds::Settings && configPreview_) configPreview_->close();
     if (outboundDialog_) outboundDialog_->close();
     pages_->setCurrentIndex(stackIndex(route.view));
+    if (auto* workspace = suspendedWorkspaces_.value(route.view).data()) {
+        if (DialogDraftGuard::hasDrafts(workspace)) showWorkspace(workspace);
+        else suspendedWorkspaces_.remove(route.view);
+    }
     syncSectionNavigation(route);
     // 页面副作用集中在各页对象的 onEnter/onLeave（S1），这里只按顺序触发。
     pageRouter_.go(route);
@@ -235,13 +271,30 @@ TaskWorkspace* MainWindow::taskWorkspaceFor(const QString& family) {
 }
 void MainWindow::showWorkspace(TaskWorkspace* workspace) {
     if (auto* drawer=qobject_cast<DetailsDrawer*>(detailsDrawer_.data())) drawer->closeDrawer();
+    if (contentStack_->indexOf(workspace)<0) {
+        workspace->hide(); workspace->setProperty("profileInspector",false);
+        workspace->style()->unpolish(workspace); workspace->style()->polish(workspace);
+        contentStack_->addWidget(workspace);
+    }
     contentStack_->setCurrentWidget(workspace);
     refreshTimer_.stop(); controller_->setHomeVisible(false); controller_->setRulesVisible(false);
     controller_->setConnectionsVisible(false); controller_->setDiagnosticsVisible(false); websitePage_->setActive(false);
 }
 void MainWindow::returnFromWorkspace() {
     if (outboundDialog_) outboundDialog_->close();
+    suspendedWorkspaces_.remove(route_.view);
+    const bool returningProfile = route_.view == ViewIds::Profiles &&
+        workspaces_.value(ViewIds::Profiles) && workspaces_.value(ViewIds::Profiles)->context().startsWith("profile:");
     contentStack_->setCurrentIndex(0); enterView(route_.view,route_);
+    if (returningProfile && profiles_) {
+        const QPointer<QListView> list = profiles_;
+        const int position = profileListReturnScroll_;
+        QTimer::singleShot(0, this, [list, position] {
+            if (!list) return;
+            list->verticalScrollBar()->setValue(position);
+            list->setFocus(Qt::OtherFocusReason);
+        });
+    }
 }
 void MainWindow::presentTask(QDialog* editor,const QString& key,const QString& title) {
     auto* workspace=taskWorkspace();
@@ -273,7 +326,9 @@ void MainWindow::updateTopbar() {
         : state.core == CoreState::Starting ? QString("启动中")
         : state.core == CoreState::Failed ? QString("启动失败")
         : state.core == CoreState::Stopping ? QString("停止中") : QString("未连接");
-    const bool configActions=route_.view==ViewIds::Home||route_.view==ViewIds::Profiles;
+    // 配置页已经有带来源选择的“导入…”行；顶栏 + 只作首页快捷入口。
+    // With no configuration the Home empty state is the sole import action.
+    const bool configActions=route_.view==ViewIds::Home && !controller_->profiles().isEmpty();
     if (auto* button=findChild<QToolButton*>("toolbarAdd")) { button->setVisible(configActions); button->setIcon(UiIcons::icon(UiIcons::Glyph::Plus,UiTheme::Brand)); }
     WindowParts::updateTopbar(this, route_.view==ViewIds::Home?QString("Mlash"):route_.view==ViewIds::Rules?QString("配置"):ViewIds::title(route_.view), ViewIds::subtitle(route_.view), status, dotState);
     if (topbarStatusText_) topbarStatusText_->setToolTip(sentence.line1);
@@ -313,6 +368,8 @@ void MainWindow::showEvent(QShowEvent* event) {
     }
 }
 void MainWindow::hideEvent(QHideEvent* event) {
+    if (route_.view == ViewIds::Data && currentDataTab() == int(ViewIds::DataTab::Connections))
+        rememberConnectionPosition();
     homeOutboundSnapshot_={}; updateHomeOutbound();
     if (connectionOptions_) connectionOptions_->flushPreferences();
     if (outboundDialog_) outboundDialog_->close();

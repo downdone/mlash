@@ -5,6 +5,7 @@
 #include "CompactComboBox.h"
 #include "UiIcons.h"
 #include "UiTheme.h"
+#include "WidgetStyle.h"
 #include <QApplication>
 #include <QClipboard>
 #include <QDialogButtonBox>
@@ -63,7 +64,7 @@ ConnectionDetailsDialog::ConnectionDetailsDialog(AppController* controller,QJson
     hint_=new QLabel; hint_->setObjectName("connectionDetailsHint"); hint_->setTextFormat(Qt::PlainText); hint_->setWordWrap(true); hint_->setMinimumHeight(fontMetrics().lineSpacing()*2+4); layout->addWidget(hint_);
     auto* actions=new QDialogButtonBox(QDialogButtonBox::Close); actions->button(QDialogButtonBox::Close)->setText("完成"); rule_=actions->addButton("添加规则…",QDialogButtonBox::ActionRole); rule_->setObjectName("createConnectionRule"); disconnect_=actions->addButton("断开连接",QDialogButtonBox::ActionRole); disconnect_->setObjectName("disconnectConnection"); disconnect_->setProperty("danger",true); layout->addWidget(actions); connect(actions,&QDialogButtonBox::rejected,this,&QDialog::reject);
     auto* menu=new QMenu(rule_); menu->setObjectName("connectionRuleMenu"); for (const auto& value:ruleSuggestions(row_)) { const auto candidate=value.toObject(); auto* action=menu->addAction(candidate.value("label").toString()); action->setObjectName("connectionRule_"+candidate.value("type").toString()); connect(action,&QAction::triggered,this,[this,candidate] { if (!contextCurrent()) return; auto suggestion=candidate; suggestion["target"]=target(); suggestion["profile"]=profile_; suggestion["generation"]=static_cast<qint64>(generation_); suggestion["active_version"]=version_; suggestion["observed_at"]=row_.value("_observed_at"); emit createRule(suggestion); }); }
-    rule_->setProperty("hasSuggestions",!menu->actions().isEmpty()); connect(rule_,&QPushButton::clicked,this,[this,menu] { menu->popup(rule_->mapToGlobal(QPoint(0,rule_->height()))); });
+    rule_->setProperty("hasSuggestions",!menu->actions().isEmpty()); connect(rule_,&QPushButton::clicked,this,[this,menu] { WidgetStyle::popupMenu(menu,rule_->mapToGlobal(QPoint(0,rule_->height()))); });
     connect(locate_,&QPushButton::clicked,this,[this] { const auto group=groups_->currentData().toString(); if (contextCurrent()&&controller_->proxies().value(group).toObject().value("all").isArray()) { emit browseGroup(group); accept(); } });
     connect(disconnect_,&QPushButton::clicked,this,[this] { if (!disconnect_->isEnabled()) return; if (QMessageBox::question(this,"关闭此连接","关闭所选连接可能中断当前请求。继续？",QMessageBox::Yes|QMessageBox::No,QMessageBox::No)!=QMessageBox::Yes) return; disconnecting_=true; feedback_.clear(); controller_->closeConnection(row_.value("id").toString()); });
     connect(controller_,&AppController::operationFinished,this,[this](bool ok,const QString& message) { if (!disconnecting_) return; disconnecting_=false; feedback_=ok?QString("连接关闭已回读确认"):message; updateContext(); }); connect(controller_,&AppController::stateChanged,this,&ConnectionDetailsDialog::updateContext); connect(controller_,&AppController::connectionsChanged,this,&ConnectionDetailsDialog::updateContext); connect(controller_,&AppController::proxiesChanged,this,&ConnectionDetailsDialog::updateContext); connect(groups_,&QComboBox::currentIndexChanged,this,&ConnectionDetailsDialog::updateContext);

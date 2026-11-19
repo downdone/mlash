@@ -20,6 +20,7 @@
 #include <QLabel>
 #include <QCheckBox>
 #include <QPushButton>
+#include <QToolButton>
 #include <QPlainTextEdit>
 #include <QSpinBox>
 #include <QLocalServer>
@@ -172,11 +173,14 @@ private slots:
         platform->installed=true; fake->bad=true; c.setTunEnabled(true); QTRY_COMPARE_WITH_TIMEOUT(finished.size(),5,16000); QVERIFY2(!finished.last()[0].toBool(),qUtf8Printable(finished.last()[1].toString())); QVERIFY2(c.state().ready,qUtf8Printable(finished.last()[1].toString())); QVERIFY(!c.settings().tunEnabled); QVERIFY(!c.state().tunObserved); QCOMPARE(c.profiles()[0].candidate,candidate);
         fake->bad=false; c.setTunEnabled(true); QTRY_COMPARE_WITH_TIMEOUT(finished.size(),6,16000); QVERIFY2(finished.last()[0].toBool(),qUtf8Printable(finished.last()[1].toString())); QVERIFY(c.state().tunObserved); QVERIFY(c.settings().tunEnabled); QCOMPARE(c.profiles()[0].candidate,candidate);
         MainWindow* window=new MainWindow(&c); window->setTrayAvailable(true); window->resize(840,560); window->show(); QTest::qWait(50);
-        // TUN 开关不在首页（ui-layered-design.md:169「TUN 开关不放首页」）：首页只报告观测结果，
-        // 启用入口在「设置 › 网络与内核」。这里断言它确实不在首页，且状态句里报告了接管。
+        // 首页不暴露技术开关/状态次行；代理总开关反映实际接管，
+        // 详细 TUN 观测留在全局状态与「设置 › 网络与内核」。
         QVERIFY(!window->findChild<QCheckBox*>("homeTunSwitch"));
         QVERIFY(!window->findChild<QPushButton*>("homeTunSettings"));
-        auto* stateLine=window->findChild<QLabel*>("homeStateLine"); QVERIFY(stateLine); QVERIFY2(stateLine->text().contains("TUN 已接管"),qUtf8Printable(stateLine->text())); const auto shots=qEnvironmentVariable("MLASH_UI_SCREENSHOTS"); if (!shots.isEmpty()) { QDir().mkpath(shots); window->grab().save(shots+"/tun-home-minimum.png"); } delete window; QVERIFY(fake->active());
+        QVERIFY(!window->findChild<QLabel*>("homeStateLine"));
+        auto* switchControl=window->findChild<QCheckBox*>("systemProxy"); QVERIFY(switchControl && switchControl->isChecked());
+        auto* status=window->findChild<QToolButton*>("sidebarStatus"); QVERIFY(status && status->toolTip().contains("TUN 已接管"));
+        const auto shots=qEnvironmentVariable("MLASH_UI_SCREENSHOTS"); if (!shots.isEmpty()) { QDir().mkpath(shots); window->grab().save(shots+"/tun-home-minimum.png"); } delete window; QVERIFY(fake->active());
         c.setTunEnabled(false); QTRY_COMPARE_WITH_TIMEOUT(finished.size(),7,16000); QVERIFY2(finished.last()[0].toBool(),qUtf8Printable(finished.last()[1].toString())); QVERIFY(c.state().ready); QVERIFY(!c.settings().tunEnabled); QVERIFY(!c.state().tunObserved); QCOMPARE(c.profiles()[0].candidate,candidate);
         const auto ordinaryPid=c.coreProcessId(); c.updateTunOptions(false,"mixed",true); QTRY_COMPARE(finished.size(),8); QVERIFY(finished.last()[0].toBool()); QCOMPARE(c.coreProcessId(),ordinaryPid); QVERIFY(c.settings().tunStrictRoute);
         c.setTunEnabled(true); QTRY_COMPARE_WITH_TIMEOUT(finished.size(),9,16000); QVERIFY(finished.last()[0].toBool()); fake->failStop=true;

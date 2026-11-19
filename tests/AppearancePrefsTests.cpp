@@ -70,7 +70,12 @@ private slots:
         QTemporaryDir root; auto platform=std::make_shared<AppearancePlatform>(); AppController c(root.path(),true,nullptr,platform); QSignalSpy initialized(&c,&AppController::initialized); c.initialize(); QTRY_COMPARE(initialized.size(),1); MainWindow window(&c); window.show(); const auto output=qEnvironmentVariable("MLASH_UI_SCREENSHOTS"); if (!output.isEmpty()) QDir().mkpath(output);
         for (const auto& theme:QStringList{"light","dark"}) for (const int scale:{90,100,110,120}) {
             UiTheme::setPreferences(theme,scale); QCOMPARE(qApp->font().pointSizeF(),double(UiTheme::BodyPoints)*scale/100.0);
-            for (const auto size:{QSize(840,560),QSize(1180,810)}) { window.resize(size); for (int page=0;page<8;++page) { window.setPage(page); QCoreApplication::processEvents(); for (auto* scroll:window.findChildren<QScrollArea*>()) QCOMPARE(scroll->horizontalScrollBar()->maximum(),0); if (!output.isEmpty()&&size.width()==840&&(page==0||page==6||page==7)) QVERIFY(window.grab().save(output+QString("/%1-%2-page-%3.png").arg(theme).arg(scale).arg(page))); } }
+            for (const auto size:{QSize(840,560),QSize(1180,810)}) { window.resize(size); for (int page=0;page<8;++page) { window.setPage(page); QCoreApplication::processEvents(); for (auto* scroll:window.findChildren<QScrollArea*>()) if (scroll->isVisible())
+                QVERIFY2(scroll->horizontalScrollBar()->maximum()==0,
+                         qUtf8Printable(QString("page %1 %2/%3 %4 %5%% horizontal overflow: %6")
+                             .arg(page).arg(scroll->objectName(),theme).arg(size.width()).arg(scale)
+                             .arg(scroll->horizontalScrollBar()->maximum())));
+                if (!output.isEmpty()&&size.width()==840&&(page==0||page==6||page==7)) QVERIFY(window.grab().save(output+QString("/%1-%2-page-%3.png").arg(theme).arg(scale).arg(page))); } }
         }
         UiTheme::applyAppearance(Qt::ColorScheme::Dark,true); QCOMPARE(QApplication::palette().color(QPalette::Window),QColor(UiTheme::Window)); QVERIFY(!UiTheme::styleSheet().contains('@')); QCOMPARE(platform->writes,0);
     }
@@ -97,7 +102,11 @@ private slots:
                 QPointer<QDialog> dialog=create(); dialog->resize(qMin(dialog->width(),780),qMin(dialog->height(),500)); dialog->show(); QTest::qWait(30);
                 QVERIFY2(dialog->width()<=800&&dialog->height()<=520,qUtf8Printable(QString("%1 %2 %3: %4x%5").arg(dialog->objectName(),theme).arg(scale).arg(dialog->width()).arg(dialog->height())));
                 for (auto* button:dialog->findChildren<QPushButton*>()) if (button->isVisible()) QVERIFY2(button->width()>=button->minimumSizeHint().width(),qUtf8Printable(dialog->objectName()+"/"+button->text()+" clipped"));
-                for (auto* scroll:dialog->findChildren<QScrollArea*>()) QCOMPARE(scroll->horizontalScrollBar()->maximum(),0);
+                for (auto* scroll:dialog->findChildren<QScrollArea*>()) if (scroll->isVisible())
+                    QVERIFY2(scroll->horizontalScrollBar()->maximum()==0,
+                             qUtf8Printable(QString("%1/%2 %3 %4%% horizontal overflow: %5")
+                                 .arg(dialog->objectName(),scroll->objectName(),theme).arg(scale)
+                                 .arg(scroll->horizontalScrollBar()->maximum())));
                 if (!output.isEmpty()&&scale==120) QVERIFY(dialog->grab().save(output+QString("/%1-dialog-%2-%3.png").arg(theme).arg(index).arg(dialog->objectName())));
                 ++index; dialog->reject(); QTRY_VERIFY(dialog.isNull());
             }

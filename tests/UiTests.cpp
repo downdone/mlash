@@ -2,12 +2,17 @@
 #include "app/AppController.h"
 #include "ui/MainWindow.h"
 #include "ui/ImportDialog.h"
+#include "ui/DialogDraftGuard.h"
 #include "ui/NodePresentation.h"
 #include "ui/NodeRowDelegate.h"
 #include "ui/NodeRowModel.h"
 #include "ui/NodeRowView.h"
+#include "ui/GroupPickerPopup.h"
 #include "ui/PrototypeUi.h"
 #include "ui/ProfileRowModel.h"
+#include "ui/ProfileCardDelegate.h"
+#include "ui/TaskWorkspace.h"
+#include "ui/SettingsSearch.h"
 #include "ui/ViewIds.h"
 #include <QListView>
 #include <QStandardItemModel>
@@ -77,6 +82,215 @@ static bool seedDashboardFixture(const QString& root) {
 class UiTests : public QObject {
     Q_OBJECT
 private slots:
+    void subscriptionCardsRouteActionsWithoutChangingUse() {
+        QTemporaryDir data; QVERIFY(seedDashboardFixture(data.path()));
+        AppController controller(data.path(), true);
+        QSignalSpy initialized(&controller, &AppController::initialized);
+        controller.initialize(); QTRY_COMPARE(initialized.size(), 1);
+        Profile remote = controller.profiles().first();
+        remote.id = newId(); remote.name = "远程示例"; remote.sourceType = "url";
+        remote.source = "http://127.0.0.1:1/sub?token=private";
+        remote.active.clear();
+        const_cast<QVector<Profile>&>(controller.profiles()).append(remote);
+        MainWindow window(&controller); window.resize(900, 650); window.show(); window.setPage(1);
+        auto* list = window.findChild<QListView*>("profileList"); QVERIFY(list);
+        QCOMPARE(list->model()->rowCount(), 2);
+        const auto shots = qEnvironmentVariable("MLASH_UI_SCREENSHOTS");
+        if (!shots.isEmpty()) { QVERIFY(QDir().mkpath(shots)); QVERIFY(window.grab().save(shots + "/subscription-list.png")); }
+        const auto localIndex = list->model()->index(0, 0);
+        const auto remoteIndex = list->model()->index(1, 0);
+        QCOMPARE(localIndex.data(ProfileRowModel::SourceLabel).toString(), QString("本地快照"));
+        QCOMPARE(remoteIndex.data(ProfileRowModel::SourceLabel).toString(), QString("127.0.0.1"));
+        QVERIFY(!remoteIndex.data(ProfileRowModel::SourceLabel).toString().contains("private"));
+        QVERIFY(!localIndex.data(ProfileRowModel::CanRefresh).toBool());
+        QVERIFY(remoteIndex.data(ProfileRowModel::CanRefresh).toBool());
+        QCOMPARE(list->viewMode(), QListView::IconMode);
+        QCOMPARE(list->itemDelegate()->sizeHint({}, remoteIndex).height(), 144);
+        QVERIFY(list->visualRect(localIndex).top() == list->visualRect(remoteIndex).top());
+        window.resize(560, 650);
+        QTRY_VERIFY(list->visualRect(localIndex).top() < list->visualRect(remoteIndex).top());
+        window.resize(900, 650);
+        QTRY_VERIFY(list->visualRect(localIndex).top() == list->visualRect(remoteIndex).top());
+        const auto currentId = controller.state().activeProfile;
+        const auto remoteRect = list->visualRect(remoteIndex);
+        QTest::mouseClick(list->viewport(), Qt::LeftButton, {}, ProfileCardDelegate::refresh(remoteRect).center());
+        QCOMPARE(controller.state().activeProfile, currentId);
+        QTRY_VERIFY(!controller.state().busy);
+        const auto menuPoint = ProfileCardDelegate::menu(list->visualRect(remoteIndex)).center();
+        QTest::mouseClick(list->viewport(), Qt::LeftButton, {}, menuPoint);
+        auto* menu = window.findChild<QMenu*>("profileContextMenu"); QVERIFY(menu);
+        QCOMPARE(menu->property("profileKind").toString(), QString("remote"));
+        QCOMPARE(menu->actions().size(), 5); // four object actions and a separator
+        menu->hide();
+        menu->actions().first()->trigger();
+        auto* workspace = window.findChild<TaskWorkspace*>("taskWorkspace"); QVERIFY(workspace);
+        QTRY_VERIFY(workspace->isVisible());
+        QVERIFY(workspace->context().endsWith(":content"));
+        QVERIFY(workspace->editor("nodes"));
+        QVERIFY(workspace->findChild<QTabBar*>("taskTabs")->isVisible());
+        QTRY_VERIFY(!window.findChild<QLabel*>("proxyEditorHint")->text().startsWith("正在读取"));
+        if (!shots.isEmpty()) QVERIFY(window.grab().save(shots + "/subscription-content.png"));
+        workspace->findChild<QPushButton*>("taskBack")->click();
+        QTRY_VERIFY(list->isVisible());
+        QCOMPARE(list->currentIndex().data(ProfileRowModel::ProfileId).toString(), remote.id);
+        const auto review = ProfileCardDelegate::review(list->visualRect(remoteIndex)).center();
+        QTest::mouseClick(list->viewport(), Qt::LeftButton, {}, review);
+        QTRY_VERIFY(workspace->context().endsWith(":candidate"));
+        QVERIFY(workspace->editor("candidate"));
+        QCOMPARE(controller.state().activeProfile, currentId);
+        workspace->findChild<QPushButton*>("taskBack")->click();
+        const auto localMenuPoint = ProfileCardDelegate::menu(list->visualRect(localIndex)).center();
+        QTest::mouseClick(list->viewport(), Qt::LeftButton, {}, localMenuPoint);
+        QCOMPARE(menu->property("profileKind").toString(), QString("local"));
+        QCOMPARE(menu->actions().size(), 4); // three actions and separator
+        menu->hide();
+        menu->actions().at(1)->trigger();
+        QTRY_VERIFY(workspace->context().endsWith(":source"));
+        auto* sourceEditor = window.findChild<QDialog*>("profilePolicyDialog"); QVERIFY(sourceEditor);
+        QVERIFY(sourceEditor->findChild<QLineEdit*>("profileEditName"));
+        QCOMPARE(controller.state().activeProfile, currentId);
+    }
+    void subscriptionCardEditingAndReturnPreserveObject() {
+        QTemporaryDir data; QVERIFY(seedDashboardFixture(data.path()));
+        AppController controller(data.path(),true);
+        QSignalSpy initialized(&controller,&AppController::initialized),finished(&controller,&AppController::operationFinished);
+        controller.initialize(); QTRY_COMPARE(initialized.size(),1);
+        const auto id=controller.profiles().first().id;
+        MainWindow window(&controller); window.resize(900,600); window.show(); window.setPage(1);
+        auto* list=window.findChild<QListView*>("profileList"); QVERIFY(list);
+        QCOMPARE(list->model()->rowCount(),1);
+        QVERIFY(!window.findChild<QToolButton*>("profileOrder")->isVisible());
+        const auto index=list->model()->index(0,0);
+        QTest::mouseClick(list->viewport(),Qt::LeftButton,{},ProfileCardDelegate::menu(list->visualRect(index)).center());
+        auto* menu=window.findChild<QMenu*>("profileContextMenu"); QVERIFY(menu);
+        QCOMPARE(menu->property("contextProfileId").toString(),id);
+        menu->hide(); menu->actions().at(1)->trigger();
+        auto* workspace=window.findChild<TaskWorkspace*>("taskWorkspace"); QVERIFY(workspace);
+        QTRY_VERIFY(workspace->context().endsWith(":source"));
+        auto* editor=window.findChild<QDialog*>("profilePolicyDialog"); QVERIFY(editor);
+        auto* name=editor->findChild<QLineEdit*>("profileEditName"); QVERIFY(name);
+        const auto original=name->text(); name->setText("尚未保存");
+        QTimer::singleShot(0,&window,[&window] { if (auto* box=window.findChild<QMessageBox*>()) box->button(QMessageBox::No)->click(); });
+        workspace->findChild<QPushButton*>("taskBack")->click();
+        QVERIFY(workspace->isVisible()); QCOMPARE(name->text(),QString("尚未保存"));
+        name->setText(original);
+        workspace->findChild<QPushButton*>("taskBack")->click();
+        QTRY_VERIFY(list->isVisible()); QCOMPARE(finished.size(),0);
+        QTest::mouseClick(list->viewport(),Qt::LeftButton,{},ProfileCardDelegate::menu(list->visualRect(index)).center());
+        menu->hide(); menu->actions().at(1)->trigger();
+        QTRY_VERIFY(workspace->context().endsWith(":source"));
+        editor=window.findChild<QDialog*>("profilePolicyDialog"); QVERIFY(editor);
+        name=editor->findChild<QLineEdit*>("profileEditName"); QVERIFY(name);
+        name->setText("新的配置名称");
+        editor->findChild<QDialogButtonBox*>()->button(QDialogButtonBox::Save)->click();
+        QTRY_COMPARE(finished.size(),1); QVERIFY2(finished.last()[0].toBool(),qUtf8Printable(finished.last()[1].toString()));
+        QCOMPARE(controller.profiles().first().id,id);
+        QCOMPARE(controller.profiles().first().name,QString("新的配置名称"));
+        QCOMPARE(list->model()->index(0,0).data(Qt::DisplayRole).toString(),QString("新的配置名称"));
+    }
+    void subscriptionCardReturnRestoresGridPosition() {
+        QTemporaryDir data; QVERIFY(seedDashboardFixture(data.path()));
+        AppController controller(data.path(),true); QSignalSpy initialized(&controller,&AppController::initialized);
+        controller.initialize(); QTRY_COMPARE(initialized.size(),1);
+        for (int i=0;i<18;++i) {
+            Profile extra=controller.profiles().first(); extra.id=newId(); extra.name=QString("配置 %1").arg(i);
+            const_cast<QVector<Profile>&>(controller.profiles()).append(extra);
+        }
+        MainWindow window(&controller); window.resize(900,570); window.show(); window.setPage(1);
+        auto* list=window.findChild<QListView*>("profileList"); QVERIFY(list);
+        QCOMPARE(list->model()->rowCount(),19);
+        list->verticalScrollBar()->setValue(list->verticalScrollBar()->maximum()/2);
+        QCoreApplication::processEvents(); const int position=list->verticalScrollBar()->value();
+        const auto index=list->indexAt(QPoint(20,list->viewport()->height()/2)); QVERIFY(index.isValid());
+        const auto id=index.data(ProfileRowModel::ProfileId).toString();
+        QTest::mouseClick(list->viewport(),Qt::LeftButton,{},ProfileCardDelegate::menu(list->visualRect(index)).center());
+        auto* menu=window.findChild<QMenu*>("profileContextMenu"); QVERIFY(menu);
+        QCOMPARE(menu->property("contextProfileId").toString(),id);
+        menu->hide(); list->setCurrentIndex(list->model()->index(0,0));
+        menu->actions().first()->trigger();
+        auto* workspace=window.findChild<TaskWorkspace*>("taskWorkspace"); QVERIFY(workspace);
+        QTRY_VERIFY(workspace->context().endsWith(":content"));
+        QVERIFY(workspace->context().contains(id));
+        QVERIFY(workspace->editor("nodes"));
+        workspace->findChild<QPushButton*>("taskBack")->click();
+        QTRY_VERIFY(list->isVisible());
+        QTRY_COMPARE(list->verticalScrollBar()->value(),position);
+        QCOMPARE(list->currentIndex().data(ProfileRowModel::ProfileId).toString(),id);
+    }
+    void subscriptionOrderKeepsSelectedObject() {
+        QTemporaryDir data; QVERIFY(seedDashboardFixture(data.path()));
+        auto platform=createPlatformServices(); ProfileStore store(data.path(),platform);
+        auto loaded=store.load(); QVERIFY(loaded.result.ok);
+        Profile second=loaded.profiles.first(); second.id=newId(); second.name="第二个配置";
+        const auto secondId=second.id;
+        loaded.profiles.append(second);
+        QVERIFY(store.save(loaded.settings,loaded.profiles).ok);
+        AppController controller(data.path(),true);
+        QSignalSpy initialized(&controller,&AppController::initialized),finished(&controller,&AppController::operationFinished);
+        controller.initialize(); QTRY_COMPARE(initialized.size(),1);
+        MainWindow window(&controller); window.resize(900,600); window.show(); window.setPage(1);
+        auto* cards=window.findChild<QListView*>("profileList"); QVERIFY(cards);
+        QTRY_COMPARE(cards->model()->rowCount(),2);
+        QVERIFY(window.findChild<QToolButton*>("profileOrder")->isVisible());
+        cards->setCurrentIndex(cards->model()->index(1,0));
+        auto* menu=window.findChild<QMenu*>("profileOrderMenu"); QVERIFY(menu);
+        menu->popup(cards->mapToGlobal(QPoint(20,20)));
+        QTRY_VERIFY(menu->isVisible()); QVERIFY(menu->actions().first()->isEnabled());
+        menu->hide(); menu->actions().first()->trigger();
+        QTRY_COMPARE(finished.size(),1); QVERIFY(finished.last()[0].toBool());
+        QCOMPARE(controller.profiles().first().id,secondId);
+        QCOMPARE(cards->currentIndex().data(ProfileRowModel::ProfileId).toString(),secondId);
+    }
+    void subscriptionRollbackRequiresExplicitConfirmation() {
+        QTemporaryDir data; QVERIFY(seedDashboardFixture(data.path()));
+        AppController controller(data.path(),true);
+        QSignalSpy initialized(&controller,&AppController::initialized),finished(&controller,&AppController::operationFinished);
+        controller.initialize(); QTRY_COMPARE(initialized.size(),1);
+        auto& profile=const_cast<Profile&>(controller.profiles().first());
+        profile.lastGood="previous-verified-version";
+        const auto active=profile.active;
+        MainWindow window(&controller); window.resize(900,600); window.show(); window.setPage(1);
+        auto* cards=window.findChild<QListView*>("profileList"); QVERIFY(cards);
+        QTest::mouseClick(cards->viewport(),Qt::LeftButton,{},ProfileCardDelegate::menu(cards->visualRect(cards->model()->index(0,0))).center());
+        auto* menu=window.findChild<QMenu*>("profileContextMenu"); QVERIFY(menu);
+        menu->hide(); menu->actions().at(1)->trigger();
+        auto* editor=window.findChild<QDialog*>("profilePolicyDialog"); QVERIFY(editor);
+        auto* rollback=editor->findChild<QPushButton*>("rollbackProfile"); QVERIFY(rollback);
+        QTimer::singleShot(0,&window,[&window] { if (auto* prompt=window.findChild<QMessageBox*>()) prompt->button(QMessageBox::No)->click(); });
+        rollback->click();
+        QCOMPARE(finished.size(),0);
+        QCOMPARE(controller.profiles().first().active,active);
+        QVERIFY(editor->isVisible());
+    }
+    void groupPickerSearchKeepsStablePopupAndSelection() {
+        QWidget anchor; anchor.resize(36, 32); anchor.move(100, 100); anchor.show();
+        auto* picker = new GroupPickerPopup(&anchor);
+        QPointer<GroupPickerPopup> guard = picker;
+        picker->addChoice("HK", false);
+        picker->addChoice("JP", true);
+        picker->addChoice("SG", false);
+        QString chosen;
+        picker->chosen = [&chosen](const QString& group) { chosen = group; };
+        picker->openBelow(&anchor);
+        QTRY_VERIFY(picker->isVisible());
+        const QRect firstGeometry = picker->geometry();
+        QCOMPARE(picker->grab().toImage().pixelColor(0, 0).alpha(), 0);
+        const auto output = qEnvironmentVariable("MLASH_UI_SCREENSHOTS");
+        if (!output.isEmpty()) { QVERIFY(QDir().mkpath(output)); QVERIFY(picker->grab().save(output + "/group-picker.png")); }
+        auto* search = picker->findChild<QLineEdit*>("groupSearch");
+        auto* choices = picker->findChild<QListWidget*>("groupChoices");
+        QVERIFY(search && choices);
+        QCOMPARE(choices->count(), 3);
+        QCOMPARE(choices->currentItem()->data(Qt::UserRole).toString(), QString("JP"));
+        QTest::keyClicks(search, "SG");
+        QCOMPARE(picker->geometry(), firstGeometry);
+        QVERIFY(choices->item(0)->isHidden());
+        QVERIFY(choices->item(1)->isHidden());
+        QCOMPARE(choices->currentItem()->text(), QString("SG"));
+        QTest::keyClick(search, Qt::Key_Return);
+        QCOMPARE(chosen, QString("SG"));
+        QTRY_VERIFY(guard.isNull());
+    }
     void initTestCase() {
         // Match the production QApplication font, including item delegate fallback.
         QApplication::setFont(QFont("Microsoft YaHei UI",9));
@@ -97,6 +311,66 @@ private slots:
             item->setAttribute(Qt::WA_UnderMouse,false);
         }
     }
+    void profileRenameStaysWithItsDetails() {
+        QTemporaryDir data; QVERIFY(seedDashboardFixture(data.path()));
+        AppController controller(data.path(),true);
+        QSignalSpy initialized(&controller,&AppController::initialized), finished(&controller,&AppController::operationFinished);
+        controller.initialize(); QTRY_COMPARE(initialized.size(),1);
+        const auto id=controller.profiles().first().id;
+        MainWindow window(&controller); window.resize(900,600); window.show(); window.setPage(1);
+        QVERIFY(!window.findChild<QPushButton*>("batchProfiles")->isVisible());
+        auto* list=window.findChild<QListView*>("localProfileList"); QVERIFY(list && list->model()->rowCount()==1);
+        list->setCurrentIndex(list->model()->index(0,0)); QCoreApplication::processEvents();
+        QMenu* menu=nullptr;
+        for (auto* candidate:window.findChildren<QMenu*>("profileContextMenu"))
+            if (candidate->property("profileKind").toString()=="local") menu=candidate;
+        QVERIFY(menu);
+        auto* rename=menu->findChild<QAction*>("renameProfile"); QVERIFY(rename && rename->isEnabled());
+        rename->trigger();
+        auto* editor=window.findChild<QWidget*>("profileNameEditor"); QVERIFY(editor); QTRY_VERIFY(editor->isVisible());
+        QVERIFY(!window.findChild<QInputDialog*>());
+        auto* input=editor->findChild<QLineEdit*>("profileNameInput"); QVERIFY(input);
+        input->setText("尚未保存");
+        // A double click can deliver activation after the first click opened
+        // details. It must not rebuild the inline editor or lose its draft.
+        list->activated(list->model()->index(0,0));
+        QCOMPARE(window.findChild<QWidget*>("profileNameEditor"),editor);
+        QCOMPARE(input->text(),QString("尚未保存"));
+        QTimer::singleShot(0,&window,[&window] { if (auto* box=window.findChild<QMessageBox*>()) box->button(QMessageBox::Cancel)->click(); });
+        window.findChild<QPushButton*>("profileDetailsBack")->click();
+        QVERIFY(editor->isVisible()); QCOMPARE(input->text(),QString("尚未保存"));
+        input->setText("取消的草稿"); editor->findChild<QPushButton*>("cancelProfileName")->click();
+        QVERIFY(!editor->isVisible()); QCOMPARE(input->text(),QString("Dashboard fixture"));
+        QCOMPARE(controller.profiles().first().name,QString("Dashboard fixture")); QCOMPARE(finished.size(),0);
+        window.findChild<QPushButton*>("profileDetailsRename")->click(); QTRY_VERIFY(editor->isVisible());
+        input->setText("新的配置名称"); editor->findChild<QPushButton*>("saveProfileName")->click();
+        QTRY_COMPARE(finished.size(),1); QVERIFY2(finished.last()[0].toBool(),qUtf8Printable(finished.last()[1].toString()));
+        QCOMPARE(controller.profiles().first().id,id); QCOMPARE(controller.profiles().first().name,QString("新的配置名称"));
+        QTRY_VERIFY(!editor->isVisible());
+    }
+    void profileRenameDraftBlocksObjectSwitch() {
+        QTemporaryDir data; QVERIFY(seedDashboardFixture(data.path())); AppController controller(data.path(),true);
+        QSignalSpy initialized(&controller,&AppController::initialized); controller.initialize(); QTRY_COMPARE(initialized.size(),1);
+        Profile second=controller.profiles().first(); second.id=newId(); second.name="Second fixture";
+        const_cast<QVector<Profile>&>(controller.profiles()).append(second);
+        MainWindow window(&controller); window.resize(900,600); window.show(); window.navigate(Route{ViewIds::Profiles});
+        auto* list=window.findChild<QListView*>("localProfileList"); QVERIFY(list); QCOMPARE(list->model()->rowCount(),2);
+        const auto first=list->model()->index(0,0), other=list->model()->index(1,0);
+        const auto originalId=first.data(ProfileRowModel::ProfileId).toString();
+        list->activated(first);
+        auto* editor=window.findChild<QWidget*>("profileNameEditor"); QVERIFY(editor);
+        editor->parentWidget()->findChild<QPushButton*>("profileDetailsRename")->click();
+        auto* input=editor->findChild<QLineEdit*>("profileNameInput"); QVERIFY(input); input->setText("未保存的配置名");
+        list->activated(other);
+        QCOMPARE(window.findChild<QWidget*>("profileNameEditor"),editor);
+        QCOMPARE(input->text(),QString("未保存的配置名"));
+        QCOMPARE(list->currentIndex().data(ProfileRowModel::ProfileId).toString(),originalId);
+        editor->findChild<QPushButton*>("cancelProfileName")->click();
+        list->activated(other);
+        auto* stack=window.findChild<QStackedWidget*>("profileTaskStack"); QVERIFY(stack);
+        QCOMPARE(stack->currentWidget()->findChild<QLineEdit*>("profileNameInput")->text(),QString("Second fixture"));
+        QCOMPARE(list->currentIndex().data(ProfileRowModel::ProfileId).toString(),second.id);
+    }
     void profileTaskReturnPreservesDetailAndExternalNoticeStaysLocal() {
         QTemporaryDir data; QVERIFY(seedDashboardFixture(data.path())); AppController controller(data.path(),true);
         QSignalSpy initialized(&controller,&AppController::initialized); controller.initialize(); QTRY_COMPARE(initialized.size(),1);
@@ -112,11 +386,16 @@ private slots:
         auto* detail=qobject_cast<QScrollArea*>(stack->widget(1)); QVERIFY(detail); QVERIFY(window.findChild<QWidget*>("profileDetailsPage")); QVERIFY(!window.findChild<QTabBar*>("profileTaskTabs"));
         detail->verticalScrollBar()->setValue(detail->verticalScrollBar()->maximum()); const int position=detail->verticalScrollBar()->value();
         window.findChild<QPushButton*>("profileDetailsRules")->click();
-        auto* tabs=window.findChild<QTabBar*>("taskTabs"); QVERIFY(tabs); QTRY_VERIFY(tabs->isVisible());
-        tabs->setCurrentIndex(0); QTRY_COMPARE(stack->currentIndex(),1);
+        auto* tabs=window.findChild<QTabBar*>("taskTabs"); QVERIFY(tabs); QVERIFY(tabs->isHidden());
+        auto* taskBack=window.findChild<QPushButton*>("taskBack"); QVERIFY(taskBack&&taskBack->isVisible()); taskBack->click(); QTRY_COMPARE(stack->currentIndex(),1);
         QCOMPARE(stack->widget(1),static_cast<QWidget*>(detail));
         QCOMPARE(detail->verticalScrollBar()->value(),position);
         window.navigate(Route{ViewIds::Profiles}); QCOMPARE(stack->currentIndex(),1);
+        window.navigate(Route{ViewIds::Home});
+        window.navigate(Route{ViewIds::Profiles});
+        QCOMPARE(stack->currentIndex(),1);
+        QCOMPARE(stack->widget(1),static_cast<QWidget*>(detail));
+        QCOMPARE(detail->verticalScrollBar()->value(),position);
         window.findChild<QPushButton*>("profileDetailsBack")->click(); QCOMPARE(stack->currentIndex(),0);
         QCOMPARE(list->verticalScrollBar()->value(),listPosition);
         auto& state=const_cast<AppState&>(controller.state());
@@ -126,6 +405,199 @@ private slots:
         state.lastError="恢复日志写入失败"; controller.stateChanged();
         QCOMPARE(alarm->text(),QString("恢复日志写入失败")); QVERIFY(resolve->isVisible());
     }
+    void changingSectionRestoresNetworkSettingsDraft() {
+        QTemporaryDir data; QVERIFY(seedDashboardFixture(data.path())); AppController controller(data.path(),true);
+        QSignalSpy initialized(&controller,&AppController::initialized); controller.initialize(); QTRY_COMPARE(initialized.size(),1);
+        MainWindow window(&controller); window.resize(900,600); window.show();
+        window.navigate(Route{ViewIds::Settings});
+        window.findChild<QPushButton*>("settingsNetworkRow")->click();
+        auto* port=window.findChild<QSpinBox*>("mixedPort"); QVERIFY(port);
+        const int original=port->value(); port->setValue(original+1);
+        window.navigate(Route{ViewIds::Home});
+        QCOMPARE(window.currentRoute().view,int(ViewIds::Home));
+        QCOMPARE(port->value(),original+1);
+        window.navigate(Route{ViewIds::Settings});
+        QCOMPARE(window.findChild<QStackedWidget*>("settingsTaskStack")->currentIndex(),1);
+        QCOMPARE(port->value(),original+1);
+        QTimer::singleShot(0,[] { if (auto* box=qobject_cast<QMessageBox*>(QApplication::activeModalWidget())) box->button(QMessageBox::Yes)->click(); });
+        window.findChild<QPushButton*>("settingsBack")->click();
+        QCOMPARE(port->value(),original);
+        QCOMPARE(window.findChild<QStackedWidget*>("settingsTaskStack")->currentIndex(),0);
+    }
+    void settingsDirectoryOwnsNetworkAndCoreTasks() {
+        QTemporaryDir data; AppController controller(data.path(),true);
+        QSignalSpy initialized(&controller,&AppController::initialized); controller.initialize(); QTRY_COMPARE(initialized.size(),1);
+        MainWindow window(&controller); window.resize(940,700); window.show(); window.setPage(6);
+        auto* stack=window.findChild<QStackedWidget*>("settingsTaskStack");
+        auto* port=window.findChild<QSpinBox*>("mixedPort");
+        auto* logLevel=window.findChild<QComboBox*>("coreLogLevel");
+        auto* coreUpdate=window.findChild<QPushButton*>("manageCoreUpdate");
+        QVERIFY(stack&&port&&logLevel&&coreUpdate);
+        window.findChild<QPushButton*>("settingsNetworkRow")->click();
+        QCOMPARE(stack->currentIndex(),1); QVERIFY(port->isVisible()); QVERIFY(!logLevel->isVisible()); QVERIFY(!coreUpdate->isVisible());
+        window.findChild<QPushButton*>("settingsBack")->click();
+        window.findChild<QPushButton*>("settingsCoreRow")->click();
+        QCOMPARE(stack->currentIndex(),1); QVERIFY(logLevel->isVisible()); QVERIFY(coreUpdate->isVisible()); QVERIFY(!port->isVisible());
+        window.findChild<QPushButton*>("settingsBack")->click();
+        auto* search=window.findChild<QLineEdit*>("settingsSearch"); QVERIFY(search&&search->isVisible());
+        search->setText("日志等级"); QTest::keyClick(search,Qt::Key_Return);
+        QCOMPARE(stack->currentIndex(),1); QVERIFY(logLevel->isVisible()); QVERIFY(!port->isVisible());
+        window.findChild<QPushButton*>("settingsBack")->click();
+        search->setText("登录启动"); QTest::keyClick(search,Qt::Key_Return);
+        QCOMPARE(stack->currentIndex(),0);
+        auto* autostart=window.findChild<QCheckBox*>("autoStart");
+        QVERIFY(autostart&&autostart->isVisible());
+        QVERIFY(window.findChild<QWidget*>("settingsDirectory")->isAncestorOf(autostart));
+    }
+    void settingsSearchDoesNotRearrangeDirtyNetworkTask() {
+        QTemporaryDir data; QVERIFY(seedDashboardFixture(data.path())); AppController controller(data.path(),true);
+        QSignalSpy initialized(&controller,&AppController::initialized); controller.initialize(); QTRY_COMPARE(initialized.size(),1);
+        MainWindow window(&controller); window.resize(900,600); window.show(); window.navigate(Route{ViewIds::Settings});
+        window.findChild<QPushButton*>("settingsNetworkRow")->click();
+        auto* stack=window.findChild<QStackedWidget*>("settingsTaskStack");
+        auto* port=window.findChild<QSpinBox*>("mixedPort"); QVERIFY(stack && port);
+        port->setValue(port->value()+1); const auto draft=port->value();
+        // A stale search result can still emit a navigation request while the
+        // network task owns an unapplied draft.
+        auto* search=window.findChild<SettingsSearch*>(); QVERIFY(search);
+        emit search->anchorRequested(port);
+        QCOMPARE(stack->currentIndex(),1);
+        QCOMPARE(port->value(),draft);
+        QVERIFY(port->isVisible());
+    }
+    void profileContextCommandKeepsOpenedObject() {
+        QTemporaryDir data; QVERIFY(seedDashboardFixture(data.path())); AppController controller(data.path(),true);
+        QSignalSpy initialized(&controller,&AppController::initialized); controller.initialize(); QTRY_COMPARE(initialized.size(),1);
+        Profile second=controller.profiles().first(); second.id=newId(); second.name="Second fixture";
+        const_cast<QVector<Profile>&>(controller.profiles()).append(second);
+        MainWindow window(&controller); window.resize(900,600); window.show(); window.navigate(Route{ViewIds::Profiles});
+        QVERIFY(!window.findChild<QToolButton*>("toolbarAdd")->isVisible());
+        auto* list=window.findChild<QListView*>("localProfileList"); QVERIFY(list); QCOMPARE(list->model()->rowCount(),2);
+        const auto first=list->model()->index(0,0), other=list->model()->index(1,0);
+        const auto openedId=first.data(ProfileRowModel::ProfileId).toString();
+        QTest::mouseClick(list->viewport(),Qt::LeftButton,Qt::ControlModifier,list->visualRect(first).center());
+        QTest::mouseClick(list->viewport(),Qt::LeftButton,Qt::ControlModifier,list->visualRect(other).center());
+        QCOMPARE(window.findChild<QStackedWidget*>("profileTaskStack")->currentIndex(),0);
+        QCOMPARE(list->selectionModel()->selectedRows().size(),2);
+        const auto point=list->visualRect(first).center();
+        QContextMenuEvent event(QContextMenuEvent::Mouse,point,list->viewport()->mapToGlobal(point));
+        QApplication::sendEvent(list->viewport(),&event);
+        QMenu* menu=nullptr;
+        for (auto* candidate:window.findChildren<QMenu*>("profileContextMenu"))
+            if (candidate->property("profileKind").toString()=="local") menu=candidate;
+        QVERIFY(menu); QTRY_VERIFY(menu->isVisible()); QCOMPARE(list->selectionModel()->selectedRows().size(),1); menu->hide();
+        list->setCurrentIndex(other); // a refresh or another selection after the menu opened
+        menu->findChild<QAction*>("renameProfile")->trigger();
+        auto* editor=window.findChild<QWidget*>("profileNameEditor"); QVERIFY(editor && editor->isVisible());
+        QCOMPARE(editor->findChild<QLineEdit*>("profileNameInput")->text(),QString("Dashboard fixture"));
+        QCOMPARE(window.findChild<QStackedWidget*>("profileTaskStack")->currentIndex(),1);
+        QCOMPARE(list->currentIndex().data(ProfileRowModel::ProfileId).toString(),openedId);
+    }
+    void changingSectionRestoresEmbeddedTaskDraft() {
+        QTemporaryDir data; QVERIFY(seedDashboardFixture(data.path())); AppController controller(data.path(),true);
+        QSignalSpy initialized(&controller,&AppController::initialized); controller.initialize(); QTRY_COMPARE(initialized.size(),1);
+        MainWindow window(&controller); window.resize(900,600); window.show(); window.navigate(Route{ViewIds::Settings});
+        auto* editor=new QDialog(&window); editor->setObjectName("navigationDraftFixture");
+        auto* input=new QLineEdit(editor); input->setText("unsaved");
+        DialogDraftGuard::protect(editor,[input] { return !input->text().isEmpty(); });
+        window.presentTask(editor,"navigation-draft"); QTRY_VERIFY(editor->isVisible());
+        window.navigate(Route{ViewIds::Home});
+        QCOMPARE(window.currentRoute().view,int(ViewIds::Home));
+        QCOMPARE(input->text(),QString("unsaved"));
+        window.navigate(Route{ViewIds::Settings});
+        QCOMPARE(window.currentRoute().view,int(ViewIds::Settings));
+        QVERIFY(editor->isVisible()); QCOMPARE(input->text(),QString("unsaved"));
+    }
+    void rulesNextStepAlwaysReturnsToItsProfile() {
+        QTemporaryDir data; QVERIFY(seedDashboardFixture(data.path())); AppController controller(data.path(),true);
+        QSignalSpy initialized(&controller,&AppController::initialized); controller.initialize(); QTRY_COMPARE(initialized.size(),1);
+        MainWindow window(&controller); window.resize(900,600); window.show();
+        auto* tabs=window.findChild<QTabWidget*>("rulesTabs");
+        auto* next=window.findChild<QPushButton*>("rulesNextStep");
+        QVERIFY(tabs); QVERIFY(next);
+        for (int tab=0; tab<tabs->count(); ++tab) {
+            window.navigate(Route{ViewIds::Rules});
+            tabs->setCurrentIndex(tab);
+            next->click();
+            QCOMPARE(window.currentRoute().view,int(ViewIds::Profiles));
+            QCOMPARE(window.findChild<QStackedWidget*>("profileTaskStack")->currentIndex(),1);
+        }
+    }
+    void settingsSearchKeepsDirtyTaskVisible() {
+        QTemporaryDir data; QVERIFY(seedDashboardFixture(data.path())); AppController controller(data.path(),true);
+        QSignalSpy initialized(&controller,&AppController::initialized); controller.initialize(); QTRY_COMPARE(initialized.size(),1);
+        MainWindow window(&controller); window.resize(900,600); window.show(); window.navigate(Route{ViewIds::Settings});
+        auto* stack=window.findChild<QStackedWidget*>("settingsTaskStack");
+        QCOMPARE(stack->currentIndex(),0);
+        auto* strip=window.findChild<QWidget*>("settingsSearchStrip");
+        QVERIFY(strip && strip->isVisible());
+        QVERIFY(strip->height()<72);
+        auto* search=window.findChild<QLineEdit*>("settingsSearch");
+        QVERIFY(search && search->isVisible());
+        auto* directory=window.findChild<QWidget*>("settingsDirectory");
+        QVERIFY(directory && directory->isVisible());
+        search->setText("外观");
+        QTest::keyClick(search,Qt::Key_Return);
+        QCOMPARE(stack->currentIndex(),0);
+        QVERIFY(directory->isVisible());
+        auto* appearanceRow=window.findChild<QWidget*>("settingsAppearanceRow");
+        QVERIFY(appearanceRow->isVisible());
+        QVERIFY(appearanceRow->property("located").toBool());
+        window.navigate(Route{ViewIds::Home});
+        window.navigate(Route{ViewIds::Settings});
+        QCOMPARE(stack->currentIndex(),0);
+        QVERIFY(directory->isVisible());
+        QVERIFY(search->isVisible());
+        QVERIFY(appearanceRow->isVisible());
+        search->clear();
+        window.findChild<QPushButton*>("settingsNetworkRow")->click();
+        auto* port=window.findChild<QSpinBox*>("mixedPort");
+        QVERIFY(stack); QVERIFY(port); QVERIFY(search);
+        QVERIFY(search->isVisible());
+        const int changed=port->value()+1; port->setValue(changed);
+        search->setText("登录 启动");
+        QTest::keyClick(search,Qt::Key_Return);
+        QCOMPARE(stack->currentIndex(),1);
+        QCOMPARE(port->value(),changed);
+        QVERIFY(port->isVisible());
+        for (auto* row:window.findChildren<QWidget*>("settingRow"))
+            if (row->property("settingSearchName").toString()=="登录启动") QVERIFY(!row->property("located").toBool());
+    }
+    void nodeViewSwitchAndBookmarkUseVisibleSelection() {
+        QTemporaryDir data; QVERIFY(seedDashboardFixture(data.path())); AppController controller(data.path(),true);
+        QSignalSpy initialized(&controller,&AppController::initialized); controller.initialize(); QTRY_COMPARE(initialized.size(),1);
+        auto& state=const_cast<AppState&>(controller.state()); state.ready=true;
+        auto& proxies=const_cast<QJsonObject&>(controller.proxies());
+        proxies={{"A",QJsonObject{{"type","Direct"}}},{"C",QJsonObject{{"type","Direct"}}},
+                 {"B",QJsonObject{{"type","Selector"},{"now","C"},{"all",QJsonArray{"C"}}}},
+                 {"G",QJsonObject{{"type","Selector"},{"now","A"},{"all",QJsonArray{"A","B"}}}}};
+        MainWindow window(&controller); window.resize(900,600); window.show();
+        window.restoreNodeBookmark({{"profile",state.activeProfile},{"group","G"},{"view",0}});
+        auto* rows=window.findChild<QListView*>("nodeList");
+        auto* cards=window.findChild<QListView*>("nodeCards");
+        QVERIFY(rows); QVERIFY(cards);
+        QModelIndex a;
+        for (int i=0;i<rows->model()->rowCount();++i) if (rows->model()->index(i,0).data(Qt::DisplayRole).toString()=="A") a=rows->model()->index(i,0);
+        QVERIFY(a.isValid());
+        QCOMPARE(a.data(Qt::DisplayRole).toString(),QString("A"));
+        rows->setCurrentIndex(a);
+        window.setMemberView(1);
+        QCOMPARE(cards->currentIndex().data(Qt::UserRole).toString(),QString("A"));
+        for (int i=0;i<cards->model()->rowCount();++i) if (cards->model()->index(i,0).data(Qt::UserRole).toString()=="B") cards->setCurrentIndex(cards->model()->index(i,0));
+        QCOMPARE(window.nodeBookmark().value("member").toString(),QString("B"));
+        window.setMemberView(0);
+        QCOMPARE(rows->currentIndex().data(Qt::DisplayRole).toString(),QString("B"));
+        const auto point=rows->visualRect(rows->currentIndex()).center();
+        QContextMenuEvent context(QContextMenuEvent::Mouse,point,rows->viewport()->mapToGlobal(point));
+        QApplication::sendEvent(rows->viewport(),&context);
+        auto* favorite=rows->findChild<QMenu*>("nodeFavoriteMenu");
+        QVERIFY(favorite); QTRY_VERIFY(favorite->isVisible());
+        QCOMPARE(favorite->actions().first()->text(),QString("收藏此成员"));
+        favorite->hide();
+        window.setMemberView(1);
+        window.findChild<QAction*>("enterGroup")->trigger();
+        QCOMPARE(window.nodeBookmark().value("group").toString(),QString("B"));
+    }
     void prototypeSystemPagesAndResponsiveInspector() {
         QTemporaryDir data; QVERIFY(seedDashboardFixture(data.path())); AppController controller(data.path(),true);
         QSignalSpy initialized(&controller,&AppController::initialized); controller.initialize(); QTRY_COMPARE(initialized.size(),1);
@@ -134,6 +606,11 @@ private slots:
         for (int i=0;i<40;++i) { const auto name=QString("JP 日本 节点 %1").arg(i); members.append(name); proxies.insert(name,QJsonObject{{"type","Http"}}); }
         proxies.insert("日常选择",QJsonObject{{"type","Selector"},{"all",members},{"now",members.first()}});
         MainWindow window(&controller); window.resize(1040,720); window.show(); QTest::qWait(40);
+        auto* sidebar=window.findChild<QWidget*>("sidebar"); auto* navigation=window.findChild<QListWidget*>("navigation");
+        QVERIFY(sidebar && navigation); QCOMPARE(sidebar->width(),228);
+        const auto firstNav=navigation->visualItemRect(navigation->item(0));
+        const auto secondNav=navigation->visualItemRect(navigation->item(1));
+        QVERIFY(firstNav.height()>=48); QVERIFY(secondNav.top()-firstNav.bottom()-1>=8);
         const auto save=[&](const QString& name) { const auto output=qEnvironmentVariable("MLASH_UI_SCREENSHOTS"); if (!output.isEmpty()) { QDir().mkpath(output); QVERIFY(window.grab().save(output+"/u11-"+name+".png")); } };
         auto* title=window.findChild<QLabel*>("topbarTitle"); QCOMPARE(title->text(),QString("Mlash"));
         QVERIFY(window.findChild<QToolButton*>("toolbarAdd")->isVisible()); QVERIFY(!window.findChild<QToolButton*>("toolbarImport")); QVERIFY(!window.findChild<QToolButton*>("topbarMore"));
@@ -155,11 +632,14 @@ private slots:
         QTimer::singleShot(0,[] { if (auto* box=qobject_cast<QMessageBox*>(QApplication::activeModalWidget())) box->button(QMessageBox::Yes)->click(); });
         window.findChild<QPushButton*>("settingsBack")->click(); QCOMPARE(settings->currentIndex(),0); QCOMPARE(port->value(),baseline); QCOMPARE(testUrl->text(),originalUrl); QCOMPARE(operations.size(),0);
         window.navigate(Route{ViewIds::Profiles}); QCoreApplication::processEvents(); save("profiles");
-        auto* local=window.findChild<QListView*>("localProfileList"); QVERIFY(local->model()->rowCount());
-        QTest::mouseClick(local->viewport(),Qt::LeftButton,{},local->visualRect(local->model()->index(0,0)).center());
-        auto* profileTasks=window.findChild<QStackedWidget*>("profileTaskStack"); QVERIFY(profileTasks); QTRY_COMPARE(profileTasks->currentIndex(),1);
-        QVERIFY(window.findChild<QPushButton*>("profileDetailsRules")->isVisible()); QVERIFY(window.findChild<QPushButton*>("profileDetailsDns")->isVisible()); save("profile-details");
-        window.findChild<QPushButton*>("profileDetailsBack")->click(); QCOMPARE(profileTasks->currentIndex(),0);
+        auto* local=window.findChild<QListView*>("profileList"); QVERIFY(local&&local->model()->rowCount());
+        QTest::mouseClick(local->viewport(),Qt::LeftButton,{},ProfileCardDelegate::menu(local->visualRect(local->model()->index(0,0))).center());
+        auto* profileMenu=window.findChild<QMenu*>("profileContextMenu"); QVERIFY(profileMenu);
+        profileMenu->hide(); profileMenu->actions().first()->trigger();
+        auto* profileTasks=window.findChild<TaskWorkspace*>("taskWorkspace"); QVERIFY(profileTasks);
+        QTRY_VERIFY(profileTasks->isVisible()); QVERIFY(profileTasks->editor("nodes"));
+        QCOMPARE(profileTasks->findChild<QTabBar*>("taskTabs")->count(),6); save("profile-content");
+        profileTasks->findChild<QPushButton*>("taskBack")->click(); QTRY_VERIFY(local->isVisible());
         window.navigate(Route{ViewIds::Home}); QCoreApplication::processEvents(); save("home");
         const auto index=nodes->model()->index(1,0); nodes->scrollTo(index); QCoreApplication::processEvents();
         QTest::mouseClick(nodes->viewport(),Qt::LeftButton,{},NodeRowDelegate::infoRect(nodes->visualRect(index)).center());
@@ -210,6 +690,15 @@ private slots:
         combo->setEditable(true); for (int i=0;i<40;++i) combo->addItem(QString("节点 %1").arg(i),QString("n%1").arg(i)); combo->setEditText("自定义组"); combo->showPopup(); QVERIFY(combo->view()->window()->height()<400); QTest::keyClick(combo->view(),Qt::Key_Escape); QCOMPARE(combo->currentText(),QString("自定义组")); combo->showPopup(); QTest::keyClick(combo->view(),Qt::Key_End); QTest::keyClick(combo->view(),Qt::Key_Return); QTRY_VERIFY(!combo->view()->isVisible()); QCOMPARE(combo->currentData().toString(),QString("n39"));
         QMenu longMenu; QAction* last=nullptr; for (int i=0;i<500;++i) last=longMenu.addAction(QString("节点 %1").arg(i)); QSignalSpy triggered(&longMenu,&QMenu::triggered); longMenu.popup(QPoint(150,80)); QTRY_VERIFY(longMenu.isVisible()); QVERIFY2(longMenu.height()<=longMenu.screen()->availableGeometry().height(),qUtf8Printable(QString("menu %1x%2 screen %3 avail %4 scroll %5").arg(longMenu.width()).arg(longMenu.height()).arg(longMenu.screen()->geometry().height()).arg(longMenu.screen()->availableGeometry().height()).arg(longMenu.style()->styleHint(QStyle::SH_Menu_Scrollable)))); QCOMPARE(longMenu.actionGeometry(longMenu.actions().first()).left(),longMenu.actionGeometry(last).left()); QVERIFY(longMenu.width()<480);
         if (!output.isEmpty()) QVERIFY(longMenu.grab().save(output+"/long-menu.png")); QTest::keyClick(&longMenu,Qt::Key_End); QTest::keyClick(&longMenu,Qt::Key_Return); QTRY_VERIFY(!longMenu.isVisible()); QCOMPARE(triggered.size(),1); QCOMPARE(qvariant_cast<QAction*>(triggered.first()[0]),last);
+        QMenu measured; for (int i=0;i<30;++i) measured.addAction(QString("选项 %1").arg(i));
+        const QPoint anchor=QGuiApplication::primaryScreen()->availableGeometry().bottomRight()-QPoint(12,12);
+        WidgetStyle::popupMenu(&measured,anchor); QTRY_VERIFY(measured.isVisible());
+        const QRect placed=measured.geometry(), screen=measured.screen()->availableGeometry();
+        QVERIFY(screen.contains(placed)); QVERIFY(placed.height()<=480);
+        QCOMPARE(measured.grab().toImage().pixelColor(0,0).alpha(),0);
+        if (!output.isEmpty()) QVERIFY(measured.grab().save(output+"/measured-menu.png"));
+        QTest::qWait(60); QCOMPARE(measured.geometry(),placed);
+        QTest::keyClick(&measured,Qt::Key_Escape); QTRY_VERIFY(!measured.isVisible());
         QSignalSpy exited(&controller,&AppController::exitReady); controller.requestExit(); QTRY_COMPARE(exited.size(),1);
     }
     void desktopPreferencesAndEnvironmentCopy() {
@@ -283,7 +772,7 @@ private slots:
         window.setMinimumWidth(700); window.resize(700,560); QCoreApplication::processEvents();
         QVERIFY(!window.findChild<QTabBar*>("settingsCategories"));
         const auto groups=window.findChildren<QFrame*>("settingsGroup"); QCOMPARE(groups.size(),3);
-        { int visible=0; for (auto* group:groups) if (group->isVisible()) ++visible; QCOMPARE(visible,2); }
+        { int visible=0; for (auto* group:groups) if (group->isVisible()) ++visible; QCOMPARE(visible,1); }
         QCOMPARE(settings->horizontalScrollBar()->maximum(),0);
         window.resize(940,620); QCoreApplication::processEvents();
         QCOMPARE(window.findChildren<QFrame*>("settingsGroup").size(),3); QCOMPARE(settings->horizontalScrollBar()->maximum(),0);
@@ -299,7 +788,9 @@ private slots:
         controller.diagnostics()->setSecrets({"test-node-password"}); controller.diagnostics()->append("app",p.source+" test-node-password"); QVERIFY(!logs->toPlainText().contains("private-path-token")); QVERIFY(!logs->toPlainText().contains("test-node-password"));
         controller.diagnostics()->append("core","level=info info-only"); controller.diagnostics()->append("core","level=warning warning-only"); level->setCurrentIndex(level->findData("warning")); QVERIFY(logs->toPlainText().contains("warning-only")); QVERIFY(!logs->toPlainText().contains("info-only"));
         QTest::mouseClick(pause,Qt::LeftButton); const auto frozen = logs->toPlainText(); controller.diagnostics()->append("error","paused-error"); QCOMPARE(logs->toPlainText(),frozen); window.setPage(0); window.setPage(5); QCOMPARE(logs->toPlainText(),frozen);
-        QTest::mouseClick(pause,Qt::LeftButton); level->setCurrentIndex(level->findData("error")); QVERIFY(logs->toPlainText().contains("paused-error"));
+        window.findChild<QAction*>("clearLogView")->trigger(); QVERIFY(logs->toPlainText().isEmpty()); QVERIFY(controller.diagnostics()->lines().isEmpty()); QVERIFY(pause->isChecked());
+        controller.diagnostics()->append("error","new-after-clear"); QVERIFY(logs->toPlainText().isEmpty());
+        QTest::mouseClick(pause,Qt::LeftButton); level->setCurrentIndex(level->findData("error")); QVERIFY(logs->toPlainText().contains("new-after-clear")); QVERIFY(!logs->toPlainText().contains("paused-error"));
         const auto report = data.path()+"/diagnostics.json"; controller.exportDiagnostics(report); QTRY_COMPARE(finished.size(),1); QVERIFY(finished.last()[0].toBool()); QByteArray exported; QVERIFY(readFile(report,exported).ok);
         for (const auto& privateValue : {"private-path-token","query-private","test-node-password","private-profile-name","source.yaml","subscription_info"}) QVERIFY(!exported.contains(privateValue)); QVERIFY(QJsonDocument::fromJson(exported).object().value("logs").isArray());
         QTRY_VERIFY(QFileInfo(data.path()+"/logs/app.log").size()>0); window.findChild<QAction*>("clearLogView")->trigger(); QVERIFY(controller.diagnostics()->lines().isEmpty()); QVERIFY(logs->toPlainText().isEmpty()); QVERIFY(QFileInfo(data.path()+"/logs/app.log").size()>0);
@@ -312,22 +803,20 @@ private slots:
         Settings settings; settings.startCore = false; Profile profile; profile.id = newId(); profile.candidate = newId(); profile.name = "用量示例"; profile.sourceType = "url"; profile.source = "https://example.invalid/config";
         profile.subscriptionInfo = {{"upload","1024"},{"download","2048"},{"total","8192"},{"expire","2000000000"},{"observed_at","2026-10-13T12:00:00Z"}};
         QVERIFY(store.save(settings, {profile}).ok); AppController controller(data.path(), true); QSignalSpy init(&controller, &AppController::initialized), finished(&controller, &AppController::operationFinished);
-        controller.initialize(); QTRY_COMPARE(init.size(), 1); MainWindow window(&controller); window.show(); window.setPage(1); auto* list = window.findChild<QListView*>("remoteProfileList"); QVERIFY(list); QTRY_COMPARE(list->model()->rowCount(), 1); list->setCurrentIndex(list->model()->index(0,0)); QCoreApplication::processEvents();
-        // K7：对象动作并入行详情抽屉；点行（或行尾 ›）打开抽屉，「来源与更新…」在「更多操作」菜单里。
-        const auto rowRect = list->visualRect(list->model()->index(0,0));
-        QTest::mouseClick(list->viewport(), Qt::LeftButton, {}, rowRect.center()); QCoreApplication::processEvents();
-        auto* more = window.findChild<QPushButton*>("profileDetailsMore"); QVERIFY(more); more->click(); QCoreApplication::processEvents();
-        auto* action = window.findChild<QAction*>("profilePolicyButton"); QVERIFY(action); QVERIFY(action->isEnabled()); action->trigger();
+        controller.initialize(); QTRY_COMPARE(init.size(), 1); MainWindow window(&controller); window.show(); window.setPage(1); auto* list = window.findChild<QListView*>("profileList"); QVERIFY(list); QTRY_COMPARE(list->model()->rowCount(), 1);
+        const auto openSource=[&] {
+            const auto index=list->model()->index(0,0);
+            QTest::mouseClick(list->viewport(),Qt::LeftButton,{},ProfileCardDelegate::menu(list->visualRect(index)).center());
+            auto* menu=window.findChild<QMenu*>("profileContextMenu"); QVERIFY(menu);
+            menu->hide(); menu->actions().at(1)->trigger();
+        };
+        openSource();
         QCoreApplication::processEvents();
         QPointer<QDialog> dialog = window.findChild<QDialog*>("profilePolicyDialog"); QVERIFY(dialog);
         auto* automatic = dialog->findChild<QCheckBox*>("profileAutoUpdate"); auto* hours = dialog->findChild<QSpinBox*>("profileUpdateHours"); QVERIFY(!automatic->isChecked()); QVERIFY(!hours->isEnabled()); automatic->setChecked(true); hours->setValue(3);
         dialog->findChild<QComboBox*>("downloadRoute")->setCurrentIndex(1); dialog->findChild<QLineEdit*>("downloadUserAgent")->setText("Cancelled-Agent/1");
         QTimer::singleShot(0,[] { if (auto* box=qobject_cast<QMessageBox*>(QApplication::activeModalWidget())) box->button(QMessageBox::Yes)->click(); }); dialog->findChild<QDialogButtonBox*>()->button(QDialogButtonBox::Cancel)->click(); QTRY_VERIFY(dialog.isNull()); QCOMPARE(finished.size(), 0); QVERIFY(!controller.profiles()[0].autoUpdate); QCOMPARE(controller.profiles()[0].download.route, QString("direct")); QVERIFY(controller.profiles()[0].download.userAgent.isEmpty());
-        // 「更多操作」菜单是 WA_DeleteOnClose：对话框打开时菜单已销毁，缓存的 QAction 不能再用。
-        // 第二次按用户路径重新点开抽屉与菜单。
-        QTest::mouseClick(list->viewport(), Qt::LeftButton, {}, list->visualRect(list->model()->index(0,0)).center()); QCoreApplication::processEvents();
-        auto* moreAgain = window.findChild<QPushButton*>("profileDetailsMore"); QVERIFY(moreAgain); moreAgain->click(); QCoreApplication::processEvents();
-        auto* policyAgain = window.findChild<QAction*>("profilePolicyButton"); QVERIFY(policyAgain); QVERIFY(policyAgain->isEnabled()); policyAgain->trigger(); QCoreApplication::processEvents();
+        QTRY_VERIFY(list->isVisible()); openSource();
         dialog = window.findChild<QDialog*>("profilePolicyDialog"); QVERIFY(dialog); automatic = dialog->findChild<QCheckBox*>("profileAutoUpdate"); hours = dialog->findChild<QSpinBox*>("profileUpdateHours"); automatic->setChecked(true); hours->setValue(3);
         dialog->findChild<QComboBox*>("downloadRoute")->setCurrentIndex(1); dialog->findChild<QLineEdit*>("downloadUserAgent")->setText("Saved-Agent/1"); dialog->findChild<QSpinBox*>("downloadTimeout")->setValue(45);
         const auto screenshots = qEnvironmentVariable("MLASH_UI_SCREENSHOTS"); if (!screenshots.isEmpty()) { QDir().mkpath(screenshots); dialog->grab().save(screenshots+"/profile-policy.png"); }
@@ -342,16 +831,41 @@ private slots:
         auto prepared = store.prepare(profile, source, settings, 19090, QString(64, 'a')); QVERIFY(prepared.result.ok); const auto provider = prepared.result.data.value("providers").toArray()[0].toObject(); const QByteArray payload = "proxies: [{name: Sample, type: http, server: example.test, port: 443}]\n";
         QVERIFY(writeAtomic(prepared.workPath + '/' + provider.value("path").toString(), payload).ok); QVERIFY(store.recordProviderSnapshot(prepared.workPath, provider, payload).ok); QVERIFY(store.save(settings, {prepared.profile}).ok);
         AppController controller(data.path(), true); QSignalSpy initialized(&controller, &AppController::initialized), finished(&controller, &AppController::operationFinished); controller.initialize(); QTRY_COMPARE(initialized.size(), 1);
-        // 本地文件来源落在「本地配置」列表，不是远程订阅列表。
-        MainWindow window(&controller); window.resize(840,560); window.show(); window.setPage(1); auto* list = window.findChild<QListView*>("localProfileList"); QVERIFY(list); QTRY_COMPARE(list->model()->rowCount(), 1);
-        const auto row = list->visualRect(list->model()->index(0,0));
-        QTest::mouseClick(list->viewport(), Qt::LeftButton, {}, row.center()); QCoreApplication::processEvents();
-        // K7：对象维护动作在右键菜单（profileContextMenu）里，抽屉只放高频动作。
-        auto* compatibility = window.findChild<QAction*>("profileCompatibility"); QVERIFY(compatibility); QVERIFY(compatibility->isEnabled()); compatibility->trigger();
-        auto* report = window.findChild<QPlainTextEdit*>("compatibilityReport"); QVERIFY(report); QTRY_VERIFY(report->toPlainText().contains("静态兼容检查通过")); QVERIFY(!report->toPlainText().contains("token=hidden")); report->parentWidget()->close();
-        auto* providers = window.findChild<QAction*>("profileProviders"); QVERIFY(providers); QVERIFY(providers->isEnabled()); providers->trigger(); QPointer<QDialog> dialog = window.findChild<QDialog*>("providersDialog"); QTRY_VERIFY(dialog); auto* table = dialog->findChild<QTableWidget*>("providersTable"); QTRY_COMPARE(table->rowCount(), 1); QCOMPARE(table->item(0,2)->text(), QString("1")); table->selectRow(0);
+        MainWindow window(&controller); window.resize(840,560); window.show(); window.setPage(1);
+        auto* list = window.findChild<QListView*>("profileList"); QVERIFY(list); QTRY_COMPARE(list->model()->rowCount(), 1);
+        QTest::mouseClick(list->viewport(),Qt::LeftButton,{},ProfileCardDelegate::menu(list->visualRect(list->model()->index(0,0))).center());
+        auto* menu=window.findChild<QMenu*>("profileContextMenu"); QVERIFY(menu); menu->hide(); menu->actions().first()->trigger();
+        auto* workspace=window.findChild<TaskWorkspace*>("taskWorkspace"); QVERIFY(workspace);
+        QTRY_VERIFY(workspace->context().endsWith(":content"));
+        auto* tabs=workspace->findChild<QTabBar*>("taskTabs"); QVERIFY(tabs); tabs->setCurrentIndex(5);
+        auto* report = window.findChild<QPlainTextEdit*>("compatibilityReport"); QVERIFY(report); QTRY_VERIFY(report->toPlainText().contains("静态兼容检查通过")); QVERIFY(!report->toPlainText().contains("token=hidden")); window.findChild<QDialog*>("profileCompatibilityTask")->close();
+        tabs->setCurrentIndex(4); QPointer<QDialog> dialog = window.findChild<QDialog*>("providersDialog"); QTRY_VERIFY(dialog); auto* table = dialog->findChild<QTableWidget*>("providersTable"); QTRY_COMPARE(table->rowCount(), 1); QCOMPARE(table->item(0,2)->text(), QString("1")); table->selectRow(0);
         auto* refresh = dialog->findChild<QPushButton*>("refreshProvider"); QTRY_VERIFY(refresh->isEnabled()); refresh->click(); QTRY_COMPARE(finished.size(),1); QVERIFY(!finished[0][0].toBool()); QCOMPARE(controller.profiles()[0].candidate, prepared.version);
-        dialog->close(); QTRY_VERIFY(dialog.isNull()); providers = window.findChild<QAction*>("profileProviders"); QVERIFY(providers); providers->trigger(); dialog = window.findChild<QDialog*>("providersDialog"); QTRY_VERIFY(dialog); dialog->close(); QTRY_VERIFY(dialog.isNull());
+        dialog->close(); QTRY_VERIFY(dialog.isNull()); tabs->setCurrentIndex(0); tabs->setCurrentIndex(4); dialog = window.findChild<QDialog*>("providersDialog"); QTRY_VERIFY(dialog); dialog->close(); QTRY_VERIFY(dialog.isNull());
+        QSignalSpy exited(&controller,&AppController::exitReady); controller.requestExit(); QTRY_COMPARE(exited.size(),1);
+    }
+    void trayQuickSubscriptionsKeepCurrentAndBoundMenu() {
+        QTemporaryDir data; ProfileStore store(data.path(),createPlatformServices()); QVERIFY(store.load().result.ok);
+        Settings settings; settings.startCore=false; settings.desiredProxy=false;
+        QList<Profile> profiles;
+        for (int index=0;index<7;++index) {
+            Profile profile; profile.id=newId(); profile.name=QString("配置 %1").arg(index); profile.sourceType="file";
+            profile.source=data.path()+QString("/source-%1.yaml").arg(index);
+            const QByteArray source="proxies: []\nproxy-groups: []\nrules: [\"MATCH,DIRECT\"]\n";
+            QVERIFY(writeAtomic(profile.source,source).ok);
+            const auto prepared=store.prepare(profile,source,settings,19090,QString(64,'a')); QVERIFY(prepared.result.ok);
+            profiles.append(prepared.profile);
+        }
+        settings.activeProfile=profiles.last().id; QVERIFY(store.save(settings,profiles).ok);
+        AppController controller(data.path(),true); QSignalSpy initialized(&controller,&AppController::initialized);
+        controller.initialize(); QTRY_COMPARE(initialized.size(),1);
+        TrayController tray(&controller); tray.measureMenuPreparation();
+        auto* root=tray.findChild<QSystemTrayIcon*>()->contextMenu(); QVERIFY(root);
+        QMenu* subscriptions=nullptr; for (auto* menu:root->findChildren<QMenu*>()) if (menu->title()=="订阅") subscriptions=menu;
+        QVERIFY(subscriptions); int quick=0; bool current=false;
+        for (auto* action:subscriptions->actions()) if (action->isCheckable()) { ++quick; if (action->isChecked()&&action->text()==profiles.last().name) current=true; }
+        QCOMPARE(quick,5); QVERIFY(current);
+        QVERIFY(subscriptions->actions().last()->text().contains("订阅页"));
         QSignalSpy exited(&controller,&AppController::exitReady); controller.requestExit(); QTRY_COMPARE(exited.size(),1);
     }
     void trayGroupDwellCacheAndSelection() {
@@ -363,8 +877,8 @@ private slots:
         QByteArray yaml="proxies:\n"; for (const auto& name:QStringList{"n1","n2","n3","n4","other"}) yaml+=QString("  - {name: %1, type: http, server: 127.0.0.1, port: %2}\n").arg(name).arg(proxy.serverPort()).toUtf8();
         yaml+="  - {name: bad, type: http, server: 127.0.0.1, port: 9}\nproxy-groups:\n  - {name: A, type: select, proxies: [n1, n2, n3, n4, bad, DIRECT, REJECT]}\n  - {name: B, type: select, proxies: [other]}\nrules: [\"MATCH,DIRECT\"]\n";
         const auto file=data.path()+"/tray.yaml"; QVERIFY(writeAtomic(file,yaml).ok); AppController controller(data.path(),true); QSignalSpy init(&controller,&AppController::initialized),finished(&controller,&AppController::operationFinished),delays(&controller,&AppController::nodeDelay); controller.initialize(); QTRY_COMPARE(init.size(),1); controller.importFile("Tray",file); QTRY_COMPARE(finished.size(),1); QVERIFY2(finished.last()[0].toBool(),qUtf8Printable(finished.last()[1].toString())); controller.activateProfile(controller.profiles().first().id); QTRY_COMPARE_WITH_TIMEOUT(finished.size(),2,15000); QVERIFY2(finished.last()[0].toBool(),qUtf8Printable(finished.last()[1].toString()));
-        QTRY_VERIFY(controller.state().ready && controller.proxies().contains("A")); TrayController tray(&controller); tray.measureMenuPreparation(); auto* root=tray.findChild<QSystemTrayIcon*>()->contextMenu(); QMenu* group=nullptr; for (auto* menu:root->findChildren<QMenu*>()) if (menu->property("groupName").toString()=="A") group=menu; QVERIFY(group);
-        group->popup(QPoint(100,100)); QTRY_VERIFY(group->isVisible()); group->hide(); QTest::qWait(340); QCOMPARE(requests(),0); QCOMPARE(delays.size(),0);
+        QTRY_VERIFY(controller.state().ready && controller.proxies().contains("A")); TrayController tray(&controller); tray.measureMenuPreparation(); auto* root=tray.findChild<QSystemTrayIcon*>()->contextMenu(); QMenu* group=nullptr; int quickGroups=0; for (auto* menu:root->findChildren<QMenu*>()) if (!menu->property("groupName").toString().isEmpty()) { ++quickGroups; if (menu->property("groupName").toString()=="A") group=menu; } QVERIFY(group); QVERIFY(quickGroups<=5);
+        group->popup(QPoint(100,100)); QTRY_VERIFY(group->isVisible()); int quickMembers=0; for (auto* action:group->actions()) if (!action->property("memberName").toString().isEmpty()) ++quickMembers; QVERIFY(quickMembers<=6); group->hide(); QTest::qWait(340); QCOMPARE(requests(),0); QCOMPARE(delays.size(),0);
         const auto pid=controller.coreProcessId(); const auto member=controller.proxies().value("A").toObject().value("now").toString(); group->popup(QPoint(100,100)); QTRY_VERIFY_WITH_TIMEOUT(delays.size()==5,2500); QVERIFY(!controller.state().busy); QCOMPARE(requests(),4); QCOMPARE(controller.coreProcessId(),pid); QCOMPARE(controller.proxies().value("A").toObject().value("now").toString(),member); QCOMPARE(finished.size(),2);
         QVERIFY(controller.trayNodeDelay("n1").value("delay").toInt()>0); QVERIFY(controller.trayNodeDelay("bad").value("known").toBool()); QCOMPARE(controller.trayNodeDelay("bad").value("delay").toInt(),-1); QVERIFY(!controller.trayNodeDelay("other").value("known").toBool());
         QAction* node=nullptr; for (auto* action:group->actions()) if (action->property("memberName").toString()=="n1") node=action; QVERIFY(node && node->isEnabled()); QVERIFY(node->text().contains(" ms")); QVERIFY(!node->icon().isNull());
@@ -375,6 +889,22 @@ private slots:
         controller.selectMember("A","REJECT"); QTRY_COMPARE_WITH_TIMEOUT(finished.size(),3,3000); QVERIFY(finished.last()[0].toBool()); QCOMPARE(controller.proxies().value("A").toObject().value("now").toString(),QString("REJECT")); QVERIFY(!controller.trayNodeDelay("n1").value("pending").toBool()); QVERIFY(!controller.trayNodeDelay("n1").value("known").toBool()); group->hide(); QTest::qWait(100); QCOMPARE(delays.size(),5); QCOMPARE(requests(),7);
         automatic->setChecked(true); group->popup(QPoint(100,100)); QTRY_VERIFY_WITH_TIMEOUT(requests()==10,1000); group->hide(); const auto before=delays.size(); QTest::qWait(100); QCOMPARE(delays.size(),before); QVERIFY(!controller.trayNodeDelay("n1").value("pending").toBool()); QVERIFY(controller.state().ready);
         QPointer<QMenu> oldGroup=group; tray.measureMenuPreparation(); QVERIFY(oldGroup.isNull()); const auto count=root->findChildren<QMenu*>().size(); for (int i=0;i<10;++i) tray.measureMenuPreparation(); QCOMPARE(root->findChildren<QMenu*>().size(),count);
+        // 首页主动整组测速与托盘悬停测速有不同生命周期：切换当前
+        // 成员应保留正在运行的只读请求，并由原组结果继续更新。
+        responseDelay=1200;
+        MainWindow window(&controller); window.resize(900,600); window.show();
+        window.restoreNodeBookmark({{"profile",controller.state().activeProfile},{"group","A"}});
+        auto* homeTest=window.findChild<QPushButton*>("homeConnectivityTest"); QVERIFY(homeTest && homeTest->isEnabled());
+        homeTest->click(); QVERIFY(controller.homeGroupTestStatus().value("running").toBool());
+        const int beforeSwitch=finished.size(); controller.selectMember("A","n1");
+        QTRY_COMPARE_WITH_TIMEOUT(finished.size(),beforeSwitch+1,3000);
+        QVERIFY(finished.last()[0].toBool());
+        QTRY_VERIFY_WITH_TIMEOUT(!controller.homeGroupTestStatus().value("running").toBool(),4000);
+        const auto status=controller.homeGroupTestStatus();
+        QCOMPARE(status.value("completed").toInt(),status.value("total").toInt());
+        QVERIFY(!status.value("cancelled").toBool());
+        QVERIFY(!window.findChild<QLabel*>("homeControlMeta"));
+        window.hide();
         QSignalSpy exited(&controller,&AppController::exitReady); controller.requestExit(); QTRY_COMPARE(exited.size(),1);
     }
     void trayAppearancePriorityAndResources() {
@@ -535,13 +1065,13 @@ private slots:
         QTemporaryDir data; AppController controller(data.path(), true); QSignalSpy initialized(&controller, &AppController::initialized);
         controller.initialize(); QTRY_COMPARE(initialized.count(), 1);
         MainWindow window(&controller); window.show(); QVERIFY(QTest::qWaitForWindowExposed(&window));
-        // K7：没有选中行就没有抽屉，抽屉里的对象动作因此都不存在。
+        // 无卡片时没有可触发的对象命令，批量更新也不应出现。
+        auto* cards=window.findChild<QListView*>("profileList"); QVERIFY(cards);
+        QCOMPARE(cards->model()->rowCount(),0);
+        auto* cardMenu=window.findChild<QMenu*>("profileContextMenu"); QVERIFY(cardMenu);
+        QVERIFY(cardMenu->actions().isEmpty());
+        QVERIFY(!window.findChild<QPushButton*>("batchProfiles")->isVisible());
         QVERIFY(!window.findChild<QPushButton*>("profileDetailsActivate"));
-        QVERIFY(!window.findChild<QAction*>("updateProfile"));
-        // K7：右键菜单在两张列表创建时就存在（完整对象维护），但空态下所有对象动作都禁用。
-        auto* activate = window.findChild<QAction*>("activateProfile"); QVERIFY(activate); QVERIFY(!activate->isEnabled());
-        // K7：没有选择就没有抽屉；顶部只剩与选择无关的「添加订阅 / 导入文件 / 更新全部」。
-        QVERIFY(!window.findChild<QMenu*>("profileDetailsMenu"));
         QVERIFY(!window.findChild<QPushButton*>("chooseMember"));
         QVERIFY(!window.findChild<QAction*>("automaticAction")->isEnabled());
         // K5：首页六卡与「更多运行信息」抽屉都已删除，控制卡在任何状态下都存在。
@@ -552,16 +1082,11 @@ private slots:
         // 首页主控件是代理总开关（ADR 0048）：没有订阅时点击只引导添加订阅，不发起任何操作。
         auto* master=window.findChild<QCheckBox*>("systemProxy"); QVERIFY(master); QVERIFY(master->text().isEmpty()); QVERIFY(master->accessibleName().contains("系统代理"));
         QSignalSpy noStart(&controller,&AppController::operationStarted);
-        // K5：空态下总开关禁用（内核未运行且无接管），可观察的「下一步」是节点区底部那句引导，
-        // 而不是靠点击开关弹导入框。
+        // K5：空态下总开关禁用；节点区有唯一的就近导入动作。
         QVERIFY(!master->isEnabled()); QVERIFY(!master->isChecked());
-        auto* guidance=window.findChild<QLabel*>("homeSelectionHint");
-        QVERIFY(guidance&&guidance->text().contains("添加并使用订阅"));
-        QVERIFY(guidance); QVERIFY(guidance->isVisible() || !window.isVisible());
+        auto* emptyHome=window.findChild<QWidget*>("prototypeHomeEmpty"); QVERIFY(emptyHome); QVERIFY(emptyHome->isVisible());
+        auto* importHome=emptyHome->findChild<QPushButton*>(); QVERIFY(importHome); QCOMPARE(importHome->text(),QString("导入配置"));
         QCOMPARE(noStart.size(),0); QVERIFY(!controller.state().ready);
-        QVERIFY(!window.findChild<QAction*>("rollbackProfile")->isEnabled());
-        QVERIFY(!window.findChild<QAction*>("renameProfile")->isEnabled());
-        QVERIFY(!window.findChild<QAction*>("deleteProfile")->isEnabled());
         QVERIFY(!window.findChild<QPushButton*>("saveCustomRules")->isEnabled());
         QVERIFY(!window.findChild<QPushButton*>("addCustomRule")->isEnabled()); QVERIFY(!window.findChild<QComboBox*>("ruleType")->isEnabled());
         for (int page = 0; page < 8; ++page) { window.setPage(page); QCoreApplication::processEvents(); }
@@ -639,7 +1164,14 @@ private slots:
             for (int i=0;i<rectangles.size();++i) for (int j=i+1;j<rectangles.size();++j) QVERIFY2(!rectangles[i].second.intersects(rectangles[j].second),qPrintable(rectangles[i].first+" intersects "+rectangles[j].first));
             auto* cards=window.findChild<QListView*>("nodeCards"); QVERIFY(cards);
             QVERIFY(cards->viewport()->height()>=cards->gridSize().height());
-            for (int row=0;row<cards->model()->rowCount();++row) QVERIFY(cards->viewport()->rect().contains(cards->visualRect(cards->model()->index(row,0))));
+            for (int row=0;row<cards->model()->rowCount();++row) {
+                const auto card=cards->visualRect(cards->model()->index(row,0));
+                QVERIFY2(cards->viewport()->rect().contains(card),qPrintable(QString("row %1 rect %2,%3 %4x%5 viewport %6x%7 grid %8x%9 scroll %10,%11")
+                    .arg(row).arg(card.x()).arg(card.y()).arg(card.width()).arg(card.height())
+                    .arg(cards->viewport()->width()).arg(cards->viewport()->height())
+                    .arg(cards->gridSize().width()).arg(cards->gridSize().height())
+                    .arg(cards->horizontalScrollBar()->value()).arg(cards->verticalScrollBar()->value())));
+            }
             const auto output=qEnvironmentVariable("MLASH_UI_SCREENSHOTS"); if (!output.isEmpty()) { QDir().mkpath(output); QVERIFY(window.grab().save(output+"/refined-automatic-long-120.png")); }
         }
         state.ready=false;
@@ -652,22 +1184,22 @@ private slots:
         QVERIFY(store.save(settings, {prepared.profile}).ok);
         AppController controller(data.path(), true); QSignalSpy initialized(&controller, &AppController::initialized); controller.initialize(); QTRY_COMPARE(initialized.count(), 1);
         MainWindow window(&controller); window.setPage(1); window.show();
-        // K7：本地文件落在「本地配置」列表；远程列表保持空。
-        auto* localRows = window.findChild<QListView*>("localProfileList"); QVERIFY(localRows); QTRY_COMPARE(localRows->model()->rowCount(), 1);
-        auto* remoteRows = window.findChild<QListView*>("remoteProfileList"); QVERIFY(remoteRows); QCOMPARE(remoteRows->model()->rowCount(), 0);
-        // 选中本地行 → 抽屉主按钮是「重新加载 / 设为当前配置」；来源与更新在「更多操作」里。
-        localRows->setCurrentIndex(localRows->model()->index(0,0)); QCoreApplication::processEvents();
-        { const auto row = localRows->visualRect(localRows->model()->index(0,0)); QTest::mouseClick(localRows->viewport(), Qt::LeftButton, {}, row.center()); }
-        QCoreApplication::processEvents();
-        auto* activate=window.findChild<QPushButton*>("profileDetailsActivate"); QVERIFY(activate); QVERIFY(activate->isVisible()); QVERIFY(activate->isEnabled());
-        auto* more=window.findChild<QPushButton*>("profileDetailsMore"); QVERIFY(more); more->click(); QCoreApplication::processEvents();
-        auto* replace=window.findChild<QAction*>("profileUpdatePolicy"); QVERIFY(replace && replace->isEnabled());
-        // 更换文件入口保留在右键菜单（只对 file 源可用）。
-        auto* change=window.findChild<QAction*>("replaceProfileSource"); QVERIFY(change); QVERIFY(change->isEnabled());
-        QVERIFY(window.findChild<QAction*>("renameProfile")->isEnabled());
-        QVERIFY(window.findChild<QAction*>("deleteProfile")->isEnabled());
-        auto* add = window.findChild<QPushButton*>("addSubscription"); QVERIFY(add); QTest::mouseClick(add, Qt::LeftButton);
-        auto* dialog = window.findChild<ImportDialog*>(); QTRY_VERIFY(dialog && dialog->isVisible()); dialog->setSourceTab(false); QVERIFY(!dialog->isUrl()); dialog->reject();
+        auto* cards = window.findChild<QListView*>("profileList"); QVERIFY(cards); QTRY_COMPARE(cards->model()->rowCount(), 1);
+        const auto index=cards->model()->index(0,0);
+        QCOMPARE(index.data(ProfileRowModel::SourceLabel).toString(),QString("original.yaml"));
+        QVERIFY(index.data(ProfileRowModel::CanRefresh).toBool());
+        QTest::mouseClick(cards->viewport(), Qt::LeftButton, {}, ProfileCardDelegate::menu(cards->visualRect(index)).center());
+        auto* localMenu=window.findChild<QMenu*>("profileContextMenu"); QVERIFY(localMenu);
+        QCOMPARE(localMenu->property("profileKind").toString(),QString("local"));
+        QCOMPARE(localMenu->actions().size(),4);
+        localMenu->hide(); localMenu->actions().at(1)->trigger();
+        auto* sourceEditor=window.findChild<QDialog*>("profilePolicyDialog"); QVERIFY(sourceEditor);
+        QCOMPARE(sourceEditor->findChild<QLineEdit*>("profileEditSource")->text(),p.source);
+        sourceEditor->reject();
+        window.findChild<QPushButton*>("taskBack")->click();
+        auto* add = window.findChild<QPushButton*>("importLocalProfile"); QVERIFY(add); add->click();
+        auto* dialog = window.findChild<ImportDialog*>(); QTRY_VERIFY(dialog && dialog->isVisible()); QVERIFY(!dialog->isUrl());
+        QVERIFY(!dialog->findChild<QLabel*>("dialogTitle")->isVisible()); dialog->reject();
         QSignalSpy exited(&controller, &AppController::exitReady); controller.requestExit(); QTRY_COMPARE(exited.count(), 1);
     }
     void coherentActionsAndBilingualRuleTokens() {
@@ -689,7 +1221,7 @@ private slots:
         QTRY_VERIFY_WITH_TIMEOUT(target->findData("GLOBAL")>=0, 5000); QVERIFY(!window.findChild<QPushButton*>("saveCustomRules")->isEnabled()); QCOMPARE(finished.size(),0); QVERIFY(!editor->isReadOnly()); QVERIFY(editor->toPlainText().contains("自定义组"));
         window.setPage(6); window.findChild<QPushButton*>("settingsNetworkRow")->click(); auto* apply=window.findChild<QPushButton*>("applySettings"); QVERIFY(apply->isVisible()); QVERIFY(!apply->isEnabled()); auto* port=window.findChild<QSpinBox*>("mixedPort"); port->setValue(port->value()+1); QVERIFY(apply->isEnabled()); auto* reset=window.findChild<QPushButton*>("discardNetworkSettings"); QVERIFY(reset&&reset->isVisible()); reset->click(); QCOMPARE(port->value(),settings.mixedPort); QVERIFY(!apply->isVisible()); QCOMPARE(finished.size(),0);
         window.findChild<QPushButton*>("settingsNetworkRow")->click(); port->setValue(port->value()+1); QVERIFY(apply->isVisible()); QVERIFY(window.rect().contains(apply->mapTo(&window,apply->rect().bottomRight())));
-        window.setPage(4); QVERIFY(window.findChild<QToolButton*>("closeAllConnectionsButton")->isVisible()); QVERIFY(!window.findChild<QToolButton*>("connectionDetailsButton")->isVisible()); auto* detailsAction=window.findChild<QAction*>("connectionDetailsAction"); QVERIFY(detailsAction); QVERIFY(!detailsAction->isEnabled()); QVERIFY(!window.findChild<QAction*>("defaultConnectionOrder")->isEnabled());
+        window.setPage(4); QVERIFY(!window.findChild<QToolButton*>("closeAllConnectionsButton")->isVisible()); QVERIFY(!window.findChild<QWidget*>("connectionSummary")->isVisible()); QVERIFY(!window.findChild<QToolButton*>("connectionDetailsButton")->isVisible()); auto* detailsAction=window.findChild<QAction*>("connectionDetailsAction"); QVERIFY(detailsAction); QVERIFY(!detailsAction->isEnabled()); QVERIFY(!window.findChild<QAction*>("defaultConnectionOrder")->isEnabled());
         const auto output=qEnvironmentVariable("MLASH_UI_SCREENSHOTS"); if (!output.isEmpty()) { window.setPage(3); QVERIFY(window.grab().save(output+"/rules-bilingual.png")); window.setPage(6); QVERIFY(window.grab().save(output+"/settings-footer.png")); }
         QSignalSpy exited(&controller,&AppController::exitReady); controller.requestExit(); QTRY_COMPARE(exited.size(),1);
     }
@@ -749,7 +1281,7 @@ private slots:
         window.setPage(6); auto* combo=window.findChild<QPushButton*>("settingsAppearanceRow"); QVERIFY(combo); combo->clearFocus(); const auto neutral=combo->grab().toImage(); combo->setFocus(Qt::MouseFocusReason); QCoreApplication::processEvents(); QCOMPARE(combo->grab().toImage(),neutral); combo->clearFocus(); combo->setFocus(Qt::TabFocusReason); QCoreApplication::processEvents(); QVERIFY(combo->grab().toImage()!=neutral);
         // 鼠标选中下拉项不得留下键盘焦点环：用设置页的日志级别下拉（本用例没有订阅，
         // 节点区的订阅下拉是空的，弹不出列表）。
-        window.setPage(6); window.findChild<QPushButton*>("settingsNetworkRow")->click(); auto* scroll=window.findChild<QScrollArea*>("settingsScroll"); scroll->verticalScrollBar()->setValue(0);
+        window.setPage(6); window.findChild<QPushButton*>("settingsCoreRow")->click(); auto* scroll=window.findChild<QScrollArea*>("settingsScroll"); scroll->verticalScrollBar()->setValue(0);
         auto* popupCombo=window.findChild<QComboBox*>("coreLogLevel"); QVERIFY(popupCombo && popupCombo->count()>1);
         scroll->ensureWidgetVisible(popupCombo); QCoreApplication::processEvents();
         popupCombo->showPopup(); QTRY_VERIFY(popupCombo->view()->isVisible()); QTest::qWait(50);
@@ -763,13 +1295,16 @@ private slots:
         auto* logLevel=window.findChild<QComboBox*>("coreLogLevel"); auto* portBox=window.findChild<QSpinBox*>("mixedPort"); QVERIFY(logLevel&&portBox);
         const auto logBefore=logLevel->currentIndex(); const auto portBefore=portBox->value(); logLevel->clearFocus(); portBox->clearFocus();
         auto wheel=[&](QWidget* target,int delta) { const QPointF point(target->width()/2.0,target->height()/2.0); QWheelEvent event(point,target->mapToGlobal(point.toPoint()),QPoint(),QPoint(0,delta),Qt::NoButton,Qt::NoModifier,Qt::NoScrollPhase,false); QApplication::sendEvent(target,&event); };
-        wheel(logLevel,-120); wheel(portBox,-120); QCOMPARE(logLevel->currentIndex(),logBefore); QCOMPARE(portBox->value(),portBefore);
+        wheel(logLevel,-120); QCOMPARE(logLevel->currentIndex(),logBefore);
         QApplication::setActiveWindow(&window); logLevel->setFocus(Qt::TabFocusReason); QCoreApplication::processEvents(); wheel(logLevel,-120); QVERIFY(logLevel->currentIndex()!=logBefore); logLevel->clearFocus();
-        window.navigate(Route{ViewIds::Settings,1}); logLevel->setCurrentIndex(logLevel->findData(controller.settings().logLevel));
-        // K8：分类页签与分栏属性都已删除；三组卡片同时可见，且每组按内容取最小高度。
+        logLevel->setCurrentIndex(logLevel->findData(controller.settings().logLevel));
+        window.findChild<QPushButton*>("settingsBack")->click(); window.findChild<QPushButton*>("settingsNetworkRow")->click();
+        wheel(portBox,-120); QCOMPARE(portBox->value(),portBefore);
+        window.navigate(Route{ViewIds::Settings,1});
+        // 分类路由只显示所属任务，不混入其他组的字段。
         QVERIFY(!window.findChild<QTabBar*>("settingsCategories"));
         const auto groups=scroll->widget()->findChildren<QFrame*>("settingsGroup"); QCOMPARE(groups.size(),3);
-        { int visible=0; for (auto* group:groups) if (group->isVisible()) { ++visible; QVERIFY(group->height()>=group->minimumSizeHint().height()); } QCOMPARE(visible,2); }
+        { int visible=0; for (auto* group:groups) if (group->isVisible()) { ++visible; QVERIFY(group->height()>=group->minimumSizeHint().height()); } QCOMPARE(visible,1); }
         QCOMPARE(scroll->horizontalScrollBar()->maximum(),0);
         // K5：控制卡在任何状态下都存在；首页不再有整卡空态或抽屉入口。
         window.setPage(0); QVERIFY(window.findChild<QWidget*>("homeControlCard")->isVisible());
@@ -843,7 +1378,7 @@ private slots:
                  qUtf8Printable("overview: "+overview->text()));
 
         // 六卡删除后，「当前成员」由控制区第一行与成员行勾选共同表达（H2/H3）。
-        auto* stateLine=window.findChild<QLabel*>("homeStateLine"); QVERIFY(stateLine);
+        QVERIFY(!window.findChild<QLabel*>("homeStateLine"));
         // K5：列表底部那一行提示只在内核未就绪时出现，就绪后为空。
         QWidget* hintHost = window.findChild<QWidget*>("nodeSection"); QVERIFY(hintHost);
         auto* selectionHint=window.findChild<QLabel*>("homeSelectionHint");
@@ -871,10 +1406,9 @@ private slots:
         // U10：浏览不应用，只有显式使用才进入原有激活事务。
         QCOMPARE(finished.count(),beforeImport+1);
         QVERIFY(controller.settings().activeProfile!=sources->currentData().toString());
-        window.navigate(Route{ViewIds::Profiles}); auto* localProfiles=window.findChild<QListView*>("localProfileList");
-        const auto secondProfileIndex=localProfiles->model()->index(1,0); localProfiles->scrollTo(secondProfileIndex); QCoreApplication::processEvents(); QTest::mouseClick(localProfiles->viewport(),Qt::LeftButton,{},localProfiles->visualRect(secondProfileIndex).center());
-        auto* use=window.findChild<QPushButton*>("profileDetailsActivate"); QVERIFY(use&&use->isVisible()); use->click();
-        auto* comparison=window.findChild<QDialog*>("profileChangesDialog"); QVERIFY(comparison); auto* applyCompared=comparison->findChild<QPushButton*>("applyComparedVersion"); QTRY_VERIFY(applyCompared->isEnabled()); applyCompared->click();
+        window.navigate(Route{ViewIds::Profiles}); auto* localProfiles=window.findChild<QListView*>("profileList"); QVERIFY(localProfiles);
+        const auto secondProfileIndex=localProfiles->model()->index(1,0); localProfiles->scrollTo(secondProfileIndex); QCoreApplication::processEvents();
+        QTest::mouseClick(localProfiles->viewport(),Qt::LeftButton,{},ProfileCardDelegate::card(localProfiles->visualRect(secondProfileIndex)).topLeft()+QPoint(40,25));
         QTRY_COMPARE_WITH_TIMEOUT(finished.count(), beforeImport+2, 15000); QVERIFY2(finished.last()[0].toBool(), qUtf8Printable(finished.last()[1].toString()));
         QTRY_VERIFY_WITH_TIMEOUT(listModel()->rowCount() >= 6, 10000); QCOMPARE(controller.settings().activeProfile, sources->currentData().toString());
         // K1/K6：旧入口 5 是「数据 › 日志」，回显仍是数据页；用 currentRoute 而不是 page() 断言。
@@ -936,21 +1470,28 @@ private slots:
         QVERIFY(!controller.closedConnections().isEmpty()); auto* view=window.findChild<QTabBar*>("connectionView"); view->setCurrentIndex(1); QVERIFY(connections->model()->rowCount()>0); connections->selectRow(0); QVERIFY(!close->isEnabled()); window.findChild<QAction*>("connectionDetailsAction")->trigger(); QPointer<QDialog> detail=window.findChild<QDialog*>("connectionDetails"); QVERIFY(detail); QVERIFY(detail->findChild<QLabel*>("connectionField_destination")->text().contains("127.0.0.1"));
         window.setPage(0); QTRY_VERIFY(detail.isNull()); QVERIFY(controller.closedConnections().isEmpty()); QVERIFY(controller.connectionTotals().isEmpty()); window.setPage(4); view->setCurrentIndex(0);
         QTcpSocket second,third; for (auto* socket:{&second,&third}) { socket->connectToHost(QHostAddress::LocalHost,controller.settings().mixedPort); QTRY_COMPARE(socket->state(),QAbstractSocket::ConnectedState); socket->write("CONNECT "+address+" HTTP/1.1\r\nHost: "+address+"\r\n\r\n"); }
-        QTRY_VERIFY_WITH_TIMEOUT(controller.connections().size()>=2,5000); auto* closeAll=window.findChild<QAction*>("closeAllConnections");
+        QTRY_VERIFY_WITH_TIMEOUT(controller.connections().size()>=2,5000); auto* closeAll=window.findChild<QAction*>("closeAllConnections"); QVERIFY(window.findChild<QToolButton*>("closeAllConnectionsButton")->isVisible()); QVERIFY(window.findChild<QWidget*>("connectionSummary")->isVisible());
         QTimer::singleShot(0,&window,[&window] { auto* box=window.findChild<QMessageBox*>(); QVERIFY(box); box->button(QMessageBox::No)->click(); }); closeAll->trigger(); QCOMPARE(finished.size(),completed); QVERIFY(!controller.connections().isEmpty());
         ++completed; QTimer::singleShot(0,&window,[&window] { auto* box=window.findChild<QMessageBox*>(); QVERIFY(box); box->button(QMessageBox::Yes)->click(); }); closeAll->trigger(); QTRY_COMPARE(finished.size(),completed); QVERIFY(finished.last()[0].toBool()); QTRY_VERIFY(controller.connections().isEmpty()); QTRY_COMPARE(second.state(),QAbstractSocket::UnconnectedState); QTRY_COMPARE(third.state(),QAbstractSocket::UnconnectedState); QVERIFY(controller.closedConnections().size()>=2); QVERIFY(controller.state().ready);
         window.setPage(6); window.findChild<QAction*>("previewActiveConfig")->trigger(); QPointer<QDialog> config; QTRY_VERIFY((config=window.findChild<QDialog*>("configPreview"))); QVERIFY(config->findChild<QPlainTextEdit*>()->isReadOnly()); QVERIFY(config->findChild<QPlainTextEdit*>()->toPlainText().contains("[redacted]")); window.hide(); QTRY_VERIFY(config.isNull());
-        // K7：本用例两份订阅都是本地文件，落在「本地配置」列表；远程订阅列表此时为空。
-        window.show(); window.setPage(1); auto* profiles=window.findChild<QListView*>("localProfileList");
-        // 两张列表各有一份同名的右键菜单（profileContextMenu），按列表类型区分。
-        const auto contextMenu=[&window](const QString& kind) { for (auto* m : window.findChildren<QMenu*>("profileContextMenu")) if (m->property("profileKind").toString()==kind) return m; return static_cast<QMenu*>(nullptr); };
-        auto* menu=contextMenu("local"); QVERIFY(profiles && menu);
-        QVERIFY(window.findChild<QListView*>("remoteProfileList")->model()->rowCount() == 0);
-        // K7：配置行在列表模型里，对象 ID 走 ProfileRowModel::ProfileId 角色。
+        // K7：同一张卡片网格承载两份本地配置；菜单始终绑定当前卡片 ID。
+        window.show(); window.setPage(1); auto* profiles=window.findChild<QListView*>("profileList");
+        auto* menu=window.findChild<QMenu*>("profileContextMenu"); QVERIFY(profiles && menu);
         const auto target=profiles->model()->index(0,0).data(ProfileRowModel::ProfileId).toString(),active=controller.state().activeProfile; const auto corePid=controller.coreProcessId(); const int beforeRename=finished.size();
         QCOMPARE(profiles->model()->rowCount(),2);
         window.activateWindow(); QApplication::setActiveWindow(&window); QTest::qWait(50);
-        const auto rowPoint=profiles->visualRect(profiles->model()->index(0,0)).center(); QContextMenuEvent rowMenu(QContextMenuEvent::Mouse,rowPoint,profiles->viewport()->mapToGlobal(rowPoint)); QApplication::sendEvent(profiles->viewport(),&rowMenu); QTRY_VERIFY(menu->isVisible()); QCOMPARE(profiles->currentIndex().row(),0); menu->hide(); QTimer::singleShot(0,&window,[&window] { auto* dialog=window.findChild<QInputDialog*>(); QVERIFY(dialog); dialog->setTextValue("右键重命名示例"); dialog->accept(); }); window.findChild<QAction*>("renameProfile")->trigger(); QTRY_COMPARE(finished.size(),beforeRename+1); QVERIFY(finished.last()[0].toBool()); QCOMPARE(controller.state().activeProfile,active); QCOMPARE(controller.coreProcessId(),corePid); bool renamed=false; for (const auto& profile:controller.profiles()) if (profile.id==target) { QCOMPARE(profile.name,QString("右键重命名示例")); renamed=true; } QVERIFY(renamed);
+        const auto rowPoint=ProfileCardDelegate::card(profiles->visualRect(profiles->model()->index(0,0))).center();
+        QContextMenuEvent rowMenu(QContextMenuEvent::Mouse,rowPoint,profiles->viewport()->mapToGlobal(rowPoint)); QApplication::sendEvent(profiles->viewport(),&rowMenu);
+        QTRY_VERIFY(menu->isVisible()); QCOMPARE(menu->property("contextProfileId").toString(),target); QCOMPARE(menu->property("profileKind").toString(),QString("local")); menu->hide();
+        menu->actions().at(1)->trigger();
+        auto* sourceEditor=window.findChild<QDialog*>("profilePolicyDialog"); QVERIFY(sourceEditor);
+        auto* nameInput=sourceEditor->findChild<QLineEdit*>("profileEditName"); QVERIFY(nameInput); nameInput->setText("右键重命名示例");
+        sourceEditor->findChild<QDialogButtonBox*>()->button(QDialogButtonBox::Save)->click();
+        QTRY_COMPARE(finished.size(),beforeRename+1); QVERIFY(finished.last()[0].toBool());
+        QCOMPARE(controller.state().activeProfile,active); QCOMPARE(controller.coreProcessId(),corePid);
+        bool renamed=false; for (const auto& profile:controller.profiles()) if (profile.id==target) { QCOMPARE(profile.name,QString("右键重命名示例")); renamed=true; } QVERIFY(renamed);
+        auto* workspace=window.findChild<TaskWorkspace*>("taskWorkspace"); QVERIFY(workspace);
+        workspace->findChild<QPushButton*>("taskBack")->click();
         QApplication::setActiveWindow(&window); profiles->setFocus(); QCoreApplication::processEvents(); QTest::keyClick(profiles,Qt::Key_F10,Qt::ShiftModifier); QTRY_VERIFY(menu->isVisible()); menu->hide(); // K7：列表底部留白处的右键不针对任何行，也不弹菜单；同一列表的两个菜单互斥。
         const QPoint blankPoint(20,profiles->viewport()->height()-5); const QModelIndex blankIndex=profiles->indexAt(blankPoint);
         if (!blankIndex.isValid()) {
@@ -1143,20 +1684,21 @@ private slots:
     void emptyStatesOfferFocusableNextStep() {
         QTemporaryDir data; AppController controller(data.path(),true); QSignalSpy initialized(&controller,&AppController::initialized); controller.initialize(); QTRY_COMPARE(initialized.size(),1);
         MainWindow window(&controller); window.resize(940,620); window.show(); QCoreApplication::processEvents();
-        // 空态必须有可聚焦动作（R7），而不是一个只能读的透明标签。
+        // 配置的导入入口始终在页首，空态不再重复一个导入按钮。
         window.setPage(1); QCoreApplication::processEvents();
-        // K7：空态动作在「远程订阅」列表视口里；本地列表同时给出「导入文件…」。
-        auto* profiles=window.findChild<QListView*>("remoteProfileList"); QVERIFY(profiles);
+        auto* profiles=window.findChild<QListView*>("profileList"); QVERIFY(profiles);
         auto* profilesAction=profiles->viewport()->findChild<QPushButton*>("emptyStateAction"); QVERIFY(profilesAction);
-        QTRY_VERIFY(profilesAction->isVisible()); QCOMPARE(profilesAction->text(),QString("添加订阅…")); QCOMPARE(profilesAction->focusPolicy(),Qt::StrongFocus);
-        auto* localList=window.findChild<QListView*>("localProfileList"); QVERIFY(localList); auto* localAction=localList->viewport()->findChild<QPushButton*>("emptyStateAction"); QVERIFY(localAction);
-        QTRY_VERIFY(localAction->isVisible()); QCOMPARE(localAction->text(),QString("导入文件…"));
-        QTest::mouseClick(profilesAction,Qt::LeftButton); QTRY_VERIFY(window.findChild<QDialog*>("importDialog")); window.findChild<QDialog*>("importDialog")->reject();
-        // 连接页：未就绪时空态给「启动内核」而不是空白表格。
+        QVERIFY(!profilesAction->isVisible());
+        auto* source=window.findChild<QLineEdit*>("profileSourceInput"); QVERIFY(source&&source->isVisible());
+        QVERIFY(source->focusPolicy()!=Qt::NoFocus);
+        QVERIFY(window.findChild<QPushButton*>("importSubscription")->isVisible());
+        QVERIFY(window.findChild<QPushButton*>("importLocalProfile")->isVisible());
+        // 连接页：无配置时唯一空态动作直接前往配置。
         window.setPage(4); QCoreApplication::processEvents();
         auto* connections=window.findChild<QTableView*>("connectionsTable"); QVERIFY(connections);
         auto* connectionsAction=connections->viewport()->findChild<QPushButton*>("emptyStateAction"); QVERIFY(connectionsAction);
         QVERIFY(connectionsAction->isVisible()); QVERIFY(!connectionsAction->text().isEmpty()); QCOMPARE(connectionsAction->focusPolicy(),Qt::StrongFocus);
+        QTest::mouseClick(connectionsAction,Qt::LeftButton); QTRY_VERIFY(source->isVisible());
         QSignalSpy exited(&controller,&AppController::exitReady); controller.requestExit(); QTRY_COMPARE(exited.size(),1);
     }
     // P4.1 反馈路由：页面级结果只出现在所属页面，跨页结果进状态栏「最近操作」段，
@@ -1318,8 +1860,8 @@ private slots:
         AppController controller(data.path(),true);
         QSignalSpy initialized(&controller,&AppController::initialized); controller.initialize(); QTRY_COMPARE(initialized.size(),1);
         MainWindow window(&controller); window.show(); window.setPage(1); QCoreApplication::processEvents();
-        // K7：行列表没有「列」，用量改由行委托读 ProfileRowModel 的 UsageRatio / UsageText。
-        auto* remote=window.findChild<QListView*>("remoteProfileList"); QVERIFY(remote);
+        // 同一网格的有额度卡片显示真实摘要；无额度卡片不保留假进度。
+        auto* remote=window.findChild<QListView*>("profileList"); QVERIFY(remote);
         QCOMPARE(remote->model()->rowCount(),2);
         const auto first=remote->model()->index(0,0), second=remote->model()->index(1,0);
         QCOMPARE(first.data(ProfileRowModel::UsageRatio).toDouble(), 0.5);   // 2 KiB / 4 KiB
@@ -1355,7 +1897,7 @@ private slots:
         QCOMPARE(settings->horizontalScrollBar()->maximum(),0);
         QSignalSpy exited(&controller,&AppController::exitReady); controller.requestExit(); QTRY_COMPARE(exited.size(),1);
     }
-    // V4 菜单分组标题：五组各有一个不可触发的标题，且不改变可执行项的数量。
+    // 订阅对象菜单只保留低频入口；高频使用、刷新和候选操作留在卡片。
     void menuSectionsLabelGroupsWithoutAddingCommands() {
         QTemporaryDir data; auto platform=createPlatformServices(); ProfileStore store(data.path(),platform);
         QVERIFY(store.load().result.ok); Settings settings; settings.startCore=false;
@@ -1364,17 +1906,17 @@ private slots:
         AppController controller(data.path(),true);
         QSignalSpy initialized(&controller,&AppController::initialized); controller.initialize(); QTRY_COMPARE(initialized.size(),1);
         MainWindow window(&controller); window.show(); window.setPage(1); QCoreApplication::processEvents();
+        auto* cards=window.findChild<QListView*>("profileList"); QVERIFY(cards);
+        const auto index=cards->model()->index(0,0);
+        QTest::mouseClick(cards->viewport(),Qt::LeftButton,{},ProfileCardDelegate::menu(cards->visualRect(index)).center());
         auto* menu=window.findChild<QMenu*>("profileContextMenu"); QVERIFY(menu);
-        menu->popup(QPoint(10,10));
-        QCoreApplication::processEvents();
-        QList<QAction*> sections;
-        for (auto* action : menu->actions()) if (action->objectName()=="menuSection") sections.append(action);
-        QCOMPARE(sections.size(), 5);
-        for (auto* action : sections) { QVERIFY(!action->isEnabled()); QVERIFY(!action->text().isEmpty()); }
-        // 分组标题不可触发：即便被程序强行 trigger，也不应改变任何状态。
-        const auto before=controller.profiles().size();
-        for (auto* action : sections) action->trigger();
-        QCOMPARE(controller.profiles().size(), before);
+        QCOMPARE(menu->property("contextProfileId").toString(),p.id);
+        QCOMPARE(menu->actions().size(),5);
+        QStringList labels; for (const auto* action:menu->actions()) if (!action->isSeparator()) labels.append(action->text());
+        QCOMPARE(labels,QStringList({"查看配置内容","编辑来源与更新","分享配置…","删除配置…"}));
+        QVERIFY(!labels.join(' ').contains("使用"));
+        QVERIFY(!labels.join(' ').contains("刷新"));
+        QVERIFY(!labels.join(' ').contains("规则"));
         menu->hide();
         QSignalSpy exited(&controller,&AppController::exitReady); controller.requestExit(); QTRY_COMPARE(exited.size(),1);
     }
@@ -1391,6 +1933,29 @@ private slots:
         const QJsonObject automatic{{"type","URLTest"},{"all",QJsonArray{"节点甲","节点乙"}},{"now","节点乙"}};
         proxies={{"节点甲",nodeA},{"节点乙",nodeB},{"手动组",manual},{"自动组",automatic}};
         MainWindow window(&controller); window.resize(940,700); window.show(); window.setPage(0); QCoreApplication::processEvents();
+        auto* mode=window.findChild<QPushButton*>("homeRouteRow"); QVERIFY(mode); QTRY_VERIFY(mode->isEnabled());
+        QTest::mouseClick(mode,Qt::LeftButton); QPointer<QMenu> routeMenu=mode->findChild<QMenu*>("routeModeMenu"); QVERIFY(routeMenu); QTRY_VERIFY(routeMenu->isVisible());
+        QCOMPARE(routeMenu->actions().size(),3); int checked=0; for (auto* action:routeMenu->actions()) checked+=action->isChecked(); QCOMPARE(checked,1);
+        const QRect routePosition=routeMenu->geometry(); QTest::qWait(60); QCOMPARE(routeMenu->geometry(),routePosition);
+        QCOMPARE(routeMenu->grab().toImage().pixelColor(0,0).alpha(),0);
+        const auto output=qEnvironmentVariable("MLASH_UI_SCREENSHOTS"); if (!output.isEmpty()) { QVERIFY(QDir().mkpath(output)); QVERIFY(routeMenu->grab().save(output+"/route-menu.png")); }
+        QTest::keyClick(routeMenu,Qt::Key_Escape); QTRY_VERIFY(!routeMenu || !routeMenu->isVisible());
+        QTest::mouseClick(mode,Qt::LeftButton); routeMenu=mode->findChild<QMenu*>("routeModeMenu"); QVERIFY(routeMenu && routeMenu->isVisible());
+        window.setPage(1); QTRY_VERIFY(!routeMenu || !routeMenu->isVisible()); window.setPage(0);
+        auto* filterAction=window.findChild<QAction*>("nodeFilterAction"); QVERIFY(filterAction);
+        filterAction->trigger(); auto* filterPanel=window.findChild<QWidget*>("nodeFilterPopup"); QVERIFY(filterPanel);
+        QTRY_VERIFY(filterPanel->isVisible()); const QRect filterPosition=filterPanel->geometry();
+        QCOMPARE(filterPanel->grab().toImage().pixelColor(0,0).alpha(),0);
+        QTest::qWait(60); QCOMPARE(filterPanel->geometry(),filterPosition);
+        if (!output.isEmpty()) QVERIFY(filterPanel->grab().save(output+"/node-filter.png"));
+        auto* region=window.findChild<QComboBox*>("nodeRegion"); QVERIFY(region && region->hasFocus());
+        QKeyEvent escape(QEvent::KeyPress,Qt::Key_Escape,Qt::NoModifier);
+        QCoreApplication::sendEvent(region,&escape);
+        QVERIFY(!filterPanel->isVisible());
+        filterAction->trigger(); QTRY_VERIFY(filterPanel->isVisible());
+        window.setPage(1); QTRY_VERIFY(!filterPanel->isVisible()); window.setPage(0);
+        filterAction->trigger(); QTRY_VERIFY(filterPanel->isVisible());
+        window.move(window.pos()+QPoint(6,0)); QTRY_VERIFY(!filterPanel->isVisible());
         auto* hint=window.findChild<QLabel*>("nodeGroupHint"); QVERIFY(hint);
         // H3：浏览另一个策略组走「更多 › 策略组」子菜单（原 groupSwitcher_ + 卡片选择器）。
         auto* groupMenu=window.findChild<QMenu*>("nodeGroupMenu"); QVERIFY(groupMenu);

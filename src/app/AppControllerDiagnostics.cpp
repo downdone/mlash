@@ -105,6 +105,27 @@ void AppController::cancelTests() {
     if (delayInFlight_ == 0 && delayQueue_.isEmpty()) return;
     ++delayGeneration_; delayQueue_.clear(); delayInFlight_ = 0; api_.cancelAll(); updateDiagnosticStream(); finish({true,{},{{"cancelled",true}}});
 }
+void AppController::startHomeGroupTests(const QString& group) {
+    if (!state_.ready || state_.busy || state_.exiting || state_.readOnly) return;
+    const auto object=proxies_.value(group).toObject();
+    if (!object.value("all").isArray()) return;
+    QStringList members;
+    for (const auto& value:object.value("all").toArray()) {
+        const auto name=value.toString();
+        const auto proxy=proxies_.value(name).toObject();
+        if (name.isEmpty() || name.size()>512 || proxy.isEmpty()
+            || QStringList{"Direct","Reject","RejectDrop","Pass"}.contains(proxy.value("type").toString())) continue;
+        members.append(name);
+    }
+    if (members.isEmpty()) return;
+    groupDelayTests_.start(group,members,groupTestUrl(group));
+}
+void AppController::cancelHomeGroupTests() { groupDelayTests_.cancel(); }
+QJsonObject AppController::homeGroupTestStatus() const {
+    return {{"group",groupDelayTests_.group()},{"running",groupDelayTests_.running()},
+            {"completed",groupDelayTests_.completed()},{"total",groupDelayTests_.total()},
+            {"cancelled",groupDelayTests_.cancelled()}};
+}
 QJsonObject AppController::trayNodeDelay(const QString& name,const QString& group) const {
     const auto url=groupTestUrl(group); const auto found=trayDelays_.constFind(name+QChar::Null+url);
     const bool cached=state_.ready && trayCacheGeneration_==state_.generation && found!=trayDelays_.cend(); const bool known=cached&&trayClock_.elapsed()-found->measured<60000;

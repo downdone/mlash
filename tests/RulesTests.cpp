@@ -16,6 +16,8 @@
 #include <QTableWidget>
 #include <QTabWidget>
 #include <QPushButton>
+#include <QLineEdit>
+#include <QSplitter>
 #include <QLabel>
 #include <QMessageBox>
 #include <QPlainTextEdit>
@@ -43,6 +45,33 @@ class RulesTests : public QObject {
     Settings settings() const { static const int isolatedPort=isolatedListenerPort(); Settings settings; settings.mixedPort=isolatedPort; settings.startCore=false; settings.corePath=QString(MLASH_SOURCE_DIR)+"/cores/mihomo.exe"; return settings; }
 private slots:
     void initTestCase() { WidgetStyle::install(); UiTheme::install(); }
+    void ruleEntryAndExistingRulesStayInOneWorkspace() {
+        QTemporaryDir data; auto platform=std::make_shared<RulesPlatform>(); ProfileStore store(data.path(),platform);
+        QVERIFY(store.load().result.ok); Profile profile; profile.id=newId(); profile.sourceType="file"; profile.name="Rule workspace";
+        const auto prepared=store.prepare(profile,source,settings(),19090,QString(64,'a'));
+        QVERIFY(prepared.result.ok); profile=prepared.profile; QVERIFY(store.save(settings(),{profile}).ok);
+        AppController controller(data.path(),true,nullptr,platform);
+        QSignalSpy initialized(&controller,&AppController::initialized),finished(&controller,&AppController::operationFinished);
+        controller.initialize(); QTRY_COMPARE(initialized.size(),1);
+        QPointer<RuleOverlayDialog> dialog=new RuleOverlayDialog(&controller,profile.id); dialog->show();
+        auto* split=dialog->findChild<QSplitter*>("ruleEditorSplit"); QVERIFY(split);
+        QVERIFY(split->findChild<QWidget*>("ruleEntryPanel")); QVERIFY(split->findChild<QWidget*>("ruleResultsPanel"));
+        auto* sourceTable=dialog->findChild<QTableWidget*>("sourceRulesTable"); QTRY_COMPARE(sourceTable->rowCount(),2);
+        auto* value=dialog->findChild<QLineEdit*>("newRuleValue"); auto* search=dialog->findChild<QLineEdit*>("ruleSearch");
+        auto* prepend=dialog->findChild<QTableWidget*>("prependRulesTable"); auto* append=dialog->findChild<QTableWidget*>("appendRulesTable");
+        QVERIFY(value && search && prepend && append);
+        value->setText("first.example"); dialog->findChild<QPushButton*>("addPrependRule")->click();
+        QCOMPARE(prepend->rowCount(),1); QCOMPARE(prepend->item(0,1)->text(),QString("first.example"));
+        value->setText("last.example"); dialog->findChild<QPushButton*>("addAppendRule")->click();
+        QCOMPARE(append->rowCount(),1); QCOMPARE(append->item(0,1)->text(),QString("last.example"));
+        search->setText("missing.example"); QVERIFY(append->isRowHidden(0));
+        search->clear(); QVERIFY(!append->isRowHidden(0));
+        QVERIFY(dialog->findChild<QPushButton*>("saveRuleOverlay")->isEnabled());
+        dialog->reject(); QTRY_VERIFY(dialog.isNull()); QCOMPARE(finished.size(),0);
+        QCOMPARE(store.load().profiles[0].customRules.size(),0);
+        QCOMPARE(store.load().profiles[0].appendRules.size(),0);
+        QCOMPARE(platform->writes,0);
+    }
     void plainTextAndListShareTheSameDraft() {
         QTemporaryDir data; auto platform=std::make_shared<RulesPlatform>(); ProfileStore store(data.path(),platform); QVERIFY(store.load().result.ok); Profile profile; profile.id=newId(); profile.sourceType="file"; profile.name="Shared"; const auto prepared=store.prepare(profile,source,settings(),19090,QString(64,'a')); QVERIFY(prepared.result.ok); profile=prepared.profile; QVERIFY(store.save(settings(),{profile}).ok);
         AppController controller(data.path(),true,nullptr,platform); QSignalSpy init(&controller,&AppController::initialized),finished(&controller,&AppController::operationFinished); controller.initialize(); QTRY_COMPARE(init.size(),1); MainWindow window(&controller); window.show(); window.setPage(3); auto* editor=window.findChild<QPlainTextEdit*>("customRulesEditor"); auto* advanced=window.findChild<QPushButton*>("advancedRules");

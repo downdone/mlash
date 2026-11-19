@@ -3,16 +3,17 @@
 #include "profile/SubscriptionInfo.h"
 #include <QAbstractListModel>
 #include <QDateTime>
-#include <QSortFilterProxyModel>
+#include <QFileInfo>
+#include <QUrl>
 
 namespace mlash {
-// K7：配置页的行模型。两张列表（远程订阅 / 本地配置）共用这一份快照，
-// 各自套一个按 kind 过滤的代理模型；行内容与是否「当前使用」都在这里算，
-// ProfileRowDelegate 只负责绘制，行数据由本模型持有。
+// A single ordered snapshot for both URL and file profiles. UI actions use
+// ProfileId, never the row number, because an update can rebuild the model.
 class ProfileRowModel final : public QAbstractListModel {
 public:
     // data() 的自定义角色；列固定为 1。
-    enum Role { RowRole = Qt::UserRole + 1, IsCurrent, Kind, ProfileId, Detail, UsageRatio, UsageText };
+    enum Role { RowRole = Qt::UserRole + 1, IsCurrent, Kind, ProfileId, Detail, UsageRatio, UsageText,
+                SourceLabel, UpdatedLabel, CanRefresh, HasCandidate, UpdateError };
     explicit ProfileRowModel(QObject* parent = nullptr) : QAbstractListModel(parent) {}
     void setProfiles(QVector<Profile> profiles) { beginResetModel(); profiles_ = std::move(profiles); endResetModel(); }
     void setState(const QString& activeId, bool ready) {
@@ -34,6 +35,12 @@ public:
         case ProfileId: return profile->id;
         case Kind: return profile->sourceType == QStringLiteral("url") ? QStringLiteral("remote") : QStringLiteral("local");
         case IsCurrent: return active;
+        case SourceLabel: return profile->sourceType == "url" ? QUrl(profile->source).host() :
+            (profile->source.isEmpty() ? QStringLiteral("本地快照") : QFileInfo(profile->source).fileName());
+        case UpdatedLabel: return when;
+        case CanRefresh: return !profile->source.isEmpty();
+        case HasCandidate: return pending;
+        case UpdateError: return profile->updateError;
         case Detail: {
             QString detail = profile->sourceType == "url"
                 ? QString("远程订阅 · %1 · 每 %2 小时检查").arg(when).arg(profile->updateIntervalHours)
@@ -54,7 +61,7 @@ public:
         }
         case UsageText: {
             const auto summary = SubscriptionInfo::summary(profile->subscriptionInfo);
-            return summary.isEmpty() ? (profile->sourceType == "url" ? QString() : QStringLiteral("未指定额度")) : summary;
+            return summary;
         }
         case Qt::ToolTipRole: return profile->name + "\n" + data(index, Detail).toString() + (profile->updateError.isEmpty() ? QString() : "\n" + profile->updateError);
         default: return {};
@@ -64,21 +71,5 @@ private:
     QVector<Profile> profiles_;
     QString activeId_;
     bool ready_ = false;
-};
-// 按 Kind 角色分流的代理模型：远程订阅与本地配置各一张列表，数据只有一份。
-class ProfileKindFilter final : public QSortFilterProxyModel {
-public:
-    explicit ProfileKindFilter(QObject* parent = nullptr) : QSortFilterProxyModel(parent) {}
-    void setKind(const QString& kind) {
-        if (kind_ == kind) return;
-        beginFilterChange(); kind_ = kind; endFilterChange(Direction::Rows);
-    }
-protected:
-    bool filterAcceptsRow(int row, const QModelIndex& parent) const override {
-        const auto index = sourceModel()->index(row, 0, parent);
-        return index.isValid() && index.data(ProfileRowModel::Kind).toString() == kind_;
-    }
-private:
-    QString kind_;
 };
 }

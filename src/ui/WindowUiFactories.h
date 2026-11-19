@@ -7,12 +7,11 @@ inline QPushButton* button(const QString& text, QLayout* layout) { auto* b = new
 inline QToolButton* actionButton(QAction* action, QLayout* layout, const QString& name) {
     auto* control = new ChevronToolButton; control->setObjectName(name); control->setToolButtonStyle(Qt::ToolButtonTextOnly); control->setDefaultAction(action); layout->addWidget(control); return control;
 }
-// 空态（R7）：保持原有「视口内一个说明标签」的结构不变，只把说明拆成
-// 「图标 + 原因」并在下方附一个可聚焦动作按钮。动作留空时隐藏，行为与旧版一致。
+// 空态（R7/U19）：说明与操作是同一个视觉单元，随视口居中，避免按钮贴底。
 inline QLabel* emptyState(QAbstractItemView* table, const QString& text) {
-    auto* label = new QLabel(text, table->viewport()); label->setObjectName("emptyState"); label->setWordWrap(true); label->setAlignment(Qt::AlignCenter); label->setAttribute(Qt::WA_TransparentForMouseEvents); label->setTextFormat(Qt::PlainText);
+    auto* label = new QLabel(text, table->viewport()); label->setObjectName("emptyState"); label->setWordWrap(true); label->setAlignment(Qt::AlignCenter); label->setSizePolicy(QSizePolicy::Preferred, QSizePolicy::Maximum); label->setAttribute(Qt::WA_TransparentForMouseEvents); label->setTextFormat(Qt::PlainText);
     auto* action = new QPushButton(table->viewport()); action->setObjectName("emptyStateAction"); action->setProperty("quiet", true); action->setFocusPolicy(Qt::StrongFocus); action->hide();
-    auto* layout = new QVBoxLayout(table->viewport()); layout->setContentsMargins(0,0,0,0); layout->setSpacing(8); layout->addWidget(label); layout->addWidget(action, 0, Qt::AlignHCenter); label->hide();
+    auto* layout = new QVBoxLayout(table->viewport()); layout->setContentsMargins(0,0,0,0); layout->setSpacing(8); layout->addStretch(1); layout->addWidget(label, 0, Qt::AlignHCenter); layout->addWidget(action, 0, Qt::AlignHCenter); layout->addStretch(1); label->hide();
     return label;
 }
 // 空态动作按钮；调用方按当前原因设置文案与处理函数。文案为空即整块隐藏。

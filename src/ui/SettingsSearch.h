@@ -3,7 +3,7 @@
 #include <QPointer>
 #include <QTimer>
 #include "Route.h"
-class QLineEdit; class QMenu; class QPushButton; class QScrollArea; class QShortcut;
+class QLineEdit; class QMenu; class QPushButton; class QScrollArea;
 namespace mlash {
 class SettingsSearch final : public QWidget {
     Q_OBJECT
@@ -12,6 +12,8 @@ public:
     void addRoute(const QString& title,const QString& terms,int page);
     // 路由级条目：title/terms 用于检索，route 决定跳转目标（见 Route.h）。
     void addRoute(const QString& title,const QString& terms,Route route);
+    // Directory-owned controls do not need a duplicate hidden editor row to be searchable.
+    void addAnchor(const QString& title,const QString& terms,QWidget* anchor);
     void remapAnchor(const QString& settingName,QWidget* anchor);
 signals:
     void pageRequested(int page);
@@ -34,7 +36,6 @@ private:
     QPushButton* count_;
     QMenu* menu_;
     QScrollArea* scroll_;
-    QShortcut* shortcut_;
     QPointer<QWidget> marked_;
     QTimer markTimer_;
 };

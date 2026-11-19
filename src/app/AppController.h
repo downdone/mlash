@@ -8,6 +8,7 @@
 #include "ProfileMaintenance.h"
 #include "ConnectionSession.h"
 #include "WebsiteTests.h"
+#include "GroupDelayTests.h"
 #include <QElapsedTimer>
 #include <QDateTime>
 #include <QDeadlineTimer>
@@ -172,6 +173,9 @@ public:
     void testNodes(const QStringList& names,const QString& group={});
     bool testingNodes() const { return state_.busy && (delayInFlight_ > 0 || !delayQueue_.isEmpty()); }
     void cancelTests();
+    void startHomeGroupTests(const QString& group);
+    void cancelHomeGroupTests();
+    QJsonObject homeGroupTestStatus() const;
     void testTrayGroup(const QString& group, bool force = false);
     void cancelTrayTests();
     const WebsiteTests* websiteTests() const { return &websiteTests_; }
@@ -179,6 +183,7 @@ public:
     QString homeNode() const;
     void setWebsiteTestsVisible(bool visible);
     void startWebsiteTests(const QString& node,const QString& targetId={});
+    void selectWebsiteTestNode(const QString& node);
     void cancelWebsiteTests();
     void clearWebsiteTests();
     void updateWebsiteTargets(const QJsonArray& targets);
@@ -210,6 +215,7 @@ signals:
     void operationStarted(const QString& message, OperationId id = OperationId::Unspecified);
     void nodeDelay(const QString& name, int delay, const QString& error);
     void delayProgress(int done, int total);
+    void homeGroupTestsChanged();
     void trayDelaysChanged();
     void exitReady();
 private:
@@ -343,6 +349,7 @@ private:
     QString homeProbeGroup_;
     OutboundDiagnostics outboundDiagnostics_{this};
     WebsiteTests websiteTests_;
+    GroupDelayTests groupDelayTests_{&api_,this};
     bool websiteTestsVisible_=false;
     CoreManager core_;
     OfficialCoreSource officialCore_{this};

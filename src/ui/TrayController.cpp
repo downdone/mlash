@@ -177,8 +177,8 @@ void TrayController::rebuildMenu() {
     QStringList names;
     const auto appendGroup=[&](const QString& name) { if (!name.isEmpty() && !names.contains(name) && proxies.value(name).toObject().value("all").isArray()) names.append(name); };
     appendGroup(preferences.value("last_group").toString());
-    for (const auto& value:common) { if (names.size()>=8) break; appendGroup(value.toString()); }
-    for (const auto& name:allNames) { if (names.size()>=8) break; appendGroup(name); }
+    for (const auto& value:common) { if (names.size()>=5) break; appendGroup(value.toString()); }
+    for (const auto& name:allNames) { if (names.size()>=5) break; appendGroup(name); }
     for (const auto& name:names) {
         const auto group=proxies.value(name).toObject(); if (!group.value("all").isArray()) continue;
         auto* sub = groups->addMenu((common.contains(name)?QString("★ "):QString())+name); sub->setProperty("groupName",name); sub->setToolTipsVisible(true); sub->installEventFilter(this);
@@ -191,8 +191,8 @@ void TrayController::rebuildMenu() {
             QStringList quick;
             const auto appendMember=[&](const QString& value) { if (!value.isEmpty() && members.contains(value) && !quick.contains(value)) quick.append(value); };
             appendMember(current);
-            for (const auto& value:favorites) { if (quick.size()>=16) break; appendMember(value.toString()); }
-            for (const auto& member:members) { if (quick.size()>=16) break; appendMember(member.toString()); }
+            for (const auto& value:favorites) { if (quick.size()>=6) break; appendMember(value.toString()); }
+            for (const auto& member:members) { if (quick.size()>=6) break; appendMember(member.toString()); }
             for (const auto& value:quick) {
                 auto* action = sub->addAction(value); action->setCheckable(true); action->setChecked(value == current);
                 action->setProperty("memberName",value); const bool nested=controller_->proxies().value(value).toObject().value("all").isArray();
@@ -213,9 +213,15 @@ void TrayController::rebuildMenu() {
     menu_.addSeparator();
 
     auto* subscriptions = menu_.addMenu("订阅"); subscriptions->setEnabled(enabled);
-    for (const auto& profile : controller_->profiles()) {
-        auto* action = subscriptions->addAction(profile.name); action->setCheckable(true); action->setChecked(profile.id == state.activeProfile);
-        connect(action, &QAction::triggered, this, [this, id = profile.id] { controller_->activateProfile(id); });
+    QList<QPair<QString,QString>> quickProfiles;
+    const auto appendProfile=[&](const auto& profile) {
+        if (quickProfiles.size()<5) quickProfiles.append({profile.id,profile.name});
+    };
+    for (const auto& profile:controller_->profiles()) if (profile.id==state.activeProfile) appendProfile(profile);
+    for (const auto& profile:controller_->profiles()) if (profile.id!=state.activeProfile) appendProfile(profile);
+    for (const auto& [id,name]:quickProfiles) {
+        auto* action=subscriptions->addAction(name); action->setCheckable(true); action->setChecked(id==state.activeProfile);
+        connect(action,&QAction::triggered,this,[this,id] { controller_->activateProfile(id); });
     }
     subscriptions->addSeparator(); auto* update = subscriptions->addAction("更新当前订阅");
     bool canUpdate = false; for (const auto& p : controller_->profiles()) if (p.id == state.activeProfile && p.sourceType == "url") canUpdate = true;

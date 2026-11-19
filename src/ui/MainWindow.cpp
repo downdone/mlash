@@ -82,9 +82,9 @@ MainWindow::MainWindow(AppController* controller, QWidget* parent) : QMainWindow
     central->setObjectName("mainSurface"); central->setAttribute(Qt::WA_StyledBackground, true);
     layout->setContentsMargins(0,0,0,0); layout->setSpacing(0);
     auto* sidebar = new QWidget; sidebar->setObjectName("sidebar"); sidebar->setFixedWidth(UiTheme::SidebarWidth); sidebar->setAttribute(Qt::WA_StyledBackground); auto* sideLayout = new QVBoxLayout(sidebar); sideLayout->setContentsMargins(design::ShadowrocketStyle::geometry.sidebarInset,design::ShadowrocketStyle::geometry.sidebarInset,design::ShadowrocketStyle::geometry.sidebarInset,design::ShadowrocketStyle::geometry.sidebarInset); sideLayout->setSpacing(design::ShadowrocketStyle::geometry.sidebarGap);
-    navigation_ = new QListWidget; navigation_->setObjectName("navigation"); navigation_->addItems({"首页", "配置", "数据", "设置"}); navigation_->setIconSize(QSize(18, 18));
+    navigation_ = new QListWidget; navigation_->setObjectName("navigation"); navigation_->addItems({"首页", "配置", "数据", "设置"}); navigation_->setIconSize(QSize(20, 20)); navigation_->setSpacing(design::ShadowrocketStyle::geometry.sidebarGap);
     const QList<int> pageOrder{ViewIds::Home,ViewIds::Profiles,ViewIds::Data,ViewIds::Settings};
-    for (int i=0;i<pageOrder.size();++i) { navigation_->item(i)->setData(Qt::UserRole,pageOrder[i]); navigation_->item(i)->setIcon(navigationIcon(navKindOfView(pageOrder[i]))); }
+    for (int i=0;i<pageOrder.size();++i) { navigation_->item(i)->setData(Qt::UserRole,pageOrder[i]); navigation_->item(i)->setIcon(navigationIcon(navKindOfView(pageOrder[i]))); navigation_->item(i)->setSizeHint(QSize(0,UiTheme::SidebarItemHeight)); }
     sideLayout->addWidget(navigation_, 1);
     // 常驻状态条（分层设计 P1）：四段文案由 statusSentence 统一产出，与托盘 tooltip 同源。
     statusButton_ = new QToolButton(sidebar); statusButton_->setObjectName("sidebarStatus"); statusButton_->setAccessibleName("当前运行状态，单击返回首页"); statusButton_->setCursor(Qt::PointingHandCursor);
@@ -120,7 +120,7 @@ MainWindow::MainWindow(AppController* controller, QWidget* parent) : QMainWindow
     for (int page = 0; page < pages_->count(); ++page) { if (pages_->widget(page)->objectName().isEmpty()) pages_->widget(page)->setObjectName("pageSurface"); pages_->widget(page)->setProperty("pageSurface",true); pages_->widget(page)->setAttribute(Qt::WA_StyledBackground, true); pages_->widget(page)->setAutoFillBackground(true); }
     layout->addWidget(sidebar);
     // 共享框架的顶栏高度和两侧动作槽由风格几何规格统一提供。
-    auto* content = new QWidget(central); content->setObjectName("contentSurface"); auto* contentLayout = new QVBoxLayout(content); contentLayout->setContentsMargins(0,0,0,0); contentLayout->setSpacing(0); pages_->setContentsMargins(UiTheme::ContentInset,UiTheme::ContentTop,UiTheme::ContentInset,UiTheme::ContentTop);
+    auto* content = new QWidget(central); content->setObjectName("contentSurface"); content->installEventFilter(this); auto* contentLayout = new QVBoxLayout(content); contentLayout->setContentsMargins(0,0,0,0); contentLayout->setSpacing(0); pages_->setContentsMargins(UiTheme::ContentInset,UiTheme::ContentTop,UiTheme::ContentInset,UiTheme::ContentTop);
     auto* topbar = new QWidget(content); topbar->setObjectName("topbar"); topbar->setFixedHeight(UiTheme::TopbarHeight);
     chromeDragArea_=topbar; topbar->installEventFilter(this);
     // Equal-width edge slots keep the title centered independently of toolbar actions.

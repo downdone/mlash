@@ -6,6 +6,7 @@ QString templateStyleSheet() {
         /* The application font owns the fallback list; a global QSS family would discard it. */
         QWidget { color: @Ink; }
         QWidget#websiteSurface, QWidget#pageSurface, QWidget#mainSurface, QWidget#settingsSurface, QWidget#settingsCanvas, QWidget#profilesSurface, QStackedWidget, QScrollArea { background: @Window; }
+        QScrollArea#connectionColumnScroll, QWidget#connectionColumnRows { background: transparent; border: none; }
         QStackedWidget#nodeViews { background: @Surface; border-radius: 8px; }
         QDialog#importDialog, QDialog#profilePolicyDialog { background: @Window; }
         QWidget#importSource { background: @Surface; }
@@ -24,9 +25,13 @@ QString templateStyleSheet() {
         QLabel#remoteProfileHeading, QLabel#localProfileHeading, QLabel#prototypeSection { padding: 4px 12px 0px 12px; font-weight: 500; }
         QPushButton[prototypeRow="true"] { text-align: left; background: transparent; border: none; border-radius: 0; padding: 0; }
         QPushButton[backLink="true"] { background: transparent; border: none; color: @Brand; padding: 3px 0; }
+        QWidget#settingsSearchStrip { background: @Window; border-bottom: 1px solid @Separator; }
+        QPushButton#settingsSearchResults { background: transparent; border: none; color: @Secondary; padding: 3px 4px; }
+        QPushButton#settingsSearchResults:hover { background: @Hover; color: @Ink; }
         QLabel[caption="true"] { font-size: @CaptionPoints; }
         QToolButton[prototypeIcon="true"] { background: transparent; border: none; padding: 5px; color: @Brand; }
-        QToolButton#browseGroup { color: @Ink; padding: 5px; }
+        QToolButton#browseGroup { color: @Ink; background: @Control; border: none; border-radius: 6px; padding: 4px 8px; text-align: left; }
+        QToolButton#browseGroup:hover { background: @Hover; }
         QToolButton[prototypeIcon="true"]:hover { background: @Hover; }
         QWidget#settingsCanvas, QWidget#settingsDirectory, QWidget#profileDetailsPage { background: @Window; }
         QFrame#panel { border: none; }
@@ -110,8 +115,12 @@ QString templateStyleSheet() {
         QListWidget#navigation { border: none; background: transparent; outline: none; font-size: @BodyPoints; }
         QListWidget#navigation::item { padding: 4px 8px; margin: 0px; border-radius: 6px; }
         QListWidget#navigation::item:hover { background: @Hover; }
-        QListWidget#navigation::item:selected { background: @Primary; color: @OnPrimary; }
+        QListWidget#navigation::item:selected { background: @Selection; color: @Ink; }
+        QListWidget#navigation::item:selected:hover { background: @Selection; }
+        QLabel#nodeHeadingTitle { font-size: @SectionPoints; font-weight: 600; }
+        QLabel#nodeHeadingCount { color: @Secondary; font-size: @CaptionPoints; }
         QPushButton, QToolButton { min-height: @ControlMinimum; padding: 3px 10px; border: 1px solid transparent; border-radius: 6px; background: @Control; }
+        QPushButton#homeRouteRow { min-height: @HomeControlRowMinimum; padding: 0; }
         QPushButton:hover, QToolButton:hover { background: @Hover; }
         QPushButton:pressed, QToolButton:pressed { background: @Pressed; }
         QPushButton[keyboardFocus="true"]:focus, QToolButton[keyboardFocus="true"]:focus { border: 1px solid @Focus; }
@@ -119,13 +128,17 @@ QString templateStyleSheet() {
         QPushButton[prototypeRow="true"][keyboardFocus="true"]:focus { border: none; }
         QToolButton::menu-indicator { image: none; width: 0px; }
         QListView#nodeList { background: @Surface; border: none; border-radius: 8px; outline: none; }
+        QListWidget#groupChoices { background: transparent; border: none; outline: none; }
+        QListWidget#groupChoices::item { padding: 3px 8px; border-radius: 5px; }
+        QListWidget#groupChoices::item:hover { background: @Hover; }
+        QListWidget#groupChoices::item:selected { background: @Selection; color: @Ink; }
         QToolButton#testGroupButton { padding-right: 22px; }
         QToolButton#testGroupButton::menu-button { width: 20px; border: none; background: transparent; }
         QToolButton#testGroupButton::menu-arrow { image: none; }
         QPushButton#recentNodes { padding-right: 26px; }
         QPushButton#recentNodes::menu-indicator { image: none; width: 0; height: 0; }
         QPushButton[danger="true"]:enabled, QToolButton[danger="true"]:enabled { color: @Error; }
-        QLabel#emptyState { color: @Secondary; padding: 24px; }
+        QLabel#emptyState { color: @Secondary; padding: 0px; }
         QPushButton[primary="true"]:enabled, QToolButton[primary="true"]:enabled, QPushButton[visualPrimary="true"]:enabled { background: @Primary; color: @OnPrimary; border-color: @Primary; }
         QPushButton[primary="true"]:hover:enabled, QToolButton[primary="true"]:hover:enabled, QPushButton[visualPrimary="true"]:hover:enabled { background: @PrimaryPressed; }
         QPushButton[primary="true"]:pressed:enabled, QToolButton[primary="true"]:pressed:enabled, QPushButton[visualPrimary="true"]:pressed:enabled { background: @PrimaryPressed; border-color: @Focus; }
@@ -185,8 +198,8 @@ QString templateStyleSheet() {
         QToolButton#statusDetails[keyboardFocus="true"]:focus { border-color: @Focus; }
         QPushButton[mode] { min-width: 35px; }
         /* K7：配置页行高 76px（原型 .profile-row），图标 37px 方形。 */
-        QListView#remoteProfileList, QListView#localProfileList { border: none; background: transparent; outline: none; }
-        QListView#remoteProfileList::item, QListView#localProfileList::item { border-bottom: 1px solid @Separator; }
+        QListView#profileList { border: none; background: transparent; outline: none; }
+        QListView#profileList::item { border: none; background: transparent; }
         QLabel#profileRowMark { background: @Control; border-radius: 10px; }
         /* K3：右侧抽屉（410px），原型 .drawer。 */
         QDialog#nodeDetailsDrawer { background: @Surface; border-left: 1px solid @Border; }

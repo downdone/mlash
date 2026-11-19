@@ -4,7 +4,7 @@
 
 namespace mlash::design::ShadowrocketStyle {
 
-inline constexpr Geometry geometry{30,28,8,8, 14,12,12,184, 42,32,34,36, 36,38,52,350, 8,6,16,76,4};
+inline constexpr Geometry geometry{30,28,8,8, 14,12,12,228, 42,48,34,36, 36,38,52,350, 8,8,16,76,4};
 inline constexpr Typography typography{9.5,10.0,0.87,8.25, 15,10,14,12};
 inline constexpr const char* artworkSurface="#F2F2F7";
 
