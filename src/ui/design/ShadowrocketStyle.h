@@ -12,31 +12,31 @@ inline constexpr const char* artworkSurface="#F2F2F7";
 inline constexpr Colors light{
     "#FAFAFC","#F5F6F8","#FFFFFF",
     "#1D1D1F","#585E68","#62636B","#989DA6",
-    "#DDE1E7","#E7E9ED","#0058BA","#EAF2FF",
-    "#0063CF","#FFFFFF","#F0F4F9","#0058BA",
-    "#F5F6F8","#E9EDF3","#004B9A",
-    "#236E46","#855100","#B92330","#8A919C","#F2F2F7"};
+    "#DDE1E7","#E7E9ED","#1769C2","#EAF2FF",
+    "#1769C2","#FFFFFF","#F0F4F9","#1769C2",
+    "#F5F6F8","#E9EDF3","#0E5AA6",
+    "#236E46","#855100","#B92330","#8A919C","#F2F2F7","#34C759"};
 inline constexpr Colors dark{
     "#222326","#25262A","#2D2E32",
     "#F5F5F7","#CDD0D8","#B9BFC8","#858A93",
     "#50535B","#42454C","#A5C9FF","#2D4564",
-    "#2776CF","#FFFFFF","#36393F","#A5C9FF",
-    "#303238","#3D4249","#175FAF",
-    "#91DDB4","#FFD09C","#FFAFB5","#969AA3","#F2F2F7"};
+    "#2B73BE","#FFFFFF","#36393F","#A5C9FF",
+    "#303238","#3D4249","#195B9A",
+    "#91DDB4","#FFD09C","#FFAFB5","#969AA3","#F2F2F7","#30D158"};
 inline constexpr Colors highContrastLight{
     "#FFFFFF","#FFFFFF","#FFFFFF",
     "#000000","#1A1A1A","#333333","#6B6B6B",
     "#000000","#000000","#0B3D91","#DCE6F7",
     "#0B3D91","#FFFFFF","#EDEDED","#0B63CE",
     "#F2F2F2","#D9D9D9","#082C6B",
-    "#00552E","#6B3A00","#A30018","#4A4A4A","#F2F2F7"};
+    "#00552E","#6B3A00","#A30018","#4A4A4A","#F2F2F7","#00552E"};
 inline constexpr Colors highContrastDark{
     "#000000","#000000","#101010",
     "#FFFFFF","#FFFFFF","#E6E6E6","#8C8C8C",
     "#FFFFFF","#FFFFFF","#FFD60A","#3A2F00",
     "#FFD60A","#000000","#262626","#FFD60A",
     "#1C1C1C","#333333","#FFE44D",
-    "#5CFFA8","#FFD60A","#FF8A9A","#FFFFFF","#F2F2F7"};
+    "#5CFFA8","#FFD60A","#FF8A9A","#FFFFFF","#F2F2F7","#5CFFA8"};
 
 constexpr const Colors& colors(bool isDark, bool highContrast) {
     if (highContrast) return isDark ? highContrastDark : highContrastLight;

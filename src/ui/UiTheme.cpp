@@ -48,6 +48,7 @@ void applyAppearance(Qt::ColorScheme scheme,bool highContrast) {
     Primary=c.primary; OnPrimary=c.onPrimary; Hover=c.hover; Focus=c.focus;
     Control=c.control; Pressed=c.pressed; PrimaryPressed=c.primaryPressed;
     Success=c.success; Warning=c.warning; Error=c.error; Track=c.track;
+    SwitchOn=c.switchOn;
     qApp->setFont(bodyFont());
     qApp->setPalette(palette()); qApp->setStyleSheet(styleSheet()); qApp->style()->setObjectName("mlash-refined"); emit notifier()->changed();
     for (auto* widget:QApplication::topLevelWidgets()) widget->update();

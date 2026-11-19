@@ -18,7 +18,7 @@ protected:
         QPainter p(this); p.setRenderHint(QPainter::Antialiasing);
         p.setPen(isEnabled() ? QColor(UiTheme::Ink) : QColor(UiTheme::Muted)); p.drawText(QRect(0, 0, width() - 56, height()), Qt::AlignVCenter | Qt::AlignLeft, text());
         const QRectF track(width() - TrackWidth, (height() - TrackHeight) / 2.0, TrackWidth, TrackHeight);
-        p.setPen(Qt::NoPen); p.setBrush(isChecked() ? QColor(isEnabled() ? UiTheme::Primary : UiTheme::Disabled) : QColor(UiTheme::Track)); p.drawRoundedRect(track, TrackHeight / 2.0, TrackHeight / 2.0);
+        p.setPen(Qt::NoPen); p.setBrush(isChecked() ? QColor(isEnabled() ? UiTheme::SwitchOn : UiTheme::Disabled) : QColor(UiTheme::Track)); p.drawRoundedRect(track, TrackHeight / 2.0, TrackHeight / 2.0);
         p.setBrush(QColor(UiTheme::OnPrimary)); p.drawEllipse(QPointF(track.left() + (isChecked() ? TrackWidth - Inset - Knob / 2.0 : Inset + Knob / 2.0), track.center().y()), Knob / 2.0, Knob / 2.0);
         if (hasFocus() && (keyboardFocus_ || property("keyboardFocus").toBool())) { p.setBrush(Qt::NoBrush); p.setPen(QPen(QColor(UiTheme::Focus), 1)); p.drawRoundedRect(rect().adjusted(0, 0, -1, -1), 4, 4); }
     }

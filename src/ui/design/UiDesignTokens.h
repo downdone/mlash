@@ -9,7 +9,7 @@ struct Colors {
     const char *border, *separator, *brand, *selection;
     const char *primary, *onPrimary, *hover, *focus;
     const char *control, *pressed, *primaryPressed;
-    const char *success, *warning, *error, *track, *artworkSurface;
+    const char *success, *warning, *error, *track, *artworkSurface, *switchOn;
 };
 
 // Physical dimensions are in device-independent pixels. Text scaling is applied

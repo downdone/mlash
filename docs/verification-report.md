@@ -1,5 +1,15 @@
 # 验证报告
 
+## 2026-11-19：U27 移动端参考图设计审视
+
+按用户提供的 Shadowrocket 截图审视首页、配置、节点编辑、路由、设置与数据的任务和发现路径，记录[桌面端转译准则](design/u27-shadowrocket-mobile-lessons.md)，未修改这些页面的业务行为或路由。`check_docs.py`：139 个 Markdown 文件、0 问题；`check_document_privacy.py`：146 个文件、0 问题；`check_ui_tokens.py`：0 命中；`git diff --check`：0 问题。该设计审视不构成 UI 实施或原生人工验收。
+
+## 2026-11-19：U26 品牌蓝主按钮与绿色胶囊开关本地预览
+
+用户澄清“胶囊”指开关轨道，主操作按钮应使用独立主题色。首次误做的绿色主按钮与胶囊圆角已撤销，错误预览包废弃；详见[修订设计和实施复核](design/u26-theme-buttons-green-switches.md)。最终代码增加独立 `switchOn` 语义色，浅/深色启用轨道为绿、关闭为灰；主按钮与品牌使用深海蓝。`scripts/build.ps1` 成功，`scripts/test.ps1 -TestRegex '^(appearance_tests|ui_components|subscription_cards_ui)$'` **3/3 通过，0 失败**，耗时 54.65 秒。人工检查隔离离屏网站测试页的蓝色主按钮，以及设置页明暗主题同屏的绿色启用/灰色关闭开关；`check_ui_tokens.py` 0 命中。原生显示器/读屏验收未执行。
+
+`scripts/package.ps1 -OutputName Mlash-1.21.0-windows-x64-u26-theme-switch-preview` 生成独立本地 ZIP，SHA-256 `449a95986abf23dc6552c0998cb5cd9f174c3d952e8d01be71b222deed5581cd`；`ci_release_check.py` 验证 35 文件与逐文件完整性，`ci_smoke.ps1` 从该包使用隔离数据启动，Schannel TLS 可用、八路由截图完成。v1.21.0 标签和资产未修改；真实系统代理/TUN、跨机器和长稳未验，`release_qualified=false`。
+
 ## 2026-11-19：U25 明亮语义配色本地预览
 
 按[事前设计与复核](design/u25-brighter-macos-semantic-palette.md)仅修改集中浅/深语义色；浅色改为近白画布、白色内容面和浅灰侧栏，深色改为柔和深灰层级，增强对比套色保持原值。`scripts/build.ps1` 成功。`scripts/test.ps1 -TestRegex '^(appearance_tests|appearance_prefs_tests|navigation_contract_tests|subscription_cards_ui|settings_value_tests|ui_components)$'` **6/6 通过，0 失败**，耗时 75.12 秒；外观测试包含四主页面明暗、多尺寸/文字缩放及语义文字对比度。人工查看离屏首页、配置双卡、数据连接、设置及托盘菜单截图，未见表面颜色断层。`check_ui_tokens.py` 0 命中；没有执行原生显示器/读屏验收。

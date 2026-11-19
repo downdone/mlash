@@ -15,6 +15,7 @@ inline const char *Border=design::ShadowrocketStyle::colors(false,false).border,
 inline const char *Primary=design::ShadowrocketStyle::colors(false,false).primary, *OnPrimary=design::ShadowrocketStyle::colors(false,false).onPrimary, *Hover=design::ShadowrocketStyle::colors(false,false).hover, *Focus=design::ShadowrocketStyle::colors(false,false).focus;
 inline const char *Control=design::ShadowrocketStyle::colors(false,false).control, *Pressed=design::ShadowrocketStyle::colors(false,false).pressed, *PrimaryPressed=design::ShadowrocketStyle::colors(false,false).primaryPressed;
 inline const char *Success=design::ShadowrocketStyle::colors(false,false).success, *Warning=design::ShadowrocketStyle::colors(false,false).warning, *Error=design::ShadowrocketStyle::colors(false,false).error, *Track=design::ShadowrocketStyle::colors(false,false).track;
+inline const char *SwitchOn=design::ShadowrocketStyle::colors(false,false).switchOn;
 inline constexpr auto ArtworkSurface=design::ShadowrocketStyle::artworkSurface;
 inline constexpr int ControlHeight = design::ShadowrocketStyle::geometry.controlHeight, TableRow = design::ShadowrocketStyle::geometry.tableRow, PanelGap = design::ShadowrocketStyle::geometry.panelGap, PopupRadius = design::ShadowrocketStyle::geometry.popupRadius;
 inline constexpr int ContentInset = design::ShadowrocketStyle::geometry.contentInset, ContentTop = design::ShadowrocketStyle::geometry.contentTop, PanelInset = design::ShadowrocketStyle::geometry.panelInset, SidebarWidth = design::ShadowrocketStyle::geometry.sidebarWidth;

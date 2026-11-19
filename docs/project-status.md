@@ -2,6 +2,10 @@
 
 ## 当前任务
 
+**U27 设计审视已完成：Shadowrocket 移动端交互原则提炼。** 对照用户提供的首页、配置、导入、编辑、路由、设置与数据截图，把“少操心且找得到”转为[桌面端逐页迁移和检查项](design/u27-shadowrocket-mobile-lessons.md)。已写入交互契约；这是设计分析，不声称代码已按全部建议实现。文档与隐私检查结果见[验证报告](verification-report.md)。
+
+**U26 已实现并完成本机定向与便携包验证：品牌蓝主按钮与绿色胶囊开关。** 按[用户澄清后的设计及复核](design/u26-theme-buttons-green-switches.md)拆开按钮与开关语义，明暗主题的开关启用绿、关闭灰，主按钮统一深海蓝。Windows 构建、3 组受影响回归、明暗截图、35 文件独立预览包及包内八路由冒烟通过；最初误解版预览已废弃。实际证据与未验边界见[验证报告](verification-report.md)，不声称已进入 v1.21.0 发布版。
+
 **U25 已实现并完成本机定向验证：macOS 式明亮语义配色。** 按[事前设计与复核](design/u25-brighter-macos-semantic-palette.md)统一窗口、内容面、侧栏、控件及选中层级，保持业务操作与深色/增强对比语义。Windows 构建、6 组受影响回归、四主页面明暗截图、35 文件预览包完整性及包内八路由冒烟通过；证据与未验范围见[验证报告](verification-report.md)。此变更在 v1.21.0 已发布标签之后，仅作为另名本地预览，不声称已进入该发布版。
 
 **U24 实现、Windows 验收与 v1.21.0 预发布已完成：Daymark 语义配色与配置页重组。** 按[设计与复核](design/u24-daymark-color-and-profile-composition.md)统一明暗配色，配置卡片改为紧凑、有界宽度且与集合标题左对齐；导入在列表上方就近展开。本机 10 组受影响测试、单/双卡截图、35 文件包完整性及包内八路由冒烟通过；[远端标签流水线](https://github.com/downdone/mlash/actions/runs/44448223393) 完整回归 61 通过、1 系统门禁跳过，并生成[预发布资产](https://github.com/downdone/mlash/releases/tag/v1.21.0)。证据与未验边界见[验证报告](verification-report.md)；正式发行资格仍为 `false`。
