@@ -15,6 +15,7 @@
 #include "PrototypeUi.h"
 #include "UiIcons.h"
 #include "UiTheme.h"
+#include "ViewIds.h"
 #include "WidgetStyle.h"
 #include "WindowUiFactories.h"
 #include "WebsiteTestsPage.h"
@@ -247,19 +248,20 @@ void MainWindow::editNodePreferences() {
         groupEditor_->done(QDialog::Rejected); groupEditor_=nullptr;
     }
     const auto expected=controller_->nodePreferences(id),initial=expected.value("groups").toObject().value(group).toObject();
-    auto* dialog=new TaskDialog(this); groupEditor_=dialog; dialog->setProperty("profileId",id); dialog->setProperty("groupName",group); dialog->setAttribute(Qt::WA_DeleteOnClose); dialog->setObjectName("nodePreferencesDialog"); dialog->setWindowTitle("节点选项"); dialog->resize(510,280); auto* box=new QVBoxLayout(dialog); auto* label=new QLabel(group); label->setTextFormat(Qt::PlainText); label->setObjectName("sectionTitle"); box->addWidget(label);
-    auto* form=new QFormLayout; auto* url=new QLineEdit(initial.value("test_url").toString()); url->setObjectName("groupTestUrl"); url->setMaxLength(2048); url->setPlaceholderText("留空沿用默认测试地址"); form->addRow("本组延迟测试地址",url);
-    auto* view=new CompactComboBox; view->addItems({"行列表","卡片"}); view->setCurrentIndex(memberView()); form->addRow("默认视图",view); box->addLayout(form);
-    auto* common=new QCheckBox("作为常用组，在列表和托盘中优先显示"); common->setChecked(expected.value("common_groups").toArray().contains(group)); box->addWidget(common);
-    auto* subscriptionScope=new QLabel("此订阅的切换行为"); subscriptionScope->setProperty("secondary",true); box->addWidget(subscriptionScope);
+    auto* dialog=new TaskDialog(this); groupEditor_=dialog; dialog->setProperty("profileId",id); dialog->setProperty("groupName",group); dialog->setProperty("guardReject",true); dialog->setProperty("retainHiddenDraft",true); dialog->setAttribute(Qt::WA_DeleteOnClose); dialog->setObjectName("nodePreferencesDialog"); dialog->setWindowTitle("策略组设置 · "+group); dialog->resize(490,310);
+    auto* box=new QVBoxLayout(dialog); box->setContentsMargins(20,18,20,16); box->setSpacing(12);
+    auto* label=new QLabel(group); label->setTextFormat(Qt::PlainText); label->setObjectName("sectionTitle"); box->addWidget(label);
+    auto* form=new QFormLayout; form->setContentsMargins(0,0,0,0); form->setHorizontalSpacing(14); form->setVerticalSpacing(10);
+    auto* url=new QLineEdit(initial.value("test_url").toString()); url->setObjectName("groupTestUrl"); url->setMaxLength(2048); url->setPlaceholderText("使用默认测试地址"); form->addRow("测速地址",url);
+    auto* view=new CompactComboBox; view->addItems({"行列表","卡片"}); view->setCurrentIndex(memberView()); form->addRow("显示方式",view); box->addLayout(form);
+    auto* common=new QCheckBox("常用策略组"); common->setToolTip("在组列表和托盘中优先显示"); common->setChecked(expected.value("common_groups").toArray().contains(group)); box->addWidget(common);
+    auto* subscriptionScope=new QLabel("此配置的切换行为"); subscriptionScope->setProperty("secondary",true); box->addWidget(subscriptionScope);
     auto* disconnect=new QCheckBox("切换成员后断开受影响连接"); disconnect->setObjectName("disconnectAffected"); disconnect->setChecked(expected.value("disconnect_affected").toBool()); disconnect->setToolTip("此开关用于该订阅的所有策略组。默认保留。只处理切换前经过所切策略组的连接，单次最多32条；其他连接保留，结果以回读为准。"); box->addWidget(disconnect);
     auto* note=new QLabel; note->setTextFormat(Qt::PlainText); note->setWordWrap(true); box->addWidget(note); auto* buttons=new QDialogButtonBox(QDialogButtonBox::Save|QDialogButtonBox::Cancel); buttons->button(QDialogButtonBox::Save)->setText("保存"); buttons->button(QDialogButtonBox::Cancel)->setText("取消"); box->addWidget(buttons);
     const auto draft=[expected,group,url,view,common,disconnect] { auto value=expected; auto groups=value.value("groups").toObject(); groups[group]=QJsonObject{{"test_url",url->text().trimmed()},{"view",view->currentIndex()}}; value["groups"]=groups; value["last_group"]=group; value["disconnect_affected"]=disconnect->isChecked(); auto commons=value.value("common_groups").toArray(); for (int i=commons.size()-1;i>=0;--i) if (commons[i].toString()==group) commons.removeAt(i); if (common->isChecked()) commons.append(group); value["common_groups"]=commons; return value; };
     const auto baseline=draft(); auto pending=std::make_shared<bool>(false); DialogDraftGuard::protect(dialog,[draft,baseline] { return draft()!=baseline; },[pending] { return *pending; }); connect(buttons,&QDialogButtonBox::rejected,dialog,&QDialog::reject);
     connect(buttons,&QDialogButtonBox::accepted,dialog,[this,id,expected,draft,pending,buttons] { *pending=true; buttons->setEnabled(false); controller_->updateNodePreferences(id,draft(),expected); });
     connect(controller_,&AppController::operationFinished,dialog,[this,dialog,pending,buttons,note,view](bool ok,const QString& message) { if (!*pending) return; *pending=false; buttons->setEnabled(true); if (ok) { setMemberView(view->currentIndex()); dialog->accept(); } else note->setText(message); });
-    dialog->setProperty("embeddedTask",true); dialog->setParent(nodeSection_,Qt::Widget); dialog->setMinimumSize(0,0); dialog->setSizePolicy(QSizePolicy::Preferred,QSizePolicy::Maximum);
-    static_cast<QVBoxLayout*>(nodeSection_->layout())->insertWidget(1,dialog);
     connect(dialog,&QDialog::finished,dialog,&QObject::deleteLater); dialog->show();
 }
 
@@ -298,7 +300,7 @@ void MainWindow::updateProxies() {
 }
 
 void MainWindow::updateGroup() {
-    if (groupEditor_) groupEditor_->setVisible(groupEditor_->property("profileId").toString()==profilesCombo_->currentData().toString()&&groupEditor_->property("groupName").toString()==selectedGroup_);
+    if (groupEditor_) groupEditor_->setVisible(route_.view==ViewIds::Home&&groupEditor_->property("profileId").toString()==profilesCombo_->currentData().toString()&&groupEditor_->property("groupName").toString()==selectedGroup_);
     websitePage_->suggestGroup(selectedGroup_);
     const auto group = selectedGroup_; const bool sameProfile = profilesCombo_->currentData().toString() == controller_->state().activeProfile;
     const auto object = controller_->proxies().value(group).toObject();

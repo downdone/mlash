@@ -21,6 +21,7 @@
 [U25 更明亮的 macOS 式配色](design/u25-brighter-macos-semantic-palette.md)：在既有语义色上提亮窗口、内容面与侧栏层级，覆盖明暗/增强对比的事前设计与复核边界。
 [U26 品牌蓝主按钮与绿色胶囊开关](design/u26-theme-buttons-green-switches.md)：主操作使用蓝色主题，启用的胶囊开关为绿色、关闭为灰色，记录用户澄清后的事前设计与复核。
 [U27 Shadowrocket 移动端交互启示](design/u27-shadowrocket-mobile-lessons.md)：从用户截图提炼“少操心且找得到”的桌面信息架构、逐页迁移和检查项；此文为设计分析，不等于代码已完成。
+[U29 四处任务表面重设计](design/u29-task-surface-redesign.md)：按实机反馈修正数据重复展开、配置卡片比例、节点与组密集名单及首页组设置挤占列表；实施与验证结果另见项目状态和验证报告。
 [U22 Daymark 方法逐页重审](design/u22-daymark-page-reaudit.md)：把“简约而不简单”落实到 Mlash 的配置、节点、观察和恢复路径；逐页检查布局、信息、交互与切换状态。设计不等于完成。
 [U22 订阅优先的配置页重设计](design/u22-config-rethink.md)：先脱离旧的列表→详情目录→检查器结构，形成第一版[内容工作台原型](design/u22-config-rethink.html)；按用户明确的高频任务与 Clash 源码操作链，第二版改为[订阅列表/更新优先原型](design/u22-subscription-first.html)。当前运行 UI 已迁入统一卡片网格和内容工作区；实际完成度以项目状态与验证报告为准。
 

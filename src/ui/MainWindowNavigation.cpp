@@ -156,6 +156,9 @@ void MainWindow::navigate(Route route) {
         if (connectionDetail_) connectionDetail_->close();
         if (dataPanels_) updateDataPanelVisibility();
     }
+    if (groupEditor_) groupEditor_->setVisible(route.view == ViewIds::Home &&
+        groupEditor_->property("profileId").toString() == profilesCombo_->currentData().toString() &&
+        groupEditor_->property("groupName").toString() == selectedGroup_);
     if (route.view != ViewIds::Settings && configPreview_) configPreview_->close();
     if (outboundDialog_) outboundDialog_->close();
     pages_->setCurrentIndex(stackIndex(route.view));

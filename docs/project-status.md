@@ -2,6 +2,8 @@
 
 ## 当前任务
 
+**U29 已实施并完成 Windows 本机验证：四处任务表面重设计。** [Shadowrocket 逐图提炼与验收标准](design/u29-shadowrocket-reference-audit.md)和[实施后复核](design/u29-task-surface-redesign.md)覆盖数据重复展开、配置卡比例、节点名单及首页组设置。Windows 构建、完整隔离回归（62 组中 61 通过/0 失败/1 系统门禁跳过）、35 文件便携包完整性与包内八入口/TLS 冒烟通过。预发布上传结果另记；真实系统代理/TUN、原生读屏和长稳未验，`release_qualified=false`。
+
 **U28 已实施并完成 Windows 本机验证：按任务优先原则逐页落实。** [事前设计及实施后逐页复核](design/u28-shadowrocket-task-first-delivery.md)确认既有首页、配置、数据、设置入口，补足路由效果说明、节点两视图的常显独立详情及配置卡片动作/失败提示。Windows 构建、完整隔离回归 61 通过/0 失败/1 系统门禁跳过，35 文件便携预览包完整性与包内八路由冒烟通过；实际证据和未验范围见[验证报告](verification-report.md)。原生读屏、真实系统代理/TUN、跨机器与长稳未验，`release_qualified=false`。
 
 **U27 设计审视已完成：Shadowrocket 移动端交互原则提炼。** 对照用户提供的首页、配置、导入、编辑、路由、设置与数据截图，把“少操心且找得到”转为[桌面端逐页迁移和检查项](design/u27-shadowrocket-mobile-lessons.md)。已写入交互契约；这是设计分析，不声称代码已按全部建议实现。文档与隐私检查结果见[验证报告](verification-report.md)。

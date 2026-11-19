@@ -1,5 +1,13 @@
 # 验证报告
 
+# 2026-11-19：U29 Shadowrocket 任务表面与 1.22.0 Windows 便携候选
+
+用户提供的移动端参考与四张 Mlash 问题截图先后形成[逐图设计标准](design/u29-shadowrocket-reference-audit.md)及[四处实施后复核](design/u29-task-surface-redesign.md)。首轮局部实现早于完整逐图提炼；用户指出流程问题后补齐设计，按它复查并修正了卡片密度、名单短列表高度和数据卡面。测试截图 `build/ui-screens-u29-release/` 显示流量直接可读、白色有界配置卡、可搜索节点名单和独立组设置；初判“组设置窗口主题不一致”经核实是测试显式使用深色主题，首页同为深色。
+
+`scripts/build.ps1` 成功。首次完整隔离回归 62 组中仅新增的跨页返回断言失败；修正首页返回时独立组窗口的恢复条件后，`flat_workspace_tests` 单独通过。随后 1.22.0 完整 `scripts/test.ps1`：62 组中 61 通过、0 失败，`system_test_guard` 按默认门禁跳过，479.85 秒。最后对数据卡面样式调整后重建并跑受影响的 5 组 UI/外观测试，全部通过。文档导航、隐私、UI token 与 `git diff --check` 均无发现。
+
+最终 `scripts/package.ps1 -OutputName Mlash-1.22.0-windows-x64-portable` 生成 `dist/Mlash-1.22.0-windows-x64-portable.zip`，本地 SHA-256 `93a2fbe16b62317f8d2d3f8e7c0558412bd96341bf5f5882aeed2a3877ff3f5a`。`ci_release_check.py` 验证 35 文件白名单、逐文件内容、包与当前构建的 EXE 一致、固定内核和 ZIP 侧车。`ci_smoke.ps1` 从最终包用隔离数据启动，Qt 6.10.2 / Schannel TLS 可用，八个入口和设置搜索往返通过。证据在忽略的 `build/u29-package-identity-final.json` 与 `build/u29-package-smoke-final/`。此段记录本地候选；远端标签、预发布资产和下载核验待实际流水线完成后另记。真实系统代理/TUN、Windows 10/干净机器、原生读屏和 72 小时长稳未验，`release_qualified=false`。
+
 ## 2026-11-19：U28 按任务优先原则逐页实施与本地便携预览
 
 按[事前逐页设计与实施后复核](design/u28-shadowrocket-task-first-delivery.md)，核对首页、节点、配置、配置内容/新增、数据和设置的主动作、次动作、返回及空态。代码补足首页路由模式的结果说明、节点行和卡片的常显独立详情入口，以及配置卡片的主体使用和更新失败重试提示。节点卡片详情、延迟重测与主体使用采用独立命中区；测试确认详情和延迟操作均不切换当前节点。配置、数据、设置的既有任务结构经审视符合设计，本轮未另加页面或业务写入。人工检查隔离离屏截图 `route-menu.png`、`node-card-details-affordance.png`、`subscription-list.png`，未见新增遮挡或卡片高度变化。

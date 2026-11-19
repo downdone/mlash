@@ -128,19 +128,9 @@ void MainWindow::updateDataPanelVisibility() {
     websitePage_->setActive(showing && tab == int(ViewIds::DataTab::Tests), selectedGroup_);
 }
 QWidget* MainWindow::trafficPanel() {
-    // 流量：三个统计块 + 60 秒曲线 + 出站摘要（原型 data 页）。
-    auto* panel = new QWidget; panel->setObjectName("trafficPanel"); auto* layout = new QVBoxLayout(panel); layout->setContentsMargins(0,0,0,0); layout->setSpacing(8);
-    auto* tiles = new QHBoxLayout; tiles->setSpacing(1);
-    for (const auto& pair : QList<QPair<QString,QString>>{{"trafficUpload","上传"},{"trafficDownload","下载"},{"trafficActive","活动连接"}}) {
-        auto* tile = WindowParts::panel(); tile->setObjectName(pair.first); auto* tileLayout = new QVBoxLayout(tile); tileLayout->setContentsMargins(12,9,12,9); tileLayout->setSpacing(3);
-        auto* caption = new QLabel(pair.second); caption->setProperty("secondary", true); tileLayout->addWidget(caption);
-        auto* value = new QLabel("—"); value->setObjectName(pair.first + "Value"); value->setProperty("role", "value"); value->setProperty("metricValue",true); tileLayout->addWidget(value);
-        tiles->addWidget(tile, 1);
-    }
-    layout->addLayout(tiles);
-    auto* diagnosticRows=PrototypeUi::group(layout,"诊断"); auto* outbound=PrototypeUi::row(diagnosticRows,"trafficDiagnostics","出口与服务诊断",UiIcons::Glyph::Globe,"按需检测"); connect(outbound,&QPushButton::clicked,this,&MainWindow::showOutboundDiagnostics);
-    auto* expand=PrototypeUi::row(diagnosticRows,"trafficDetails","流量明细",UiIcons::Glyph::Chart);
-    auto* metrics = new HomeMetricsView(controller_->homeMetrics()); connect(metrics,&HomeMetricsView::inspectRequested,this,&MainWindow::showOutboundDiagnostics); layout->addWidget(metrics); metrics->hide(); connect(expand,&QPushButton::clicked,metrics,[metrics] { metrics->setVisible(!metrics->isVisible()); });
+    // This page is already the detail surface. Show its one metric source directly.
+    auto* panel = new QWidget; panel->setObjectName("trafficPanel"); auto* layout = new QVBoxLayout(panel); layout->setContentsMargins(0,0,0,0); layout->setSpacing(12);
+    auto* metrics = new HomeMetricsView(controller_->homeMetrics()); connect(metrics,&HomeMetricsView::inspectRequested,this,&MainWindow::showOutboundDiagnostics); layout->addWidget(metrics);
     homeOutboundSummary_ = new QLabel; homeOutboundSummary_->setObjectName("outboundSummary"); homeOutboundSummary_->setProperty("secondary", true); homeOutboundSummary_->setWordWrap(true); layout->addWidget(homeOutboundSummary_);
     layout->addStretch();
     return panel;

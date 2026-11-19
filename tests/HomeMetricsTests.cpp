@@ -46,8 +46,8 @@ private slots:
         window.navigate(Route{ViewIds::Data, kNoCategory, HomeAnchor::Control, int(ViewIds::DataTab::Traffic)});
         QCoreApplication::processEvents();
         QCOMPARE(window.currentRoute().tab,int(ViewIds::DataTab::Traffic));
-        QVERIFY(metrics->isHidden()); auto* details=window.findChild<QPushButton*>("trafficDetails"); QVERIFY(details); details->click();
-        QVERIFY(!metrics->isHidden());   // 已选中的堆叠页：不再 hidden，只随数据页一起显示/隐藏
+        QVERIFY(!metrics->isHidden());
+        QVERIFY(!window.findChild<QPushButton*>("trafficDetails"));
         window.show(); QTest::qWait(20); QVERIFY(metrics->isVisible());
         // 首页不含指标块；切回合页后它随数据页一起隐藏。
         window.setPage(0); QCoreApplication::processEvents();

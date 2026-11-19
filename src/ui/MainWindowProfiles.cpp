@@ -122,6 +122,7 @@ QWidget* MainWindow::profilesPage() {
     profiles_->setUniformItemSizes(true);
     profiles_->setGridSize(QSize(320, 112));
     profiles_->setMouseTracking(true);
+    profiles_->installEventFilter(this);
     profiles_->viewport()->installEventFilter(this);
     profiles_->setAccessibleName("订阅卡片");
     profiles_->setAccessibleDescription("方向键选择卡片，回车使用，F5 检查更新，菜单键打开操作；有待应用更新时按 Ctrl+Shift+V 查看变化、Ctrl+Shift+A 应用更新");
@@ -142,10 +143,10 @@ QWidget* MainWindow::profilesPage() {
 void MainWindow::updateProfileGrid() {
     if (!profiles_) return;
     const int available = qMax(1, profiles_->viewport()->width());
-    const int columns = profileRowsModel_ && profileRowsModel_->rowCount() > 1 && available >= 600 ? 2 : 1;
+    const int columns = profileRowsModel_ && profileRowsModel_->rowCount() > 1 && available >= 900 ? 2 : 1;
     // Leave a few pixels for the view's own layout rounding and scrollbar.
     // An exact half can wrap the second card onto a new row at fractional DPI.
-    const int width = qMax(1, columns == 2 ? qMin((available - 20) / 2, 520) : qMin(available - 8, 560));
+    const int width = qMax(1, columns == 2 ? qMin((available - 20) / 2, 448) : qMin(available - 8, 448));
     if (profiles_->gridSize() != QSize(width, 112)) profiles_->setGridSize(QSize(width, 112));
 }
 

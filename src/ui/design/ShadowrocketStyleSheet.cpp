@@ -11,6 +11,13 @@ QString templateStyleSheet() {
         QDialog#importDialog, QDialog#profilePolicyDialog { background: @Window; }
         QDialog#importDialog[inlineImport="true"] { background: transparent; }
         QFrame#profileImportHost { background: @Surface; border: 1px solid @Separator; border-radius: 10px; }
+        QFrame#homeMetrics { background: @Surface; border: 1px solid @Border; border-radius: 10px; }
+        QDialog#proxyEditorDialog[embeddedTask="true"] { background: @Window; }
+        QTabWidget#proxyEditorTabs::pane { background: transparent; border: none; top: 4px; }
+        QTabWidget#proxyEditorTabs QTabBar { background: @Sidebar; border-radius: 7px; }
+        QTabWidget#proxyEditorTabs QTabBar::tab { background: transparent; color: @Secondary; border: none; border-radius: 5px; margin: 2px; padding: 7px 18px; }
+        QTabWidget#proxyEditorTabs QTabBar::tab:selected { background: @Surface; color: @Ink; font-weight: 600; }
+        QListWidget#editableNodes, QListWidget#editableGroups { background: @Surface; border: 1px solid @Border; border-radius: 9px; outline: none; }
         QScrollArea#importScroll { background: transparent; border: none; }
         QWidget#importBody, QTabWidget#importTabs, QTabWidget#importTabs::pane { background: @Surface; border: none; }
         QLabel#profileCollectionHeading { font-size: @SectionPoints; font-weight: 600; }
@@ -43,8 +50,9 @@ QString templateStyleSheet() {
         QFrame#panel { border: none; }
         QFrame#homeControlCard { border: @PanelBorder; border-radius: 8px; }
         QFrame#homeControlSeparator { background: @Separator; border: none; margin-left: 35px; }
+        QLabel#taskTitle { font-size: @SectionPoints; font-weight: 600; }
         QTabBar#taskTabs { background: @Sidebar; border-radius: 7px; }
-        QTabBar#taskTabs::tab { border: none; background: transparent; color: @Secondary; padding: 4px 10px; margin: 1px; border-radius: 5px; }
+        QTabBar#taskTabs::tab { border: none; background: transparent; color: @Secondary; padding: 6px 12px; margin: 2px; border-radius: 5px; }
         QTabBar#taskTabs::tab:selected { background: @Surface; color: @Ink; }
         QDialog[embeddedTask="true"] { background: @Window; }
         QTabBar#dataTabs { background: @Sidebar; border-radius: 7px; }

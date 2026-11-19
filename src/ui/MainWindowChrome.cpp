@@ -31,6 +31,12 @@ void MainWindow::applyWindowChrome() {
 }
 
 bool MainWindow::eventFilter(QObject* watched,QEvent* event) {
+    if (profiles_ && watched==profiles_ && event->type()==QEvent::KeyPress) {
+        profiles_->setProperty("keyboardFocus",true); profiles_->viewport()->update();
+    }
+    if (profiles_ && watched==profiles_->viewport() && event->type()==QEvent::MouseButtonPress) {
+        profiles_->setProperty("keyboardFocus",false); profiles_->viewport()->update();
+    }
     if (profiles_ && watched==profiles_->viewport() && event->type()==QEvent::Resize) updateProfileGrid();
     if (profiles_ && watched==profiles_->viewport() &&
         (event->type()==QEvent::MouseButtonPress || event->type()==QEvent::MouseButtonRelease || event->type()==QEvent::MouseButtonDblClick)) {

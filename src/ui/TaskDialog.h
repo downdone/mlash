@@ -8,6 +8,7 @@ class TaskDialog : public QDialog {
 public:
     using QDialog::QDialog;
     void reject() override {
+        if (property("guardReject").toBool() && !DialogDraftGuard::allowLeave(this)) return;
         if (property("embeddedTask").toBool()) {
             for (auto* parent=parentWidget();parent;parent=parent->parentWidget()) if (auto* workspace=dynamic_cast<TaskWorkspace*>(parent)) { if (!workspace->canClose(this)) return; break; }
             if (!DialogDraftGuard::allowLeave(this)) return;

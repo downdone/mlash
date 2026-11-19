@@ -10,11 +10,11 @@ inline constexpr const char* artworkSurface="#F2F2F7";
 
 // Header-only immutable values keep lightweight UI consumers link-independent.
 inline constexpr Colors light{
-    "#FAFAFC","#F5F6F8","#FFFFFF",
-    "#1D1D1F","#585E68","#62636B","#989DA6",
-    "#DDE1E7","#E7E9ED","#1769C2","#EAF2FF",
-    "#1769C2","#FFFFFF","#F0F4F9","#1769C2",
-    "#F5F6F8","#E9EDF3","#0E5AA6",
+    "#F8F9FB","#F4F6F8","#FFFFFF",
+    "#202833","#536171","#596675","#9AA5B1",
+    "#DAE2EA","#E8EDF2","#246DB5","#EDF4FC",
+    "#246DB5","#FFFFFF","#F1F5F9","#246DB5",
+    "#F2F4F7","#E6EDF4","#1D5E9E",
     "#236E46","#855100","#B92330","#8A919C","#F2F2F7","#34C759"};
 inline constexpr Colors dark{
     "#222326","#25262A","#2D2E32",

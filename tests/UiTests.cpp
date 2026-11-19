@@ -115,7 +115,7 @@ private slots:
         QCOMPARE(cards->model()->index(0,0).data(ProfileRowModel::SourceLabel).toString(),QString("new.yaml"));
         const auto cardRect=cards->visualRect(cards->model()->index(0,0));
         QVERIFY(cardRect.left()<=12);
-        QVERIFY(cardRect.width()>500 && cardRect.width()<=560);
+        QVERIFY(cardRect.width()>=420 && cardRect.width()<=448);
         const auto shots=qEnvironmentVariable("MLASH_UI_SCREENSHOTS");
         if (!shots.isEmpty()) { QVERIFY(QDir().mkpath(shots)); QVERIFY(window.grab().save(shots+"/single-subscription-card.png")); }
     }
@@ -129,7 +129,7 @@ private slots:
         remote.source = "http://127.0.0.1:1/sub?token=private";
         remote.active.clear();
         const_cast<QVector<Profile>&>(controller.profiles()).append(remote);
-        MainWindow window(&controller); window.resize(900, 650); window.show(); window.setPage(1);
+        MainWindow window(&controller); window.resize(1440, 650); window.show(); window.setPage(1);
         auto* list = window.findChild<QListView*>("profileList"); QVERIFY(list);
         QCOMPARE(list->model()->rowCount(), 2);
         const auto shots = qEnvironmentVariable("MLASH_UI_SCREENSHOTS");
@@ -146,7 +146,7 @@ private slots:
         QVERIFY(list->visualRect(localIndex).top() == list->visualRect(remoteIndex).top());
         window.resize(560, 650);
         QTRY_VERIFY(list->visualRect(localIndex).top() < list->visualRect(remoteIndex).top());
-        window.resize(900, 650);
+        window.resize(1440, 650);
         QTRY_VERIFY(list->visualRect(localIndex).top() == list->visualRect(remoteIndex).top());
         const auto currentId = controller.state().activeProfile;
         const auto remoteRect = list->visualRect(remoteIndex);
@@ -166,6 +166,12 @@ private slots:
         QVERIFY(workspace->editor("nodes"));
         QVERIFY(workspace->findChild<QTabBar*>("taskTabs")->isVisible());
         QTRY_VERIFY(!window.findChild<QLabel*>("proxyEditorHint")->text().startsWith("正在读取"));
+        auto* entrySearch=workspace->findChild<QLineEdit*>("proxyEntrySearch"); QVERIFY(entrySearch);
+        auto* entryList=workspace->findChild<QListWidget*>("editableNodes"); QVERIFY(entryList);
+        entrySearch->setText("没有这个节点");
+        if (entryList->count()) QVERIFY(entryList->item(0)->isHidden());
+        entrySearch->clear();
+        if (entryList->count()) QVERIFY(!entryList->item(0)->isHidden());
         if (!shots.isEmpty()) QVERIFY(window.grab().save(shots + "/subscription-content.png"));
         workspace->findChild<QPushButton*>("taskBack")->click();
         QTRY_VERIFY(list->isVisible());
@@ -688,6 +694,9 @@ private slots:
         QTimer::singleShot(0,[] { if (auto* box=qobject_cast<QMessageBox*>(QApplication::activeModalWidget())) box->button(QMessageBox::Yes)->click(); });
         window.findChild<QPushButton*>("settingsBack")->click(); QCOMPARE(settings->currentIndex(),0); QCOMPARE(port->value(),baseline); QCOMPARE(testUrl->text(),originalUrl); QCOMPARE(operations.size(),0);
         window.navigate(Route{ViewIds::Profiles}); QCoreApplication::processEvents(); save("profiles");
+        window.navigate(Route{ViewIds::Data,kNoCategory,HomeAnchor::Control,int(ViewIds::DataTab::Traffic)}); QCoreApplication::processEvents();
+        QVERIFY(window.findChild<QWidget*>("homeMetrics")->isVisible()); QVERIFY(!window.findChild<QPushButton*>("trafficDetails")); save("data-traffic");
+        window.navigate(Route{ViewIds::Profiles}); QCoreApplication::processEvents();
         auto* local=window.findChild<QListView*>("profileList"); QVERIFY(local&&local->model()->rowCount());
         QTest::mouseClick(local->viewport(),Qt::LeftButton,{},ProfileCardDelegate::menu(local->visualRect(local->model()->index(0,0))).center());
         auto* profileMenu=window.findChild<QMenu*>("profileContextMenu"); QVERIFY(profileMenu);

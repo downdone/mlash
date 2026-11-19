@@ -270,7 +270,9 @@ private slots:
         auto* search=window.findChild<QLineEdit*>("nodeSearch"); QVERIFY(search->isVisible()); search->setText("no-result"); QCoreApplication::processEvents();
         window.findChild<QAction*>("locateCurrent")->trigger(); QCOMPARE(search->text(),QString());
         auto* restore=window.findChild<QPushButton*>("restoreNodeFilters"); QVERIFY(restore->isVisible()); restore->click(); QCOMPARE(search->text(),QString("no-result"));
-        window.findChild<QAction*>("nodePreferences")->trigger(); QPointer<QDialog> groupEditor=window.findChild<QDialog*>("nodePreferencesDialog"); QVERIFY(groupEditor&&groupEditor->isVisible()&&!groupEditor->isWindow());
+        window.findChild<QAction*>("nodePreferences")->trigger(); QPointer<QDialog> groupEditor=window.findChild<QDialog*>("nodePreferencesDialog"); QVERIFY(groupEditor&&groupEditor->isVisible()&&groupEditor->isWindow());
+        snapshot(&window,"group-settings-background");
+        if (const auto output=qEnvironmentVariable("MLASH_UI_SCREENSHOTS"); !output.isEmpty()) QVERIFY(groupEditor->grab().save(output+"/group-settings-window.png"));
         auto* groupUrl=groupEditor->findChild<QLineEdit*>("groupTestUrl"); groupUrl->setText("https://example.test/check");
         proxies["另一组"]=QJsonObject{{"type","Selector"},{"all",members},{"now","JP 日本"}}; controller.proxiesChanged();
         auto* menu=window.findChild<QMenu*>("nodeGroupMenu"); QVERIFY(menu);
@@ -279,6 +281,8 @@ private slots:
         answer(QMessageBox::No); window.findChild<QAction*>("nodePreferences")->trigger(); QVERIFY(groupEditor); QVERIFY(!groupEditor->isVisible());
         for (auto* action:menu->actions()) if (action->text()=="示例组") { action->trigger(); break; }
         QVERIFY(groupEditor->isVisible()); QCOMPARE(groupUrl->text(),QString("https://example.test/check"));
+        window.setPage(1); QVERIFY(!groupEditor->isVisible()); QVERIFY(DialogDraftGuard::hasDrafts(&window));
+        window.setPage(0); QVERIFY(groupEditor->isVisible()); QCOMPARE(groupUrl->text(),QString("https://example.test/check"));
         answer(QMessageBox::Yes); groupEditor->reject(); QTRY_VERIFY(groupEditor.isNull());
     }
 };
