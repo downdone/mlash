@@ -35,7 +35,7 @@ QFont bodyFont() {
 #else
     font.setFamilies({bundled,"Microsoft YaHei UI","Segoe UI","Noto Sans CJK SC"});
 #endif
-    font.setPointSizeF(BodyPoints*percent/100.0); font.setStyleHint(QFont::SansSerif); return font;
+    font.setPointSizeF(BodyPoints*percent/100.0); font.setWeight(QFont::Normal); font.setStyleHint(QFont::SansSerif); return font;
 }
 void setPreferences(const QString& appearance,int scale) { if (!validAppearance(appearance,scale)) return; if (preferred==appearance&&percent==scale) { if (!installed) install(); return; } preferred=appearance; percent=scale; if (!installed) install(); else updatePreferred(); }
 void applyAppearance(Qt::ColorScheme scheme,bool highContrast) {
@@ -73,8 +73,8 @@ QPalette palette() {
     colors.setColor(QPalette::Base,QColor(Surface));
     colors.setColor(QPalette::AlternateBase,QColor(Window));
     colors.setColor(QPalette::PlaceholderText,QColor(Secondary));
-    colors.setColor(QPalette::Link,QColor(Brand));
-    colors.setColor(QPalette::LinkVisited,QColor(Brand));
+    colors.setColor(QPalette::Link,QColor(Focus));
+    colors.setColor(QPalette::LinkVisited,QColor(Focus));
     colors.setColor(QPalette::ToolTipBase,QColor(Surface));
     colors.setColor(QPalette::ToolTipText,QColor(Ink));
     colors.setColor(QPalette::WindowText,QColor(Ink));
@@ -90,14 +90,13 @@ QPalette palette() {
 }
 QString styleSheet() {
     QString sheet=design::ShadowrocketStyle::templateStyleSheet();
-    sheet.replace("@UiFamily",QString('"')+bodyFont().family()+QString('"'));
 #ifdef Q_OS_MACOS
     sheet.replace("@MonoFamily","\"Menlo\", \"PingFang SC\"");
 #else
     sheet.replace("@MonoFamily",QString('"')+QFontDatabase::systemFont(QFontDatabase::FixedFont).family()+QString('"'));
 #endif
     const auto points=[](qreal value) { return QString::number(value*percent/100.0,'f',2)+"pt"; };
-    sheet.replace("@CaptionPoints",points(qMax(design::ShadowrocketStyle::typography.captionFloor,BodyPoints*design::ShadowrocketStyle::typography.captionRatio)));
+    sheet.replace("@CaptionPoints",points(CaptionPoints));
     sheet.replace("@BodyPoints",points(BodyPoints));
     sheet.replace("@DialogPoints",points(DialogPoints));
     sheet.replace("@SectionPoints",points(SectionPoints));
@@ -105,6 +104,8 @@ QString styleSheet() {
     sheet.replace("@TitlePoints",points(TitlePoints));
     sheet.replace("@PanelBorder",high?QString("1px solid ")+Border:QStringLiteral("none"));
     sheet.replace("@ControlMinimum",QString::number(ControlHeight-8)+"px");
+    // The stylesheet sizes the content box. The navigation token includes both borders.
+    sheet.replace("@SidebarItemContentHeight",QString::number(SidebarItemHeight-2)+"px");
     // Qt's QPushButton style adds its vertical padding to min-height.
     sheet.replace("@HomeControlRowMinimum",QString::number(RowHeight+2)+"px");
     sheet.replace("@SettingRowHeight",QString::number(SettingRowHeight)+"px");

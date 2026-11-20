@@ -84,11 +84,23 @@ void MainWindow::routeOperationFeedback(bool ok, const QString& message, Operati
         break;
     default: break;
     }
-    if (target.kind == FeedbackTarget::PageHint) {
+    auto* homeUpdate=findChild<QToolButton*>("nodeUpdateProfile");
+    const bool fromHome=id==OperationId::ProfileUpdate && homeUpdate && homeUpdate->property("pendingProfileUpdate").toBool();
+    if (fromHome) homeUpdate->setProperty("pendingProfileUpdate",false);
+    if (target.kind == FeedbackTarget::PageHint && !fromHome) {
         setPageFeedback(target.page, ok ? QString() : text);
     } else {
         // 跨页操作：仍进「最近操作」段，成功随时间消失，失败保留。
-        message_->setText(statusNoticeText(ok, message)); message_->setToolTip(message);
+        QString notice=message;
+        if (fromHome && ok) {
+            const auto active=controller_->state().activeProfile;
+            const auto& profiles=controller_->profiles();
+            const bool pending=std::any_of(profiles.cbegin(),profiles.cend(),[&active](const Profile& profile) {
+                return profile.id==active && profile.candidate!=profile.active;
+            });
+            notice=pending?"更新待应用，可在配置页查看":"已检查更新，当前版本无需应用";
+        }
+        message_->setText(statusNoticeText(ok, notice)); message_->setToolTip(notice);
         feedbackTimer_.stop(); recentFeedback_ = ok; feedbackError_ = ok ? QString() : message; noticeOperation_ = id;
         if (ok) feedbackTimer_.start();
     }

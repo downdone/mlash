@@ -48,6 +48,7 @@ signals:
     void guiReleaseRequested();
 protected:
     void closeEvent(QCloseEvent* event) override;
+    void resizeEvent(QResizeEvent* event) override;
     void showEvent(QShowEvent* event) override;
     void hideEvent(QHideEvent* event) override;
     void dragEnterEvent(QDragEnterEvent* event) override;
@@ -73,7 +74,7 @@ private:
     void updateState(); void updateProfiles(); void updateProxies(); void updateGroup(); void updateLogs();
     QString selectedProfile() const;
     void presentImport(ImportDialog* dialog);
-    void addUrl(); void addFile(bool replace); void applySettings(); void addSubscription(bool url);
+    void addUrl(); void submitQuickImport(); void openAdvancedImport(); void applySettings();
     void syncSectionNavigation(const Route& route);
     void updateTopbar();
     // 视图进入/离开的副作用实现（由 PageLifecycle 转调）。
@@ -185,7 +186,7 @@ private:
     QLabel *nodeHeadingTitle_ = nullptr, *nodeCount_ = nullptr;
     // 构造顺序敏感：这些指针在页面构造里赋值，updateActions 会在构造中调用，
     // 所以未赋值时必须是 nullptr 而不是堆垃圾（H3 曾因漏初始化 cancelTestAction_ 崩溃）。
-    QAction *coreAction_ = nullptr, *testAction_ = nullptr, *testSelectedAction_ = nullptr, *cancelTestAction_ = nullptr;
+    QAction *coreAction_ = nullptr, *testSelectedAction_ = nullptr, *cancelTestAction_ = nullptr;
     QList<QPushButton*> proxyModes_;
     // 节点区的动作都收在「更多」溢出菜单里（ui-layered-design.md:622）。
     QAction *automaticAction_ = nullptr, *locateAction_ = nullptr, *recentNodes_ = nullptr,
@@ -226,7 +227,8 @@ private:
     // One visible list for URL and file profiles; source capability remains in the model.
     ProfileRowModel* profileRowsModel_ = nullptr;
     QListView* profiles_ = nullptr;
-    QWidget* profileImportHost_ = nullptr;
+    QLineEdit* quickImport_ = nullptr;
+    bool quickImportPending_ = false;
     QPointer<ImportDialog> profileImport_;
     QMenu* profileContextMenu_ = nullptr;
     QPointer<QWidget> profileDrawer_;
@@ -265,7 +267,6 @@ private:
     QComboBox *appearance_,*textScale_;
     QComboBox* windowChrome_ = nullptr;
     QWidget* chromeDragArea_ = nullptr;
-    QWidget* chromeLeading_ = nullptr;
     QWidget* chromeTrailing_ = nullptr;
     bool integratedChrome_ = false;
     void applyWindowChrome();
@@ -277,7 +278,7 @@ private:
     QJsonObject homeOutboundSnapshot_;
     quint64 homeOutboundGeneration_=0;
     bool homeOutboundReady_=false;
-    QLabel *settingsDraftHint_, *settingsVersion_;
+    QLabel *settingsDraftHint_;
     QList<QWidget*> settingsSections_;
     QPointer<QScrollArea> settingsScroll_;
     QPointer<QWidget> settingsPage_;

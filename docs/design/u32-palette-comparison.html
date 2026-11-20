@@ -1,0 +1,93 @@
+<!doctype html>
+<html lang="zh-CN">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Mlash 配色对照</title>
+<style>
+@font-face{font-family:Noto;src:url("../../resources/fonts/NotoSansSC-variable.ttf");font-weight:100 900;font-display:swap}
+:root{color-scheme:light;--page:#fafafa;--surface:#fff;--pane:#f7f7f7;--line:#e1e1e1;--ink:#202020;--muted:#5b5b5b;--on:#fff;--track:#21864a;--knob:#fff}
+:root[data-dark]{color-scheme:dark;--page:#191919;--surface:#292929;--pane:#212121;--line:#505050;--ink:#f7f7f7;--muted:#c3c3c3;--on:#171717;--track:#4fd183;--knob:#171717}
+*{box-sizing:border-box}
+body{margin:0;background:var(--page);color:var(--ink);font:14px/1.55 Noto,"Microsoft YaHei UI",sans-serif}
+main{max-width:1120px;margin:auto;padding:28px 20px}
+.top,header,.bar,.row{display:flex;align-items:center;justify-content:space-between;gap:10px}
+.top{margin-bottom:20px}
+h1,h2{margin:0;line-height:1.35} h1{font-size:23px} h2{font-size:17px}
+small,.color{color:var(--muted);font-size:12px}
+button{font:inherit;color:inherit;background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:5px 12px;cursor:pointer}
+button:focus-visible{outline:2px solid currentColor;outline-offset:3px}
+.grid{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+article{--accent:var(--light-accent);--selected:var(--light-selected);border:1px solid var(--line);border-radius:12px;overflow:hidden;background:var(--surface)}
+[data-dark] article{--accent:var(--dark-accent);--selected:var(--dark-selected)}
+article header{padding:12px 14px}
+.cover{display:flex;align-items:center;gap:8px;padding:10px 14px;background:var(--cover);color:#fff;font-size:20px;font-weight:700}
+.cover svg{width:28px;height:28px}
+.pane{display:grid;grid-template-columns:82px 1fr;background:var(--pane);min-height:112px}
+.nav{padding:10px 8px;border-right:1px solid var(--line)}
+.nav span{display:block;padding:4px 8px;color:var(--accent);background:var(--selected);border-radius:6px;font-weight:600}
+.content{padding:10px}
+.primary{white-space:nowrap;color:var(--on);background:var(--accent);border-radius:7px;padding:3px 9px;font-weight:600}
+.row{margin-top:9px;padding:6px 8px;background:var(--surface);border:1px solid var(--line);border-radius:8px}
+.switch{display:flex;align-items:center;justify-content:flex-end;width:33px;height:19px;padding:2px;background:var(--track);border-radius:20px}
+.switch::after{content:"";width:15px;height:15px;background:var(--knob);border-radius:50%}
+@media(max-width:680px){.grid{grid-template-columns:1fr}}
+</style>
+<main>
+  <div class="top"><h1>Mlash 配色对照</h1><button id="theme" type="button" aria-pressed="false">深色</button></div>
+  <div class="grid">
+  <article style="--light-accent:#2254C7;--light-selected:#EAF0FF;--dark-accent:#9EBBFF;--dark-selected:#26354F;--cover:#142C62">
+    <header><div><h2>路由蓝</h2><small>现版</small></div><span class="color">#2254C7</span></header>
+    <div class="cover"><svg viewBox="0 0 64 64" aria-hidden="true"><use href="#mark"/></svg>Mlash</div>
+    <div class="pane">
+      <div class="nav"><span>配置</span></div>
+      <div class="content">
+        <div class="bar"><strong>我的配置</strong><span class="primary">添加配置</span></div>
+        <div class="row"><span>自动更新</span><span class="switch" aria-label="已启用" role="img"></span></div>
+      </div>
+    </div>
+  </article>
+  <article style="--light-accent:#292929;--light-selected:#ECECEC;--dark-accent:#E9E9E9;--dark-selected:#383838;--cover:#222222">
+    <header><div><h2>石墨黑</h2><small>黑白方向</small></div><span class="color">#292929</span></header>
+    <div class="cover"><svg viewBox="0 0 64 64" aria-hidden="true"><use href="#mark"/></svg>Mlash</div>
+    <div class="pane">
+      <div class="nav"><span>配置</span></div>
+      <div class="content">
+        <div class="bar"><strong>我的配置</strong><span class="primary">添加配置</span></div>
+        <div class="row"><span>自动更新</span><span class="switch" aria-label="已启用" role="img"></span></div>
+      </div>
+    </div>
+  </article>
+  <article style="--light-accent:#006967;--light-selected:#E5F4F3;--dark-accent:#7AD5D0;--dark-selected:#153E3C;--cover:#134243">
+    <header><div><h2>深海青</h2><small>青色方向</small></div><span class="color">#006967</span></header>
+    <div class="cover"><svg viewBox="0 0 64 64" aria-hidden="true"><use href="#mark"/></svg>Mlash</div>
+    <div class="pane">
+      <div class="nav"><span>配置</span></div>
+      <div class="content">
+        <div class="bar"><strong>我的配置</strong><span class="primary">添加配置</span></div>
+        <div class="row"><span>自动更新</span><span class="switch" aria-label="已启用" role="img"></span></div>
+      </div>
+    </div>
+  </article>
+  <article style="--light-accent:#A0431F;--light-selected:#FBEFE8;--dark-accent:#FFB89B;--dark-selected:#4A2920;--cover:#612C1C">
+    <header><div><h2>焦橙</h2><small>橙色方向</small></div><span class="color">#A0431F</span></header>
+    <div class="cover"><svg viewBox="0 0 64 64" aria-hidden="true"><use href="#mark"/></svg>Mlash</div>
+    <div class="pane">
+      <div class="nav"><span>配置</span></div>
+      <div class="content">
+        <div class="bar"><strong>我的配置</strong><span class="primary">添加配置</span></div>
+        <div class="row"><span>自动更新</span><span class="switch" aria-label="已启用" role="img"></span></div>
+      </div>
+    </div>
+  </article>
+  </div>
+</main>
+<svg aria-hidden="true" width="0" height="0" style="position:absolute"><defs><g id="mark"><path d="M14 43V22Q14 19 17 21L25 30Q27 32 29 30L37 21Q40 19 40 22V33Q40 39 46 39" fill="none" stroke="currentColor" stroke-width="5.5" stroke-linecap="round" stroke-linejoin="round"/><circle cx="54" cy="39" r="3.3" fill="currentColor"/></g></defs></svg>
+<script>
+const button = document.querySelector("#theme");
+function applyTheme(dark) {
+  document.documentElement.toggleAttribute("data-dark", dark);
+  button.setAttribute("aria-pressed", dark);
+}
+button.addEventListener("click", () => applyTheme(button.getAttribute("aria-pressed") !== "true"));
+applyTheme(new URLSearchParams(location.search).get("theme") === "dark");
+</script>

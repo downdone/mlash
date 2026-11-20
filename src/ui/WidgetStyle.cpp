@@ -129,10 +129,12 @@ public:
     }
     void paint(QPainter* painter,const QStyleOptionViewItem& option,const QModelIndex& index) const override {
         QStyleOptionViewItem item=option; initStyleOption(&item,index); const auto rect=item.rect.adjusted(4,1,-4,-1);
-        const bool enabled=item.state.testFlag(QStyle::State_Enabled),selected=item.state.testFlag(QStyle::State_Selected) || item.state.testFlag(QStyle::State_HasFocus) || item.state.testFlag(QStyle::State_MouseOver);
+        const bool enabled=item.state.testFlag(QStyle::State_Enabled);
+        const bool current=combo_ && index.row()==combo_->currentIndex();
+        const bool highlighted=item.state.testFlag(QStyle::State_Selected) || item.state.testFlag(QStyle::State_MouseOver);
         painter->save(); painter->setRenderHint(QPainter::Antialiasing); painter->setPen(Qt::NoPen);
-        if (selected && enabled) { painter->setBrush(QColor(UiTheme::Selection)); painter->drawRoundedRect(rect,5,5); }
-        if (combo_ && index.row()==combo_->currentIndex()) checkmark(painter,QPointF(rect.left()+11,rect.center().y()),enabled?QColor(UiTheme::Brand):QColor(UiTheme::Disabled));
+        if ((current || highlighted) && enabled) { painter->setBrush(QColor(current?UiTheme::Selection:UiTheme::Hover)); painter->drawRoundedRect(rect,5,5); }
+        if (current) checkmark(painter,QPointF(rect.left()+11,rect.center().y()),enabled?QColor(UiTheme::Brand):QColor(UiTheme::Disabled));
         painter->setFont(item.font); painter->setPen(enabled?QColor(UiTheme::Ink):QColor(UiTheme::Disabled));
         const auto textRect=rect.adjusted(26,0,-8,0); painter->drawText(textRect,Qt::AlignVCenter|Qt::AlignLeft,item.fontMetrics.elidedText(item.text,Qt::ElideRight,textRect.width())); painter->restore();
     }
@@ -192,7 +194,7 @@ public:
         const auto rect=item->rect; painter->save(); painter->setRenderHint(QPainter::Antialiasing);
         if (item->menuItemType==QStyleOptionMenuItem::Separator) { painter->setPen(QColor(UiTheme::Separator)); painter->drawLine(rect.left()+8,rect.center().y(),rect.right()-8,rect.center().y()); painter->restore(); return; }
         const bool enabled=item->state.testFlag(State_Enabled),selected=item->state.testFlag(State_Selected); const auto ink=enabled?QColor(UiTheme::Ink):QColor(UiTheme::Disabled);
-        if (selected && enabled) { painter->setPen(Qt::NoPen); painter->setBrush(QColor(UiTheme::Selection)); painter->drawRoundedRect(rect.adjusted(1,1,-1,-1),5,5); }
+        if ((item->checked || selected) && enabled) { painter->setPen(Qt::NoPen); painter->setBrush(QColor(item->checked?UiTheme::Selection:UiTheme::Hover)); painter->drawRoundedRect(rect.adjusted(1,1,-1,-1),5,5); }
         if (item->checked) checkmark(painter,QPointF(rect.left()+10,rect.center().y()),enabled?QColor(UiTheme::Brand):ink);
         int left=rect.left()+23;
         if (item->maxIconWidth>0) { if (!item->icon.isNull()) item->icon.paint(painter,QRect(left,rect.center().y()-9,18,18),Qt::AlignCenter,enabled?QIcon::Normal:QIcon::Disabled); left+=24; }
@@ -224,7 +226,7 @@ void WidgetStyle::prepareCombo(QComboBox* combo) {
     view->setVerticalScrollMode(QAbstractItemView::ScrollPerPixel); view->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff); view->setMouseTracking(true); view->setFrameShape(QFrame::NoFrame);
     view->setItemDelegate(new ComboItemDelegate(combo,view)); preparePopup(view->window(),false,combo);
 }
-void WidgetStyle::popupMenu(QMenu* menu, const QPoint& globalAnchor) {
+void WidgetStyle::popupMenu(QMenu* menu, const QPoint& globalAnchor, bool alignRight) {
     if (!menu) return;
     menu->ensurePolished();
     auto* screen=QApplication::screenAt(globalAnchor);
@@ -235,7 +237,8 @@ void WidgetStyle::popupMenu(QMenu* menu, const QPoint& globalAnchor) {
     menu->setMaximumHeight(qMin(480,available.height()));
     const QSize wanted=menu->sizeHint().boundedTo(available.size());
     menu->resize(wanted);
-    const int x=qBound(available.left(),globalAnchor.x(),qMax(available.left(),available.right()-wanted.width()+1));
+    const int anchorX=globalAnchor.x()-(alignRight?wanted.width():0);
+    const int x=qBound(available.left(),anchorX,qMax(available.left(),available.right()-wanted.width()+1));
     const int below=globalAnchor.y();
     const int above=globalAnchor.y()-wanted.height();
     const int y=below+wanted.height()<=available.bottom()+1 ? below :

@@ -1,5 +1,7 @@
 # 架构决策索引
 
+[0058 快速配置导入与独立高级窗口](0058-quick-profile-import.md)。
+
 [0052 同分区工作区与减少弹窗](0052-flat-task-workspaces.md)：高级编辑进入正文，同级切换保稿，稳定外壳。
 
 ADR 保留决策发生时的背景和取舍；较新的已接受决策可以替代旧决定的具体部分。当前行为统一见 [架构](../architecture.md)、[功能模块契约](../development/feature-contracts.md) 与 [交互契约](../ui-interactions.md)。

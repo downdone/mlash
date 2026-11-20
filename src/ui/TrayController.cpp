@@ -4,6 +4,7 @@
 #include "FeedbackSync.h"
 #include "NodePresentation.h"
 #include "WidgetStyle.h"
+#include "design/ShadowrocketStyle.h"
 #include <QPainter>
 #include <QPixmap>
 #include <QJsonArray>
@@ -19,9 +20,55 @@
 static void initializeBrand() { static const bool initialized = [] { Q_INIT_RESOURCE(brand); return true; }(); Q_UNUSED(initialized); }
 
 namespace mlash {
+namespace {
+QIcon makeTrayBadge(const QIcon& mark, const QString& key) {
+    if (key == "idle") return mark;
+    const auto& colors = design::ShadowrocketStyle::dark;
+    const bool ready = key.startsWith("ready-");
+    const bool external = key.startsWith("external-");
+    const QString mode = key.section('-', -1);
+    const bool pending = key == "working" || key == "checking";
+    const QColor fill(key == "attention" ? colors.error : pending ? colors.warning :
+                      ready ? colors.focus : external ? colors.secondary : colors.switchOn);
+    const QColor ink(colors.sidebar);
+    QIcon icon;
+    for (const int size : {16, 24, 32, 48, 64}) {
+        QPixmap tile(size, size);
+        tile.fill(Qt::transparent);
+        QPainter painter(&tile);
+        painter.setRenderHint(QPainter::Antialiasing);
+        painter.scale(size / 64.0, size / 64.0);
+        painter.drawPixmap(QRect(0, 0, 52, 52), mark.pixmap(size, size));
+        painter.setBrush(fill);
+        painter.setPen(QPen(ink, 3));
+        painter.drawEllipse(QPointF(48, 48), 14, 14);
+        painter.setBrush(Qt::NoBrush);
+        painter.setPen(QPen(ink, 4, Qt::SolidLine, Qt::RoundCap, Qt::RoundJoin));
+        if (mode == "rule") {
+            painter.drawPolyline(QPolygonF{{41,48},{46,53},{55,43}});
+        } else if (mode == "global") {
+            painter.drawEllipse(QPointF(48,48), 7, 7);
+        } else if (mode == "direct") {
+            painter.drawLine(QPointF(40,48),QPointF(53,48));
+            painter.drawPolyline(QPolygonF{{49,43},{54,48},{49,53}});
+        } else if (key == "working") {
+            painter.drawLine(QPointF(41,48),QPointF(55,48));
+        } else if (key == "checking") {
+            painter.drawPolyline(QPolygonF{{43,43},{51,43},{53,46},{48,50}});
+            painter.drawPoint(QPointF(48,55));
+        } else {
+            painter.drawLine(QPointF(48,41),QPointF(48,49));
+            painter.drawPoint(QPointF(48,55));
+        }
+        painter.end();
+        icon.addPixmap(tile);
+    }
+    return icon;
+}
+}
 qint64 TrayController::measureMenuPreparation() { QElapsedTimer timer; timer.start(); rebuildMenu(); return timer.nsecsElapsed(); }
 QIcon TrayController::icon() {
-    initializeBrand(); return QIcon(":/brand/mlash.png");
+    initializeBrand(); return QIcon(":/brand/mlash-app-icon.png");
 }
 QString TrayController::appearance(const AppState& state) {
     if (state.exiting || state.core == CoreState::Starting || state.core == CoreState::Stopping) return "working";
@@ -35,12 +82,15 @@ QString TrayController::appearance(const AppState& state) {
 QIcon TrayController::statusIcon(const AppState& state) {
     initializeBrand(); static QHash<QString, QIcon> icons;
     const auto key = appearance(state);
-    if (!icons.contains(key)) icons.insert(key, QIcon(":/brand/tray/" + key + ".png"));
+    if (!icons.contains(key)) icons.insert(key, makeTrayBadge(icon(), key));
     return icons.value(key);
 }
 QString TrayController::statusTooltip(const AppState& state, const Settings& settings, const QString& profileName) {
     const auto key = appearance(state);
-    const QString title = key == "idle" ? "小象打盹 · 内核未就绪" : key == "working" ? "小象忙碌 · 正在启停" : key == "attention" ? "小象需要照顾 · 内核或代理入口异常" : key == "checking" ? "小象观察中 · 状态待确认" : key.startsWith("ready-") ? "小象待命 · 系统代理未开启" : key.startsWith("external-") ? "小象旁观 · 系统代理由其他程序管理" : "小象上岗 · Mlash 已接管系统代理";
+    const QString title = key == "idle" ? "内核未就绪" : key == "working" ? "正在启停" :
+        key == "attention" ? "内核或代理入口异常" : key == "checking" ? "状态待确认" :
+        key.startsWith("ready-") ? "系统代理未开启" : key.startsWith("external-") ? "系统代理由其他程序管理" :
+        state.tunObserved ? "TUN 已开启" : "系统代理已接管";
     const QString mode = !state.ready ? "未就绪" : state.mode == "rule" ? "规则" : state.mode == "global" ? "全局" : state.mode == "direct" ? "直连" : "未知";
     // 前两行与侧栏状态条逐字相同（分层设计 P1/P2），第三行是托盘独有的内核模式。
     const auto sentence = statusSentence(statusFacts(state, settings, profileName));

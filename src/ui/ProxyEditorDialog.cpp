@@ -33,13 +33,18 @@ public:
     void paint(QPainter* painter,const QStyleOptionViewItem& option,const QModelIndex& index) const override {
         painter->save(); painter->setRenderHint(QPainter::Antialiasing);
         const auto row=option.rect; const bool selected=option.state.testFlag(QStyle::State_Selected);
-        painter->fillRect(row,QColor(selected?UiTheme::Selection:UiTheme::Surface));
+        const bool hovered=option.state.testFlag(QStyle::State_MouseOver);
+        painter->fillRect(row,QColor(selected?UiTheme::Control:hovered?UiTheme::Hover:UiTheme::Surface));
+        if (selected) {
+            painter->setPen(QPen(QColor(UiTheme::Brand),2,Qt::SolidLine,Qt::RoundCap));
+            painter->drawLine(row.left()+5,row.center().y()-5,row.left()+5,row.center().y()+5);
+        }
         painter->setPen(QColor(UiTheme::Separator)); painter->drawLine(row.left()+48,row.bottom(),row.right()-12,row.bottom());
         const auto* list=qobject_cast<const QListWidget*>(option.widget);
         const auto glyph=list&&list->objectName()=="editableGroups"?UiIcons::Glyph::Layers:UiIcons::Glyph::Globe;
         const QRect emblem(row.left()+14,row.top()+(row.height()-24)/2,24,24);
-        painter->setPen(Qt::NoPen); painter->setBrush(QColor(UiTheme::Selection)); painter->drawEllipse(emblem);
-        UiIcons::icon(glyph,UiTheme::Brand).paint(painter,emblem.adjusted(5,5,-5,-5));
+        painter->setPen(Qt::NoPen); painter->setBrush(QColor(selected?UiTheme::Surface:UiTheme::Control)); painter->drawRoundedRect(emblem,6,6);
+        UiIcons::icon(glyph,UiTheme::Secondary).paint(painter,emblem.adjusted(5,5,-5,-5));
         const auto status=index.data(Qt::UserRole+1).toString();
         auto font=option.font; font.setWeight(QFont::Medium); painter->setFont(font); painter->setPen(QColor(UiTheme::Ink));
         const int right=status.isEmpty()?row.right()-18:row.right()-100;
@@ -48,6 +53,11 @@ public:
                           QFontMetrics(font).elidedText(name,Qt::ElideRight,qMax(1,right-row.left()-50)));
         if (!status.isEmpty()) { painter->setPen(QColor(status=="已移除"?UiTheme::Error:UiTheme::Brand));
             painter->drawText(QRect(row.right()-94,row.top(),76,row.height()),Qt::AlignRight|Qt::AlignVCenter,status); }
+        if (option.state.testFlag(QStyle::State_HasFocus) && list && list->property("keyboardFocus").toBool()) {
+            painter->setPen(QPen(QColor(UiTheme::Focus),1));
+            painter->setBrush(Qt::NoBrush);
+            painter->drawRoundedRect(row.adjusted(2,2,-2,-2),6,6);
+        }
         painter->restore();
     }
 };
@@ -82,6 +92,10 @@ ProxyEditorDialog::ProxyEditorDialog(AppController* controller,const QString& id
     import_=menu->addAction("导入节点链接…"); import_->setObjectName("importNodeLinks"); remove_=menu->addAction("移除所选…"); remove_->setObjectName("removeProxyEntry"); restore_=menu->addAction("还原所选"); restore_->setObjectName("restoreProxyEntry"); menu->addSeparator(); reset_=menu->addAction("全部沿用订阅"); reset_->setObjectName("resetProxyEdits");
     layout->addLayout(row); layout->addWidget(tabs_);
     hint_=new QLabel("正在读取来源节点…"); hint_->setObjectName("proxyEditorHint"); hint_->setTextFormat(Qt::PlainText); hint_->setWordWrap(true); layout->addWidget(hint_);
+    retry_=new QPushButton("重新读取");
+    retry_->setObjectName("retryProxyEntries");
+    layout->addWidget(retry_,0,Qt::AlignLeft);
+    connect(retry_,&QPushButton::clicked,this,&ProxyEditorDialog::loadEntries);
     auto* actions=new QDialogButtonBox(QDialogButtonBox::Save|QDialogButtonBox::Cancel); actions->button(QDialogButtonBox::Cancel)->setText("取消"); save_=actions->button(QDialogButtonBox::Save); save_->setText("保存并校验"); save_->setObjectName("saveProxyEdits"); actions->button(QDialogButtonBox::Cancel)->setText("取消"); layout->addWidget(actions); layout->addStretch(1);
     connect(actions,&QDialogButtonBox::rejected,this,&QDialog::reject); connect(actions,&QDialogButtonBox::accepted,this,[this] { if (!sourceCurrent()) { updateActions(); return; } saving_=true; updateActions(); controller_->updateProxyEdits(id_,draft_,saved_,sourceExpected_); });
     connect(controller,&AppController::operationFinished,this,[this](bool ok,const QString& message) { if (!saving_) return; saving_=false; if (ok) accept(); else { hint_->setText(message); hint_->show(); updateActions(); } }); connect(controller,&AppController::stateChanged,this,[this] { updateActions(); });
@@ -91,8 +105,39 @@ ProxyEditorDialog::ProxyEditorDialog(AppController* controller,const QString& id
     connect(restore_,&QAction::triggered,this,[this] { if (!list()->currentItem()) return; const auto name=list()->currentItem()->data(Qt::UserRole).toString(); auto entries=draft_.value(key()).toObject(); entries.remove(name); change(key(),entries); const auto removeKey=key()=="nodes"?"remove_nodes":"remove_groups"; auto removed=draft_.value(removeKey).toArray(); for (int i=removed.size()-1;i>=0;--i) if (removed[i].toString()==name) removed.removeAt(i); change(removeKey,removed); refresh(); });
     connect(reset_,&QAction::triggered,this,[this] { draft_={}; refresh(); }); connect(tabs_,&QTabWidget::currentChanged,this,[this] { filterEntries(); updateActions(); }); connect(search_,&QLineEdit::textChanged,this,&ProxyEditorDialog::filterEntries);
     for (auto* view:{nodes_,groups_}) { connect(view,&QListWidget::itemSelectionChanged,this,[this] { updateActions(); }); connect(view,&QListWidget::itemDoubleClicked,this,[this] { if (edit_->isEnabled()) edit(false); }); }
-    const QPointer<ProxyEditorDialog> guard(this); controller_->inspectProxyEntries(id,[guard](Result result) { if (!guard) return; guard->loaded_=result.ok; if (result.ok) { guard->source_=result.data; guard->hint_->clear(); guard->hint_->hide(); guard->nodes_->setProperty("emptyHint","此配置没有节点。可新增或导入链接。"); guard->groups_->setProperty("emptyHint","此配置没有策略组。可新增策略组。"); guard->refresh(); } else { guard->hint_->clear(); guard->hint_->hide(); const auto message=QString("读取失败，原配置未改变。\n%1").arg(result.error.left(200)); guard->nodes_->setProperty("emptyHint",message); guard->groups_->setProperty("emptyHint",message); guard->nodes_->setToolTip(result.error); guard->groups_->setToolTip(result.error); guard->nodes_->viewport()->update(); guard->groups_->viewport()->update(); } guard->updateActions(); }); updateActions();
+    loadEntries();
     DialogDraftGuard::protect(this,[this] { return draft_!=saved_; },[this] { return saving_||analyzing_; });
+}
+void ProxyEditorDialog::loadEntries() {
+    retry_->hide();
+    hint_->clear();
+    hint_->hide();
+    for (auto* view:{nodes_,groups_}) {
+        view->setProperty("emptyHint","正在读取配置…");
+        view->setToolTip({});
+        view->viewport()->update();
+    }
+    const QPointer<ProxyEditorDialog> guard(this);
+    controller_->inspectProxyEntries(id_,[guard](Result result) {
+        if (!guard) return;
+        guard->loaded_=result.ok;
+        if (result.ok) {
+            guard->source_=result.data;
+            guard->nodes_->setProperty("emptyHint","此配置没有节点。可新增或导入链接。");
+            guard->groups_->setProperty("emptyHint","此配置没有策略组。可新增策略组。");
+            guard->refresh();
+        } else {
+            const auto message=QString("读取失败，原配置未改变。\n%1").arg(result.error.left(200));
+            for (auto* view:{guard->nodes_,guard->groups_}) {
+                view->setProperty("emptyHint",message);
+                view->setToolTip(result.error);
+                view->viewport()->update();
+            }
+            guard->retry_->show();
+        }
+        guard->updateActions();
+    });
+    updateActions();
 }
 QString ProxyEditorDialog::key() const { return tabs_->currentIndex()==0?"nodes":"groups"; }
 QListWidget* ProxyEditorDialog::list() const { return tabs_->currentIndex()==0?nodes_:groups_; }

@@ -48,8 +48,10 @@ def main():
                         failures.extend(inspect(name, source.read(name)))
     else:
         root = Path(__file__).resolve().parents[1]
-        names = subprocess.check_output(['git', 'ls-files', '-z'], cwd=root).decode().split('\0')
-        for name in names:
+        names = subprocess.check_output(
+            ['git', 'ls-files', '--cached', '--others', '--exclude-standard', '-z'], cwd=root
+        ).decode().split('\0')
+        for name in sorted(set(names)):
             if name and is_document(name) and (root/name).is_file():
                 count += 1
                 failures.extend(inspect(name, (root/name).read_bytes()))

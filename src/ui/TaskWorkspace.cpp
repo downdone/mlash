@@ -25,13 +25,12 @@ void presentTaskDialog(QDialog* dialog) {
 TaskWorkspace::TaskWorkspace(QWidget* parent):QWidget(parent) {
     setObjectName("taskWorkspace"); auto* layout=new QVBoxLayout(this);
     layout->setContentsMargins(12,8,12,12); layout->setSpacing(6);
-    header_=new QHBoxLayout; back_=new QPushButton("‹ 返回"); back_->setObjectName("taskBack"); back_->setProperty("backLink",true);
+    header_=new QHBoxLayout; header_->setSpacing(8);
+    back_=new QPushButton("←"); back_->setObjectName("taskBack"); back_->setProperty("taskBack",true);
     header_->addWidget(back_); title_=new QLabel; title_->setObjectName("taskTitle"); title_->setTextFormat(Qt::PlainText);
     header_->addWidget(title_,1); layout->addLayout(header_);
-    summary_=new QLabel; summary_->setObjectName("taskContextSummary"); summary_->setProperty("secondary",true);
-    summary_->setTextFormat(Qt::PlainText); summary_->hide(); layout->addWidget(summary_);
-    tabs_=new QTabBar; tabs_->setObjectName("taskTabs"); tabs_->setExpanding(false); tabs_->setUsesScrollButtons(true); tabs_->setAccessibleName("当前对象的任务");
-    layout->addWidget(tabs_); hint_=new QLabel; hint_->setObjectName("taskFeedback"); hint_->setWordWrap(true); hint_->setTextFormat(Qt::PlainText); hint_->hide(); layout->addWidget(hint_);
+    tabs_=new QTabBar; tabs_->setObjectName("taskTabs"); tabs_->setExpanding(false); tabs_->setUsesScrollButtons(true); tabs_->setDrawBase(false); tabs_->setAccessibleName("当前对象的任务");
+    layout->addWidget(tabs_,0,Qt::AlignLeft); hint_=new QLabel; hint_->setObjectName("taskFeedback"); hint_->setWordWrap(true); hint_->setTextFormat(Qt::PlainText); hint_->hide(); layout->addWidget(hint_);
     panels_=new QStackedWidget; panels_->setObjectName("taskPanels"); layout->addWidget(panels_,1);
     connect(tabs_,&QTabBar::currentChanged,this,[this](int i) { activate(i); });
     connect(back_,&QPushButton::clicked,this,[this] {
@@ -49,7 +48,6 @@ TaskWorkspace::~TaskWorkspace() {
 int TaskWorkspace::indexOf(const QString& key) const { for (int i=0;i<entries_.size();++i) if (entries_[i].task.key==key) return i; return -1; }
 QWidget* TaskWorkspace::editor(const QString& key) const { const int i=indexOf(key); return i<0?nullptr:entries_[i].editor.data(); }
 void TaskWorkspace::note(const QString& text) { hint_->setText(text); hint_->setVisible(!text.isEmpty()); }
-void TaskWorkspace::setContextSummary(const QString& text) { summary_->setText(text); summary_->setVisible(!text.isEmpty()); }
 bool TaskWorkspace::canReplace() {
     if (DialogDraftGuard::hasPending(this)) { note("当前提交尚未结束，请稍后再切换对象。"); return false; }
     if (DialogDraftGuard::hasDrafts(this)&&QMessageBox::question(this,"未保存的修改","切换对象将放弃此工作区的草稿，是否继续？",QMessageBox::Yes|QMessageBox::No,QMessageBox::No)!=QMessageBox::Yes) return false;
@@ -63,13 +61,12 @@ bool TaskWorkspace::canClose(QWidget* editor) {
 }
 bool TaskWorkspace::configure(const QString& context,const QString& title,const QList<Task>& tasks,std::function<void()> back) {
     if (context_!=context) { if (!canReplace()) return false; clear(); context_=context; }
-    contextTitle_=title; title_->setText(title); backAction_=std::move(back); note({}); setContextSummary({});
+    contextTitle_=title; title_->setText(title); backAction_=std::move(back); note({});
     const bool profile=context_.startsWith("profile:");
     const bool contentProfile=profile && context_.endsWith(":content");
-    header_->removeWidget(back_); header_->removeWidget(title_);
-    header_->addWidget(back_); header_->addWidget(title_,1);
-    back_->setText(profile ? "‹ 返回配置" : "‹ 返回");
-    back_->setProperty("backLink",true); back_->style()->unpolish(back_); back_->style()->polish(back_);
+    const auto backLabel=profile ? QString("返回配置") : QString("返回");
+    back_->setAccessibleName(backLabel);
+    back_->setToolTip(backLabel);
     {
         const QSignalBlocker block(tabs_);
         QSet<QString> declared; for (const auto& task:tasks) declared.insert(task.key);
@@ -85,9 +82,8 @@ bool TaskWorkspace::configure(const QString& context,const QString& title,const 
             else { entries_.append({task,{},{}}); tabs_->addTab(task.title); }
         }
     }
-    // The content workspace has one stable view switcher. Source and candidate
-    // are separate single-task views, so they do not need a tab strip.
-    tabs_->setVisible(entries_.size()>1 && contentProfile); return true;
+    // Profile source and candidate open as separate single-task views.
+    tabs_->setVisible(entries_.size()>1 && (contentProfile || !profile)); return true;
 }
 void TaskWorkspace::clear() {
     clearing_=true; const QSignalBlocker block(tabs_); while (tabs_->count()) tabs_->removeTab(tabs_->count()-1);
@@ -99,10 +95,15 @@ void TaskWorkspace::clear() {
 void TaskWorkspace::activate(int index) {
     if (clearing_||index<0||index>=entries_.size()) return;
     note({}); const auto task=entries_[index].task;
-    if (entries_[index].editor) { title_->setText(context_.startsWith("profile:")?contextTitle_+" / "+task.title:task.title); panels_->setCurrentWidget(entries_[index].surface); entries_[index].editor->show(); if (requested) requested(); }
+    if (entries_[index].editor) { updateHeading(task.title); panels_->setCurrentWidget(entries_[index].surface); entries_[index].editor->show(); if (requested) requested(); }
     else if (task.open) { creatingKey_=task.key; task.open(); creatingKey_.clear(); }
 }
 void TaskWorkspace::select(const QString& key) { const int i=indexOf(key); if (i<0) return; if (tabs_->currentIndex()==i) activate(i); else tabs_->setCurrentIndex(i); }
+void TaskWorkspace::updateHeading(const QString& taskTitle) {
+    const bool showTabs=entries_.size()>1 && (!context_.startsWith("profile:") || context_.endsWith(":content"));
+    tabs_->setVisible(showTabs);
+    title_->setText(showTabs && !contextTitle_.isEmpty() ? contextTitle_ : taskTitle);
+}
 void TaskWorkspace::mount(QWidget* editor,const QString& requestedKey,const QString& title) {
     if (!editor) return;
     const auto key=creatingKey_.isEmpty()?(requestedKey.isEmpty()?editor->objectName():requestedKey):creatingKey_;
@@ -117,7 +118,6 @@ void TaskWorkspace::mount(QWidget* editor,const QString& requestedKey,const QStr
             bool found=false; for (const auto& entry:entries_) if (entry.editor==parent) { entries_[index].owner=parent; found=true; break; }
             if (found||parent==this) break;
         }
-        auto* scroll=new QScrollArea; scroll->setFrameShape(QFrame::NoFrame); scroll->setObjectName("taskScroll"); scroll->setWidgetResizable(true); scroll->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
         auto* canvas=new QWidget; auto* center=new QHBoxLayout(canvas); center->setContentsMargins(0,0,0,0);
         editor->setProperty("embeddedTask",true); editor->setParent(canvas,Qt::Widget);
         if (auto* dialog=qobject_cast<QDialog*>(editor)) {
@@ -126,12 +126,21 @@ void TaskWorkspace::mount(QWidget* editor,const QString& requestedKey,const QStr
         }
         editor->setMinimumSize(0,0); editor->setMaximumWidth(960); editor->setSizePolicy(QSizePolicy::Ignored,QSizePolicy::Preferred);
         if (editor->layout()) editor->layout()->setSizeConstraint(QLayout::SetNoConstraint);
-        center->addWidget(editor,1); scroll->setWidget(canvas); entries_[index].editor=editor; entries_[index].surface=scroll; panels_->addWidget(scroll);
-        connect(editor,&QObject::destroyed,this,[this,key,identity=QPointer<QWidget>(scroll)] { const int i=indexOf(key); if (!clearing_&&i>=0&&entries_[i].surface==identity) removeEditor(key); });
+        center->addWidget(editor,1);
+        center->addStretch(0);
+        QWidget* surface=canvas;
+        if (!editor->property("editorOwnsScrolling").toBool()) {
+            auto* scroll=new QScrollArea; scroll->setFrameShape(QFrame::NoFrame); scroll->setObjectName("taskScroll");
+            scroll->setWidgetResizable(true); scroll->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
+            scroll->setWidget(canvas);
+            surface=scroll;
+        }
+        entries_[index].editor=editor; entries_[index].surface=surface; panels_->addWidget(surface);
+        connect(editor,&QObject::destroyed,this,[this,key,identity=QPointer<QWidget>(surface)] { const int i=indexOf(key); if (!clearing_&&i>=0&&entries_[i].surface==identity) removeEditor(key); });
     }
     { const QSignalBlocker block(tabs_); tabs_->setCurrentIndex(index); }
-    title_->setText(context_.startsWith("profile:")?contextTitle_+" / "+entries_[index].task.title:entries_[index].task.title);
-    panels_->setCurrentWidget(entries_[index].surface); tabs_->setVisible(entries_.size()>1 && (!context_.startsWith("profile:") || context_.endsWith(":content"))); editor->show();
+    updateHeading(entries_[index].task.title);
+    panels_->setCurrentWidget(entries_[index].surface); editor->show();
     if (requested) requested();
 }
 void TaskWorkspace::removeEditor(const QString& key) {

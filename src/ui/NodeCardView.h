@@ -1,6 +1,7 @@
 #pragma once
 #include "UiTheme.h"
 #include "NodeCardDelegate.h"
+#include <QStyle>
 #include <QTimer>
 
 namespace mlash::WindowParts {
@@ -28,7 +29,8 @@ private:
     void adjustGrid() {
         // Use the laid-out viewport: maximumViewportSize() can be wider than the
         // actual viewport after the sidebar or a scrollbar changes its width.
-        const int width=qMax(1,viewport()->width()-3),columns=qMax(1,width/300);
+        const int width=qMax(1,viewport()->width()-style()->pixelMetric(QStyle::PM_ScrollBarExtent,nullptr,this)-4);
+        const int columns=qMax(1,width/300);
         const QSize size(qMax(1,width/columns-1),UiTheme::NodeCardHeight);
         if (gridSize()!=size) {
             setGridSize(size);

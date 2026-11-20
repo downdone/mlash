@@ -11,6 +11,7 @@
 #include <QDialogButtonBox>
 #include <QFileDialog>
 #include <QFileInfo>
+#include <QFrame>
 #include <QFormLayout>
 #include <QJsonArray>
 #include <QLabel>
@@ -23,7 +24,8 @@ namespace mlash {
 namespace {
 class BackupViewport final : public QScrollArea {
 public:
-    QSize sizeHint() const override { return {480,280}; }
+    BackupViewport() { setMaximumHeight(240); }
+    QSize sizeHint() const override { return {480,maximumHeight()}; }
     QSize minimumSizeHint() const override { return {160,80}; }
     bool hasHeightForWidth() const override { return false; }
     int heightForWidth(int) const override { return -1; }
@@ -31,28 +33,60 @@ public:
 }
 BackupDialog::BackupDialog(AppController* controller, bool restore, QWidget* parent) : TaskDialog(parent), controller_(controller), restore_(restore) {
     setAttribute(Qt::WA_DeleteOnClose); setObjectName("backupDialog"); setWindowTitle(restore ? "恢复本地备份" : "创建本地备份"); resize(520, 390);
-    auto* outer=new QVBoxLayout(this); auto* scroll=new BackupViewport; scroll->setObjectName("backupScroll"); scroll->setWidgetResizable(true); scroll->setFrameShape(QFrame::NoFrame); scroll->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff); auto* body=new QWidget; auto* layout=new QVBoxLayout(body); layout->setContentsMargins(0,0,0,0); scroll->setWidget(body); outer->addWidget(scroll,1); auto* description = new QLabel(restore ? "恢复为新订阅，保留现有数据。" : "使用密码加密保存所选内容。"); description->setWordWrap(true); layout->addWidget(description);
+    auto* outer=new QVBoxLayout(this); auto* scroll=new BackupViewport; scroll->setObjectName("backupScroll"); scroll->setWidgetResizable(true); scroll->setFrameShape(QFrame::NoFrame); scroll->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff); auto* body=new QWidget;
+    auto* bodyLayout=new QVBoxLayout(body);
+    bodyLayout->setContentsMargins(0,0,0,0);
+    bodyLayout->setSizeConstraint(QLayout::SetMinimumSize);
+    auto* panel=new QFrame;
+    panel->setObjectName("backupForm");
+    panel->setMaximumWidth(640);
+    auto* layout=new QVBoxLayout(panel);
+    layout->setContentsMargins(14,14,14,14);
+    layout->setSpacing(10);
+    auto* panelRow=new QHBoxLayout;
+    panelRow->addWidget(panel,1);
+    panelRow->addStretch(0);
+    bodyLayout->addLayout(panelRow);
+    bodyLayout->addStretch(1);
+    scroll->setWidget(body);
+    scroll->setSizePolicy(QSizePolicy::Preferred,QSizePolicy::Preferred);
+    outer->addWidget(scroll,1);
+    auto* description = new QLabel(restore ? "恢复为新订阅，保留现有数据。" : "使用密码加密保存所选内容。"); description->setWordWrap(true); description->setProperty("secondary",true); layout->addWidget(description);
     auto* form = new QFormLayout; auto* source = new QWidget; auto* sourceRow = new QHBoxLayout(source); sourceRow->setContentsMargins(0,0,0,0); path_ = new QLineEdit; path_->setObjectName("backupPath"); sourceRow->addWidget(path_,1); auto* browse = new QPushButton("浏览…"); sourceRow->addWidget(browse); form->addRow("备份文件", source);
     password_ = new QLineEdit; password_->setObjectName("backupPassword"); password_->setEchoMode(QLineEdit::Password); password_->setMaxLength(1024); password_->setPlaceholderText("至少 8 个字符"); form->addRow("备份密码", password_);
     confirm_ = new QLineEdit(this); confirm_->setObjectName("backupPasswordConfirm"); confirm_->setEchoMode(QLineEdit::Password); confirm_->setMaxLength(1024); if (!restore) form->addRow("确认密码", confirm_); else confirm_->hide(); layout->addLayout(form);
     profiles_ = new QCheckBox("包含订阅、节点机密与自定义规则"); profiles_->setObjectName("backupIncludeProfiles"); profiles_->setChecked(true); profiles_->setVisible(!restore); layout->addWidget(profiles_);
     settings_ = new QCheckBox("同时恢复界面与本地偏好"); settings_->setObjectName("backupRestoreSettings"); settings_->setChecked(true); settings_->setVisible(restore); layout->addWidget(settings_);
     auto* prerequisite=new QWidget; prerequisite->setObjectName("restorePrerequisite"); auto* prerequisiteRow=new QHBoxLayout(prerequisite); prerequisiteRow->setContentsMargins(0,0,0,0); auto* prerequisiteText=new ElidedLabel("恢复前需停止内核"); prerequisiteText->setObjectName("restorePrerequisiteText"); prerequisiteText->setProperty("secondary",true); prerequisiteText->setSizePolicy(QSizePolicy::Ignored,QSizePolicy::Preferred); prerequisiteRow->addWidget(prerequisiteText,1);
-    stopCore_=new QPushButton("停止内核"); stopCore_->setObjectName("backupStopCore"); stopCore_->setAutoDefault(false); prerequisiteRow->addWidget(stopCore_); auto reserved=stopCore_->sizePolicy(); reserved.setRetainSizeWhenHidden(true); stopCore_->setSizePolicy(reserved); prerequisite->setVisible(restore); outer->addWidget(prerequisite);
-    hint_ = new ElidedLabel(restore ? "先预览校验，再确认恢复。" : "请妥善保存密码；无法找回备份密码。"); hint_->setObjectName("backupHint"); hint_->setSizePolicy(QSizePolicy::Ignored,QSizePolicy::Preferred); hint_->setMinimumHeight(hint_->fontMetrics().height()+6); outer->addWidget(hint_);
+    stopCore_=new QPushButton("停止内核"); stopCore_->setObjectName("backupStopCore"); stopCore_->setAutoDefault(false); prerequisiteRow->addWidget(stopCore_); auto reserved=stopCore_->sizePolicy(); reserved.setRetainSizeWhenHidden(true); stopCore_->setSizePolicy(reserved); prerequisite->setVisible(restore); layout->addWidget(prerequisite);
+    hint_ = new ElidedLabel(restore ? "先预览校验，再确认恢复。" : "请妥善保存密码；无法找回备份密码。"); hint_->setObjectName("backupHint"); hint_->setSizePolicy(QSizePolicy::Ignored,QSizePolicy::Preferred); hint_->setMinimumHeight(hint_->fontMetrics().height()+6); hint_->setProperty("secondary",true); layout->addWidget(hint_);
     contents_ = new QLabel; contents_->setObjectName("backupContents"); contents_->setTextFormat(Qt::PlainText); contents_->setWordWrap(true); contents_->setProperty("secondary",true); contents_->setVisible(restore); layout->addWidget(contents_);
-    auto* selectionTools=new QWidget; auto* toolRow=new QHBoxLayout(selectionTools); toolRow->setContentsMargins(0,0,0,0); toolRow->addWidget(new QLabel("选择新增订阅")); toolRow->addStretch(); selectAll_=new QPushButton("全选"); selectAll_->setAutoDefault(false); selectNone_=new QPushButton("清空"); selectNone_->setAutoDefault(false); toolRow->addWidget(selectAll_); toolRow->addWidget(selectNone_); selectionTools->setVisible(restore); layout->addWidget(selectionTools);
-    selection_=new QListWidget; selection_->setObjectName("backupSelection"); selection_->setAccessibleName("选择恢复的订阅及新增名称"); selection_->setMinimumHeight(70); selection_->setWordWrap(true); selection_->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff); selection_->setVisible(restore); layout->addWidget(selection_,1);
+    auto* selectionTools=new QWidget; auto* toolRow=new QHBoxLayout(selectionTools); toolRow->setContentsMargins(0,0,0,0); toolRow->addWidget(new QLabel("选择新增订阅")); toolRow->addStretch(); selectAll_=new QPushButton("全选"); selectAll_->setAutoDefault(false); selectNone_=new QPushButton("清空"); selectNone_->setAutoDefault(false); toolRow->addWidget(selectAll_); toolRow->addWidget(selectNone_); selectionTools->hide(); layout->addWidget(selectionTools);
+    selection_=new QListWidget; selection_->setObjectName("backupSelection"); selection_->setAccessibleName("选择恢复的订阅及新增名称"); selection_->setMinimumHeight(70); selection_->setWordWrap(true); selection_->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff); selection_->setVisible(restore); layout->addWidget(selection_);
     connect(selection_,&QListWidget::itemChanged,this,[this] { updateActions(); }); connect(settings_,&QCheckBox::toggled,this,[this] { updateActions(); });
     const auto checkAll=[this](Qt::CheckState state) { const QSignalBlocker blocker(selection_); for (int i=0;i<selection_->count();++i) selection_->item(i)->setCheckState(state); updateActions(); }; connect(selectAll_,&QPushButton::clicked,this,[checkAll] { checkAll(Qt::Checked); }); connect(selectNone_,&QPushButton::clicked,this,[checkAll] { checkAll(Qt::Unchecked); });
-    auto* actions = new QDialogButtonBox(QDialogButtonBox::Cancel); actions->button(QDialogButtonBox::Cancel)->setText("取消"); preview_ = actions->addButton("预览校验", QDialogButtonBox::ActionRole); preview_->setObjectName("previewBackup"); preview_->setVisible(restore); submit_ = actions->addButton(restore ? "恢复备份" : "创建备份", QDialogButtonBox::ActionRole); submit_->setObjectName("submitBackup"); submit_->setProperty("primary",true); outer->addWidget(actions);
+    auto* actions = new QDialogButtonBox(QDialogButtonBox::Cancel); actions->button(QDialogButtonBox::Cancel)->setText("取消"); preview_ = actions->addButton("预览校验", QDialogButtonBox::ActionRole); preview_->setObjectName("previewBackup"); preview_->setVisible(restore); submit_ = actions->addButton(restore ? "恢复备份" : "创建备份", QDialogButtonBox::ActionRole); submit_->setObjectName("submitBackup"); submit_->setProperty("primary",true);
+    auto* footer=new QWidget;
+    footer->setMaximumWidth(640);
+    auto* footerLayout=new QHBoxLayout(footer);
+    footerLayout->setContentsMargins(14,0,14,0);
+    footerLayout->addWidget(actions);
+    auto* footerRow=new QHBoxLayout;
+    footerRow->addWidget(footer,1);
+    footerRow->addStretch(0);
+    outer->addLayout(footerRow);
+    outer->addStretch(0);
     connect(actions, &QDialogButtonBox::rejected, this, &QDialog::reject);
     connect(stopCore_,&QPushButton::clicked,this,[this] {
         stopping_=true; updateActions();
         controller_->stopCore();
     });
     connect(browse, &QPushButton::clicked, this, [this] { const auto path = restore_ ? QFileDialog::getOpenFileName(this,"选择备份",{},"Mlash 备份 (*.mlashbackup)") : QFileDialog::getSaveFileName(this,"保存备份","Mlash-"+QDateTime::currentDateTime().toString("yyyyMMdd-HHmmss")+".mlashbackup","Mlash 备份 (*.mlashbackup)"); if (!path.isEmpty()) path_->setText(path); });
-    for (auto* field : {path_,password_,confirm_}) connect(field,&QLineEdit::textChanged,this,[this] { digest_.clear(); contents_->clear(); previewNames_.clear(); selection_->clear(); updateActions(); });
+    for (auto* field : {path_,password_,confirm_}) connect(field,&QLineEdit::textChanged,this,[this] {
+        digest_.clear(); contents_->clear(); previewNames_.clear(); selection_->clear();
+        if (restore_) hint_->setText("先预览校验，再确认恢复。");
+        updateActions();
+    });
     connect(controller_,&AppController::stateChanged,this,[this] { updateActions(); });
     connect(preview_,&QPushButton::clicked,this,[this] {
         previewing_ = true; updateActions(); const QPointer<BackupDialog> guard(this);
@@ -88,6 +122,15 @@ void BackupDialog::updateActions() {
     const auto& state=controller_->state();
     const bool available = !state.busy && !state.exiting && !previewing_ && !submitted_ && !stopping_;
     const bool stopped=state.core==CoreState::Stopped&&state.proxy!=ProxyState::Owned;
+    const bool previewed=restore_&&!digest_.isEmpty();
+    if (restore_) {
+        findChild<QScrollArea*>("backupScroll")->setMaximumHeight(previewed?360:240);
+        findChild<QWidget*>("restorePrerequisite")->setVisible(!stopped);
+        contents_->setVisible(previewed);
+        settings_->setVisible(previewed);
+        selectAll_->parentWidget()->setVisible(previewed&&!previewNames_.isEmpty());
+        selection_->setVisible(previewed&&!previewNames_.isEmpty());
+    }
     findChild<QLabel*>("restorePrerequisiteText")->setText(stopped?"内核已停止；确认所选内容后恢复":"恢复前需停止内核并释放本程序代理");
     stopCore_->setVisible(restore_&&!stopped);
     stopCore_->setEnabled(available&&!state.readOnly);
@@ -96,7 +139,8 @@ void BackupDialog::updateActions() {
     const bool valid = !path_->text().isEmpty() && password_->text().size() >= 8;
     preview_->setEnabled(available && valid);
     submit_->setEnabled(available && valid && !state.readOnly && (restore_ ? stopped&&!digest_.isEmpty()&&(!chosen.isEmpty()||settings_->isChecked()) : password_->text() == confirm_->text()));
-    submit_->setText(restore_?QString("恢复 %1 项").arg(chosen.size()+(settings_->isChecked()?1:0)):QString("创建备份"));
+    submit_->setText(previewed?QString("恢复 %1 项").arg(chosen.size()+(settings_->isChecked()?1:0)):
+                     restore_?QString("恢复备份"):QString("创建备份"));
     submit_->setToolTip(restore_&&!stopped?"先停止内核并释放 Mlash 的系统代理，再确认恢复；预览和选择会保留。":QString());
     for (auto* field : {path_,password_,confirm_}) field->setEnabled(available);
 }

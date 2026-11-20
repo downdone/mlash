@@ -1,4 +1,4 @@
-"""Generate the brand and static tray variants from one SVG master. Requires Pillow."""
+"""Recreate the archived elephant illustrations. Requires Pillow."""
 from pathlib import Path
 from copy import deepcopy
 import xml.etree.ElementTree as ET
@@ -137,12 +137,6 @@ for key in keys:
     ET.ElementTree(svg).write(tray / f"{key}.svg", encoding="utf-8", xml_declaration=True)
     images[key] = render(svg)
     images[key].resize((64, 64), Image.Resampling.LANCZOS).save(tray / f"{key}.png")
-qrc = ET.Element("RCC")
-resource = ET.SubElement(qrc, "qresource", prefix="/brand")
-ET.SubElement(resource, "file").text = "mlash.png"
-for key in keys:
-    ET.SubElement(resource, "file").text = f"tray/{key}.png"
-ET.ElementTree(qrc).write(root / "brand.qrc", encoding="unicode")
 preview = Image.new("RGB", (750, 580), "#f5f5f7")
 draw = ImageDraw.Draw(preview)
 font = ImageFont.load_default(size=12)

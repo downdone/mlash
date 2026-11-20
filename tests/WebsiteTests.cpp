@@ -166,6 +166,12 @@ private slots:
     void cardLayoutAtSupportedSizes() {
         QTemporaryDir dir; AppController controller(dir.path(),true); QSignalSpy init(&controller,&AppController::initialized); controller.initialize(); QTRY_COMPARE(init.size(),1); MainWindow window(&controller); window.show(); window.setPage(7);
         const auto output=qEnvironmentVariable("MLASH_UI_SCREENSHOTS"); if (!output.isEmpty()) { QDir().mkpath(output); QVERIFY(writeAtomic(output+"/website-render-context.json",QJsonDocument(QJsonObject{{"device_pixel_ratio",window.devicePixelRatioF()},{"platform",QGuiApplication::platformName()}}).toJson()).ok); }
+        auto* scroll=window.findChild<QScrollArea*>("websiteScroll"); QVERIFY(scroll);
+        QVERIFY(!scroll->isVisible());
+        QVERIFY(window.findChild<QPushButton*>("websiteNextStep")->isVisible());
+        const_cast<AppState&>(controller.state()).activeProfile="layout-fixture";
+        emit controller.stateChanged();
+        QVERIFY(scroll->isVisible());
         QCOMPARE(window.findChildren<QFrame*>("websiteCard").size(),12);
         for (const auto size:{QSize(840,560),QSize(940,620),QSize(1180,810)}) {
             window.resize(size); QCoreApplication::processEvents(); auto* scroll=window.findChild<QScrollArea*>("websiteScroll"); QCOMPARE(scroll->horizontalScrollBar()->maximum(),0);

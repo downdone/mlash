@@ -131,6 +131,30 @@ QWidget* MainWindow::trafficPanel() {
     // This page is already the detail surface. Show its one metric source directly.
     auto* panel = new QWidget; panel->setObjectName("trafficPanel"); auto* layout = new QVBoxLayout(panel); layout->setContentsMargins(0,0,0,0); layout->setSpacing(12);
     auto* metrics = new HomeMetricsView(controller_->homeMetrics()); connect(metrics,&HomeMetricsView::inspectRequested,this,&MainWindow::showOutboundDiagnostics); layout->addWidget(metrics);
+    auto* missing=new QLabel; missing->setObjectName("trafficNextReason"); missing->setWordWrap(true);
+    auto* next=new QPushButton; next->setObjectName("trafficNextStep"); next->setProperty("primary",true);
+    auto* empty=new QFrame; empty->setObjectName("panel"); auto* emptyLayout=new QVBoxLayout(empty);
+    emptyLayout->addWidget(missing); emptyLayout->addWidget(next,0,Qt::AlignLeft);
+    layout->addWidget(empty);
+    connect(next,&QPushButton::clicked,this,[this] {
+        navigate(Route{controller_->state().activeProfile.isEmpty()?ViewIds::Profiles:ViewIds::Home});
+    });
+    const auto refresh=[this,metrics,empty,missing,next] {
+        const auto& state=controller_->state();
+        const bool hasProfile=!state.activeProfile.isEmpty();
+        const bool waiting=state.core==CoreState::Starting || state.core==CoreState::Stopping || state.busy;
+        const bool sampled=!controller_->homeMetrics()->snapshot().isEmpty();
+        metrics->setVisible(sampled);
+        empty->setVisible(!sampled);
+        missing->setText(!hasProfile?"使用配置后即可查看流量。":waiting?"正在等待连接…":
+            !state.ready?"前往首页开启代理后查看流量。":
+            controller_->homeMetrics()->error().isEmpty()?"正在采集流量…":"暂时无法读取流量，正在等待下次采集。");
+        next->setText(hasProfile?"前往首页":"前往配置");
+        next->setVisible(!sampled && (!hasProfile || (!waiting && !state.ready)));
+    };
+    connect(controller_,&AppController::stateChanged,panel,refresh);
+    connect(controller_->homeMetrics(),&HomeMetrics::changed,panel,refresh);
+    refresh();
     homeOutboundSummary_ = new QLabel; homeOutboundSummary_->setObjectName("outboundSummary"); homeOutboundSummary_->setProperty("secondary", true); homeOutboundSummary_->setWordWrap(true); layout->addWidget(homeOutboundSummary_);
     layout->addStretch();
     return panel;

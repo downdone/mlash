@@ -61,6 +61,6 @@ ADR 按编号保留决策意图，后续决策可替代早期取舍，不抹除�
 
 ## 资源与发行
 
-Qt 动态链接，yaml-cpp 等依赖按锁定提交获取，编译器 ABI 不混用。品牌源为 `resources/mlash.svg`；generate-brand.py 派生 PNG/ICO/托盘资源，generate-service-icons.py 维护服务图标。派生资源入库，Python/Pillow 不进入运行包。
+Qt 动态链接，yaml-cpp 等依赖按锁定提交获取，编译器 ABI 不混用。现行品牌资产及应用位置见 [VI](design/u32-mlash-visual-identity.md)。`generate-brand.py` 用于追溯旧版小象资源，`generate-service-icons.py` 维护服务图标。派生资源入库，运行包无需 Python 或 Pillow。
 
 正式发行的证据和授权材料按 [发布门禁](release-readiness.md) 管理。默认测试不改系统代理；真实写入仅在受控 VM 显式启用，失败保留恢复意图。

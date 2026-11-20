@@ -46,15 +46,18 @@ QWidget* MainWindow::nodeSection() {
     search_ = new QLineEdit; search_->setObjectName("nodeSearch"); search_->setPlaceholderText("搜索节点"); search_->setClearButtonEnabled(true); search_->setMinimumWidth(120); search_->setMaximumWidth(280); search_->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed); headingLayout->addWidget(search_); search_->hide();
     auto* searchToggle=new QToolButton; searchToggle->setObjectName("nodeSearchToggle"); searchToggle->setProperty("prototypeIcon",true); searchToggle->setIcon(UiIcons::icon(UiIcons::Glyph::Search,UiTheme::Secondary)); searchToggle->setToolTip("搜索节点"); searchToggle->setCheckable(true);
     connect(searchToggle,&QToolButton::toggled,search_,[this](bool shown) { search_->setVisible(shown); if (shown) search_->setFocus(); else search_->clear(); });
-    testAction_ = new QAction("测速本组", this); testAction_->setObjectName("testGroup"); testSelectedAction_ = new QAction("测速所选", this);
-    // 取消测速：仍挂在测速按钮的菜单里（原来在底部状态条，随 H3 一起删除）。
+    testSelectedAction_ = new QAction("测速所选", this);
     cancelTestAction_ = new QAction("取消测速", this); cancelTestAction_->setObjectName("cancelNodeTests");
-    auto* testMenu = new QMenu(this); testMenu->addAction(testAction_); testMenu->addAction(testSelectedAction_); testMenu->addSeparator(); testMenu->addAction(cancelTestAction_);
+    auto* testMenu = new QMenu(this); testMenu->addAction(testSelectedAction_); testMenu->addAction(cancelTestAction_);
     connect(cancelTestAction_, &QAction::triggered, controller_, &AppController::cancelTests);
-    // K4（原型 05）：测速与排序是两个图标钮，各自带一个浮层菜单。
-    testAction_->setIcon(UiIcons::icon(UiIcons::Glyph::Gauge,UiTheme::Secondary));
-    auto* test = new QToolButton; test->setObjectName("nodeTestButton"); test->setProperty("prototypeIcon",true); test->setDefaultAction(testAction_);
-    test->setToolButtonStyle(Qt::ToolButtonIconOnly); test->setToolTip("测试本组节点延迟；只读，不切换节点"); headingLayout->addWidget(test);
+    auto* update=new QToolButton; update->setObjectName("nodeUpdateProfile"); update->setProperty("prototypeIcon",true);
+    update->setText("更新订阅");
+    connect(update,&QToolButton::clicked,this,[this,update] {
+        const auto id=controller_->state().activeProfile;
+        if (id.isEmpty()) return;
+        update->setProperty("pendingProfileUpdate",true);
+        controller_->updateProfile(id);
+    });
     auto* sort = new QToolButton; sort->setObjectName("nodeSortButton"); sort->setIcon(UiIcons::icon(UiIcons::Glyph::Sliders)); sort->setPopupMode(QToolButton::InstantPopup); sort->setAutoRaise(true); sort->setToolTip("排序");
     auto* sortMenu = new QMenu(sort); sortMenu->setObjectName("nodeSortMenu");
     for (const auto& option:QList<QPair<QString,int>>{{"原始顺序",-1},{"按名称升序",0},{"按延迟升序",2}}) {
@@ -78,7 +81,7 @@ QWidget* MainWindow::nodeSection() {
     // 行列表（原型 01 的 list-card）：组头与成员行都由 NodeRowModel 拍平，
     // 视图只负责画与把点击分流到折叠、详情、切换三条路径。
     nodeList_ = new NodeRowView; nodeList_->setObjectName("nodeList"); nodeList_->setUniformItemSizes(false);
-    static_cast<NodeRowView*>(nodeList_)->delayClicked=[this](const QModelIndex& index) { if (testAction_->isEnabled()) controller_->testNodes({nodeRows_->memberAt(index.row())},selectedGroup_); };
+    static_cast<NodeRowView*>(nodeList_)->delayClicked=[this](const QModelIndex& index) { if (nodeList_->property("nodeTestEnabled").toBool()) controller_->testNodes({nodeRows_->memberAt(index.row())},selectedGroup_); };
     static_cast<NodeRowView*>(nodeList_)->infoClicked=[this](const QModelIndex& index) { if (nodeRows_->rowIsHeader(index.row())) editNodePreferences(); else showNodeDetails(nodeRows_->memberAt(index.row())); };
     nodeList_->setItemDelegate(new NodeRowDelegate(nodeList_)); nodeList_->setSelectionMode(QAbstractItemView::SingleSelection);
     nodeList_->setEditTriggers(QAbstractItemView::NoEditTriggers); nodeList_->setVerticalScrollMode(QAbstractItemView::ScrollPerPixel);
@@ -143,16 +146,25 @@ QWidget* MainWindow::nodeSection() {
       headingLayout->addWidget(groupPicker);
       headingLayout->addWidget(nodeCount_);
       headingLayout->addStretch(1);
-      for (auto* widget:QList<QWidget*>{search_,searchToggle,locate,test,tools}) headingLayout->addWidget(widget);
+      for (auto* widget:QList<QWidget*>{search_,searchToggle,locate,update,tools}) headingLayout->addWidget(widget);
       for (auto* cell:cells) delete cell;
     }
-    for (auto* control:QList<QToolButton*>{searchToggle,locate,test,tools}) { control->setFixedSize(32,32); control->setIconSize(QSize(20,20)); }
+    searchToggle->setText("搜索");
+    locate->setText("定位");
+    tools->setText("更多");
+    for (auto* control:QList<QToolButton*>{searchToggle,locate,update,tools}) {
+        control->setToolButtonStyle(Qt::ToolButtonTextOnly);
+        control->setFixedHeight(32);
+        control->setAccessibleName(control->text());
+    }
+    headingLayout->removeWidget(search_);
+    search_->setMaximumWidth(QWIDGETSIZE_MAX);
+    layout->insertWidget(1,search_);
     tools->setMenu(more);
     nodeGroupHint_ = new QLabel; nodeGroupHint_->setObjectName("nodeGroupHint"); nodeGroupHint_->setProperty("secondary", true); nodeGroupHint_->setSizePolicy(QSizePolicy::Preferred,QSizePolicy::Maximum); nodeGroupHint_->setTextFormat(Qt::PlainText);
     layout->addWidget(nodeGroupHint_);
     layout->addStretch(0); // Absorb surplus below short lists, never between the toolbar and group.
 
-    connect(testAction_, &QAction::triggered, this, [this] { controller_->testNodes(model_.names(),selectedGroup_); });
     // 测选中：两个视图共用一条路径，名字由当前显示的视图决定。
     connect(testSelectedAction_, &QAction::triggered, this, [this] {
         const auto name = memberView() == 1 ? nodeCards_->currentIndex().data(Qt::UserRole).toString()
@@ -179,7 +191,7 @@ QWidget* MainWindow::nodeSection() {
     connect(nodeCards_, &QListView::doubleClicked, this, [this] { chooseSelectedNode(); });
     auto* cardEnter = new QShortcut(QKeySequence(Qt::Key_Return), nodeCards_); cardEnter->setContext(Qt::WidgetWithChildrenShortcut); connect(cardEnter, &QShortcut::activated, this, &MainWindow::chooseSelectedNode);
     auto* cardRight = new QShortcut(QKeySequence(Qt::Key_Right), nodeCards_); cardRight->setContext(Qt::WidgetWithChildrenShortcut); connect(cardRight, &QShortcut::activated, this, &MainWindow::enterSelectedGroup);
-    static_cast<NodeCardView*>(nodeCards_)->delayClicked = [this](const QModelIndex& index) { if (testAction_->isEnabled() && index.isValid()) controller_->testNodes({index.data(Qt::UserRole).toString()}, selectedGroup_); };
+    static_cast<NodeCardView*>(nodeCards_)->delayClicked = [this](const QModelIndex& index) { if (nodeCards_->property("nodeTestEnabled").toBool() && index.isValid()) controller_->testNodes({index.data(Qt::UserRole).toString()}, selectedGroup_); };
     static_cast<NodeCardView*>(nodeCards_)->infoClicked = [this](const QModelIndex& index) { if (index.isValid()) showNodeDetails(index.data(Qt::UserRole).toString()); };
     auto* retest = new QShortcut(QKeySequence(Qt::Key_F5), nodeCards_); retest->setContext(Qt::WidgetWithChildrenShortcut); connect(retest, &QShortcut::activated, this, [this] { if (testSelectedAction_->isEnabled()) testSelectedAction_->trigger(); });
     auto* cardInfo = new QShortcut(QKeySequence(Qt::CTRL|Qt::Key_I), nodeCards_); cardInfo->setContext(Qt::WidgetWithChildrenShortcut); connect(cardInfo,&QShortcut::activated,this,[this] { const auto index=nodeCards_->currentIndex(); if (index.isValid()) showNodeDetails(index.data(Qt::UserRole).toString()); });
@@ -207,7 +219,17 @@ void MainWindow::updateNodeCount() {
     if (nodeViews_) {
         const int cardWidth=nodeCards_->gridSize().width();
         const int columns=cardWidth>0?qMax(1,nodeCards_->viewport()->width()/cardWidth):1;
-        const int rows=memberView()==1?(filter_.rowCount()+columns-1)/columns:nodeRows_->rowCount();
+        int rows=nodeRows_->rowCount();
+        if (memberView()==1) {
+            rows=(filter_.rowCount()+columns-1)/columns;
+            // QListView may have wrapped before the new viewport width was available.
+            // Use the laid-out vertical extent when it needs more rows than the estimate.
+            if (filter_.rowCount()>0) {
+                const auto last=nodeCards_->visualRect(filter_.index(filter_.rowCount()-1,0));
+                const int extent=last.bottom()+1+nodeCards_->verticalScrollBar()->value();
+                rows=qMax(rows,(extent+UiTheme::NodeCardHeight-1)/UiTheme::NodeCardHeight);
+            }
+        }
         nodeViews_->setMaximumHeight(rows>0?qMax(64,rows*(memberView()==1?UiTheme::NodeCardHeight:UiTheme::twoLineRowHeight(nodeList_->font()))+4):QWIDGETSIZE_MAX);
     }
     nodeCount_->setText(filter_.rowCount() == model_.rowCount() ? QString("%1 个").arg(model_.rowCount())

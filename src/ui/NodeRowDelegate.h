@@ -11,7 +11,8 @@ class NodeRowDelegate final : public QStyledItemDelegate {
 public:
     using QStyledItemDelegate::QStyledItemDelegate;
     QSize sizeHint(const QStyleOptionViewItem& option, const QModelIndex&) const override {
-        return {10, UiTheme::twoLineRowHeight(option.font)};
+        const int textHeight=QFontMetrics(option.font).height()+QFontMetrics(UiTheme::rowCaptionFont(option.font)).height();
+        return {10, qMax(UiTheme::NodeRowHeight,textHeight+3)};
     }
     static QRect infoRect(const QRect& row) { return {row.right()-38,row.center().y()-14,28,28}; }
     static QRect delayRect(const QRect& row) { return {row.right()-108,row.top()+3,62,row.height()-6}; }

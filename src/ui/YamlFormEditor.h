@@ -19,6 +19,7 @@ public:
     void setReferenceOptions(const QStringList& members,const QStringList& providers);
     void setSourceFields(const QSet<QString>& fields);
     void setOverrideEnabled(bool enabled);
+    void useModeButton(QPushButton* button);
 signals:
     void activityChanged();
 private:

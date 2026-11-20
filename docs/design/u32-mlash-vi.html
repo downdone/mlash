@@ -1,0 +1,462 @@
+<!doctype html>
+<html lang="zh-CN">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Mlash 视觉识别规范</title>
+<style>
+  @font-face {
+    font-family: "Noto Sans SC";
+    src: url("../../resources/fonts/NotoSansSC-variable.ttf") format("truetype");
+    font-style: normal;
+    font-weight: 100 900;
+    font-display: swap;
+  }
+  :root {
+    color-scheme: light;
+    --canvas: #f7f7f7;
+    --sidebar: #f0f0f0;
+    --surface: #ffffff;
+    --line: #dddddd;
+    --ink: #202020;
+    --secondary: #5b5b5b;
+    --brand-charcoal: #202020;
+    --accent: #0069dc;
+    --action-blue: #005fc7;
+    --on-accent: #ffffff;
+    --selected: #e7f2ff;
+    --on-selected: #0059b9;
+    --hover: #eaf4ff;
+    --pressed: #e2ebf7;
+    --disabled: #999999;
+    --switch-on: #21864a;
+    --switch-off: #777777;
+    --switch-knob: #ffffff;
+    --success: #21683d;
+    --warning: #91451f;
+    --error: #ab263b;
+    --cover: #eaf5ff;
+    --cover-ink: #122944;
+    --cover-caption: #285a90;
+    --cover-mark: #83bfff;
+    --cover-logo: url("u32-assets/mlash-lockup.svg");
+    --lockup: url("u32-assets/mlash-lockup.svg");
+    --type-scale: 1;
+  }
+  :root[data-theme="dark"] {
+    color-scheme: dark;
+    --canvas: #181818;
+    --sidebar: #202020;
+    --surface: #2a2a2a;
+    --line: #505050;
+    --ink: #f7f7f7;
+    --secondary: #c3c3c3;
+    --accent: #65b1ff;
+    --action-blue: #82c1ff;
+    --on-accent: #112337;
+    --selected: #20374f;
+    --on-selected: #cde7ff;
+    --hover: #333b45;
+    --pressed: #3b4653;
+    --disabled: #898989;
+    --switch-on: #4fd183;
+    --switch-off: #929292;
+    --switch-knob: #112337;
+    --success: #83dea2;
+    --warning: #ffc1a0;
+    --error: #ffadba;
+    --cover: #132a43;
+    --cover-ink: #ffffff;
+    --cover-caption: #d9ecff;
+    --cover-mark: #398ff0;
+    --cover-logo: url("u32-assets/mlash-lockup-reversed.svg");
+    --lockup: url("u32-assets/mlash-lockup-reversed.svg");
+  }
+  :root[data-contrast="high"]:not([data-theme="dark"]) {
+    --canvas: #ffffff;
+    --sidebar: #f3f3f3;
+    --surface: #ffffff;
+    --line: #666666;
+    --ink: #141414;
+    --secondary: #3c3c3c;
+    --accent: #00448f;
+    --action-blue: #00458f;
+    --on-accent: #ffffff;
+    --selected: #e1eeff;
+    --on-selected: #00448f;
+    --hover: #ededed;
+    --pressed: #d9d9d9;
+    --disabled: #6b6b6b;
+    --switch-on: #075d2c;
+    --switch-off: #505050;
+    --success: #075d2c;
+    --warning: #793212;
+    --error: #8b0628;
+  }
+  :root[data-theme="dark"][data-contrast="high"] {
+    --canvas: #000000;
+    --sidebar: #131313;
+    --surface: #171717;
+    --line: #aaaaaa;
+    --ink: #ffffff;
+    --secondary: #e4e4e4;
+    --accent: #a9d4ff;
+    --action-blue: #9fcfff;
+    --on-accent: #0e1e30;
+    --selected: #17344f;
+    --on-selected: #e4f2ff;
+    --hover: #262626;
+    --pressed: #333333;
+    --disabled: #8c8c8c;
+    --switch-on: #73f0a3;
+    --switch-off: #aaaaaa;
+    --switch-knob: #0e1e30;
+    --success: #9df6b9;
+    --warning: #ffd2bc;
+    --error: #ffd0d8;
+  }
+  :root[data-scale="large"] { --type-scale: 1.2; }
+  * { box-sizing: border-box; }
+  body {
+    --caption: calc(9pt * var(--type-scale));
+    --body: calc(10.5pt * var(--type-scale));
+    --section: calc(11.5pt * var(--type-scale));
+    --page-title: calc(13pt * var(--type-scale));
+    --metric: calc(15pt * var(--type-scale));
+    --brand: calc(16pt * var(--type-scale));
+    margin: 0;
+    color: var(--ink);
+    background: var(--canvas);
+    font: 400 var(--body)/1.5 "Noto Sans SC", "Microsoft YaHei UI", sans-serif;
+  }
+  button { color: inherit; font: inherit; padding: 5px 12px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); cursor: pointer; }
+  button:not(:disabled):hover { background: var(--hover); }
+  button:not(:disabled):active { background: var(--pressed); }
+  button:disabled { color: var(--disabled); cursor: default; }
+  button[aria-pressed="true"] { color: var(--on-selected); background: var(--selected); border-color: var(--accent); }
+  button[aria-pressed="true"]:hover { background: var(--selected); }
+  button:focus-visible, a:focus-visible { outline: 2px solid var(--action-blue); outline-offset: 3px; }
+  .primary { color: var(--on-accent); background: var(--accent); border-color: var(--accent); font-weight: 600; padding: 5px 10px; border-radius: 8px; }
+  .sheet { max-width: 1440px; margin: auto; padding: 32px clamp(16px, 4vw, 56px) 48px; }
+  .sheet-header, .stage-title, .row, .profile-line, .toolbar, .wordmark, .sample-bar {
+    display: flex; align-items: center; gap: 8px; justify-content: space-between;
+  }
+  .sheet-header { gap: 16px; margin-bottom: 28px; flex-wrap: wrap; }
+  .identity { display: flex; align-items: center; gap: 16px; flex-wrap: wrap; }
+  .identity .lockup { width: 124px; }
+  .lockup { display: block; aspect-ratio: 209.3 / 64; background: var(--lockup) left center / contain no-repeat; }
+  h1, h2, h3, p { margin: 0; }
+  h1 { font-size: calc(40pt * var(--type-scale)); font-weight: 600; line-height: 1.14; }
+  h2, h3, .section { font-size: var(--section); font-weight: 600; }
+  .caption, small { color: var(--secondary); font-size: var(--caption); }
+  .toolbar { flex-wrap: wrap; justify-content: flex-start; }
+  .toolbar a, .asset-links a, .quick-action { color: var(--action-blue); text-underline-offset: 3px; }
+  .brand-preview { display: grid; grid-template-columns: 1.35fr 1fr; gap: 16px; margin-bottom: 16px; }
+  .brand-cover {
+    min-height: 265px; position: relative; isolation: isolate; overflow: hidden;
+    padding: clamp(20px, 3vw, 40px); display: grid; align-content: space-between; gap: 32px;
+    background: var(--cover); color: var(--cover-ink); border-radius: 14px;
+  }
+  .brand-cover .lockup { width: 110px; background-image: var(--cover-logo); }
+  .brand-cover h1 { max-width: 10em; }
+  .brand-cover p { margin-top: 10px; color: var(--cover-caption); }
+  .brand-cover .cover-line { position: absolute; z-index: -1; color: var(--cover-mark); width: 63%; height: 127%; right: -22%; bottom: -47%; opacity: .8; }
+  .asset-board { display: grid; gap: 16px; align-content: center; }
+  .lockup-preview { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+  .lockup-preview div { display: grid; place-items: center; min-height: 84px; padding: 12px; border: 1px solid var(--line); border-radius: 8px; }
+  .lockup-preview img { width: min(100%, 130px); }
+  .lockup-preview .positive { background: #f7f7f7; }
+  .lockup-preview .negative { background: #132a43; }
+  .asset-links { display: flex; gap: 8px 14px; flex-wrap: wrap; }
+  .icon-sizes { display: flex; align-items: end; gap: 12px; }
+  .icon-sizes span { display: grid; justify-items: center; gap: 4px; }
+  .stages { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
+  .stage { min-width: 0; overflow: hidden; border: 1px solid var(--line); border-radius: 14px; background: var(--surface); }
+  .stage-title { padding: 12px 16px; border-bottom: 1px solid var(--line); background: var(--surface); }
+  .stage-title h2 { font-size: var(--page-title); }
+  .workspace { display: grid; grid-template-columns: 132px minmax(0, 1fr); min-height: 340px; background: var(--canvas); }
+  aside { display: flex; flex-direction: column; padding: 16px 10px; background: var(--sidebar); border-right: 1px solid var(--line); }
+  .wordmark { justify-content: flex-start; gap: 8px; font-size: var(--brand); font-weight: 600; margin: 0 0 16px; }
+  .wordmark .lockup { width: calc(91px * var(--type-scale)); }
+  .nav-label { padding: 0 8px; margin-bottom: 4px; }
+  .nav-item { display: flex; align-items: center; gap: 8px; min-height: 34px; padding: 4px 8px; border-radius: 8px; }
+  .nav-item svg, .row-icon { width: 16px; height: 16px; flex: none; fill: none; stroke: currentColor; stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; }
+  .nav-item[aria-current="page"] { color: var(--on-selected); background: var(--selected); font-weight: 600; }
+  button.nav-item { width: 100%; border: 0; background: transparent; text-align: left; }
+  button.nav-item:hover { background: var(--selected); }
+  button.nav-item[aria-current="page"] { background: var(--selected); }
+  .nav-bottom { margin-top: auto; border-top: 1px solid var(--line); padding-top: 8px; }
+  .pane { min-width: 0; padding: 16px; }
+  .rows, .profile { background: var(--surface); border: 1px solid var(--line); border-radius: 12px; }
+  .row { padding: 8px 10px; min-height: 39px; }
+  .row + .row { border-top: 1px solid var(--line); }
+  .row-label { display: flex; align-items: center; gap: 8px; min-width: 0; }
+  .row-icon { color: var(--action-blue); }
+  .section-head { margin: 12px 0 8px; }
+  .switch { flex: none; width: 38px; height: 22px; padding: 2px; border: 0; display: inline-flex; align-items: center; border-radius: 999px; background: var(--switch-off); }
+  .switch[aria-checked="true"] { background: var(--switch-on); justify-content: flex-end; }
+  .switch:hover { background: var(--switch-off); }
+  .switch[aria-checked="true"]:hover { background: var(--switch-on); }
+  .switch::after { content: ""; height: 18px; width: 18px; border-radius: 50%; background: white; box-shadow: 0 1px 3px #22222236; }
+  .switch[aria-checked="true"]::after { background: var(--switch-knob); }
+  :root[data-theme="dark"] .switch[aria-checked="false"]::after { background: #112337; }
+  .names { min-width: 0; }
+  .names span { display: block; }
+  .profiles { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+  .profile { padding: 14px 16px; min-width: 0; border-radius: 10px; }
+  .profile.is-selected { border-color: var(--accent); }
+  .profile-top { display: grid; grid-template-columns: 32px minmax(0, 1fr) auto; align-items: center; gap: 10px; }
+  .profile-mark { display: grid; place-items: center; width: 32px; height: 32px; background: var(--sidebar); color: var(--secondary); border-radius: 8px; }
+  .profile-mark svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 1.3; }
+  .profile h3, .profile .caption { overflow-wrap: anywhere; }
+  .profile-meta { margin: 9px 0 0 42px; }
+  .profile-line { margin-top: 18px; flex-wrap: wrap; justify-content: space-between; gap: 8px; }
+  .profile-line strong { padding: 2px 8px; border-radius: 6px; background: var(--sidebar); }
+  .profile time { font-variant-numeric: tabular-nums; }
+  .sample-tabs { display: inline-flex; gap: 4px; padding: 3px; border-radius: 7px; background: var(--sidebar); }
+  .sample-tabs span { padding: 5px 12px; border-radius: 5px; }
+  .sample-tabs [aria-current] { background: var(--surface); font-weight: 600; }
+  .status-ok { color: var(--success); }
+  .status-warn { color: var(--warning); }
+  .status-error { color: var(--error); }
+  .catalog { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-top: 16px; }
+  .specimen { background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 16px; }
+  .specimen h2 { margin-bottom: 12px; }
+  .state-specimen { margin-top: 16px; }
+  .state-samples { display: flex; flex-wrap: wrap; gap: 8px; }
+  .state-samples span { padding: 7px 12px; border-radius: 8px; border: 1px solid var(--line); }
+  .state-samples .hover { background: var(--hover); }
+  .state-samples .pressed { background: var(--pressed); }
+  .state-samples .selected { background: var(--selected); color: var(--on-selected); font-weight: 600; }
+  .state-samples .keyboard { border-color: var(--action-blue); }
+  .state-samples .disabled { color: var(--disabled); }
+  .swatches { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
+  .swatch { display: grid; grid-template-rows: 34px auto auto; gap: 4px; }
+  .swatch i { background: var(--swatch); border-radius: 6px; border: 1px solid var(--line); }
+  .type-sample { padding: 5px 0; border-bottom: 1px solid var(--line); }
+  .type-sample:last-child { border-bottom: 0; }
+  .type-sample small { flex: none; }
+  .metric { font-weight: 600; font-size: var(--metric); }
+  .metric span { font-size: var(--body); }
+  .metric-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+  .metric-grid div { padding: 8px 12px; background: var(--surface); border: 1px solid var(--line); border-radius: 8px; }
+  .metric-grid p { white-space: nowrap; }
+  [hidden] { display: none !important; }
+  @media (max-width: 1120px) { .stages { grid-template-columns: 1fr; } }
+  @media (max-width: 620px) {
+    .brand-preview, .lockup-preview { grid-template-columns: 1fr; }
+    h1 { font-size: calc(29pt * var(--type-scale)); }
+    .sheet { padding: 16px; }
+    .workspace { grid-template-columns: 1fr; }
+    aside { display: grid; grid-template-columns: repeat(4, 1fr); gap: 4px; border-right: none; border-bottom: 1px solid var(--line); padding: 8px; }
+    aside .wordmark { grid-column: 1 / -1; margin: 0; }
+    .nav-label { display: none; }
+    .nav-bottom { margin: 0; border: 0; padding: 0; }
+    .nav-item { justify-content: center; padding: 4px; }
+    .nav-item svg { display: none; }
+    .catalog { grid-template-columns: 1fr; }
+  }
+  @media (max-width: 360px) { .profiles { grid-template-columns: 1fr; } }
+</style>
+<body>
+<main class="sheet">
+  <header class="sheet-header">
+    <div class="identity">
+      <span class="lockup" role="img" aria-label="Mlash"></span>
+      <span class="caption">视觉识别规范</span>
+    </div>
+    <div class="toolbar" aria-label="样板设置">
+      <button type="button" id="theme" aria-pressed="false">深色</button>
+      <button type="button" id="contrast" aria-pressed="false">增强对比</button>
+      <button type="button" id="scale" aria-pressed="false">120% 字号</button>
+      <a href="u32-mlash-visual-identity.md">设计规范</a>
+    </div>
+  </header>
+  <div class="brand-preview">
+    <section class="brand-cover" aria-label="发布封面示例">
+      <span class="lockup" role="img" aria-label="Mlash"></span>
+      <div><h1>桌面网络连接与诊断</h1><p>Windows 桌面客户端</p></div>
+      <svg class="cover-line" viewBox="0 0 64 64" aria-hidden="true"><path d="M14 43V22Q14 19 17 21L25 30Q27 32 29 30L37 21Q40 19 40 22V33Q40 39 46 39" fill="none" stroke="currentColor" stroke-width="5.5" stroke-linecap="round" stroke-linejoin="round"/><circle cx="54" cy="39" r="3.3" fill="currentColor"/></svg>
+    </section>
+    <section class="specimen asset-board" aria-label="标志资产">
+      <h2>标志与字标</h2>
+      <div class="lockup-preview">
+        <div class="positive"><img src="u32-assets/mlash-lockup.svg" alt="标准组合标志"></div>
+        <div class="negative"><img src="u32-assets/mlash-lockup-reversed.svg" alt="反白组合标志"></div>
+      </div>
+      <div class="icon-sizes" aria-label="图标尺寸">
+        <span><img src="u32-assets/mlash-app-icon.svg" width="16" height="16" alt=""><small>16</small></span>
+        <span><img src="u32-assets/mlash-app-icon.svg" width="24" height="24" alt=""><small>24</small></span>
+        <span><img src="u32-assets/mlash-app-icon.svg" width="32" height="32" alt=""><small>32</small></span>
+        <span><img src="u32-assets/mlash-app-icon.svg" width="48" height="48" alt=""><small>48</small></span>
+      </div>
+      <div class="asset-links caption"><a href="u32-assets/mlash-app-icon.svg">应用图标</a><a href="u32-assets/mlash-lockup.svg">标准组合</a><a href="u32-assets/mlash-lockup-reversed.svg">反白组合</a><a href="u32-assets/mlash-symbol.svg">单色标志</a></div>
+    </section>
+  </div>
+  <div class="stages">
+    <article class="stage" aria-labelledby="home-title" id="workspace-sample">
+      <header class="stage-title"><h2 id="home-title">首页</h2></header>
+      <div class="workspace">
+        <aside data-current="首页" aria-label="切换界面样板"></aside>
+        <div class="pane" id="sample-home">
+          <div class="rows" aria-label="代理控制示例">
+            <div class="row"><span class="row-label"><svg class="row-icon"><use href="#icon-proxy"/></svg><strong>日本 · 东京 01</strong></span><button class="switch" type="button" role="switch" aria-label="代理" aria-checked="true"></button></div>
+            <div class="row"><span class="row-label"><svg class="row-icon"><use href="#icon-route"/></svg>全局路由</span><span class="caption">规则模式 ›</span></div>
+            <div class="row"><span class="row-label"><svg class="row-icon"><use href="#icon-data"/></svg>连通性测试</span><span class="caption">测试整组</span></div>
+          </div>
+          <div class="sample-bar section-head"><h3>节点</h3><span class="caption quick-action">更新订阅</span></div>
+          <div class="rows">
+            <div class="row"><div class="names"><span>日本 · 东京 01</span><small>VLESS</small></div><span class="status-ok">81 ms</span></div>
+            <div class="row"><div class="names"><span>新加坡 · 01</span><small>Shadowsocks</small></div><span class="caption">未测试</span></div>
+          </div>
+        </div>
+        <div class="pane" id="sample-profiles" hidden>
+          <div class="sample-bar"><h3>我的配置</h3><span class="primary">添加配置</span></div>
+          <div class="profiles section-head">
+            <article class="profile"><div class="profile-top"><span class="profile-mark"><svg viewBox="0 0 16 16" aria-hidden="true"><use href="#icon-config"/></svg></span><h3>日常订阅</h3><span class="caption">↻　⋯</span></div><p class="profile-meta caption">daily.example　<time>11-20 10:42</time></p><div class="profile-line"><strong class="caption">当前使用</strong><span></span></div></article>
+            <article class="profile is-selected"><div class="profile-top"><span class="profile-mark"><svg viewBox="0 0 16 16" aria-hidden="true"><use href="#icon-config"/></svg></span><h3>本地测试</h3><span class="caption">⋯</span></div><p class="profile-meta caption">local.yaml　<time>11-20 10:42</time></p><div class="profile-line"><strong class="caption status-warn">待应用</strong><span class="caption">查看变化　<span class="primary">应用更新</span></span></div></article>
+          </div>
+        </div>
+        <div class="pane" id="sample-data" hidden>
+          <div class="sample-tabs" aria-label="数据页签"><span aria-current="true">流量</span><span>连接</span><span>测试</span><span>日志</span></div>
+          <div class="metric-grid section-head">
+            <div><small>下载速率</small><p class="metric">5.4 <span>MB/s</span></p></div>
+            <div><small>活跃连接</small><p class="metric">18</p></div>
+          </div>
+          <div class="rows">
+            <div class="row"><span>GitHub</span><span class="status-ok">81 ms · 已响应</span></div>
+            <div class="row"><span>测试目标 2</span><span class="status-error">超时</span></div>
+          </div>
+        </div>
+        <div class="pane" id="sample-settings" hidden>
+          <h3>常用</h3>
+          <div class="rows section-head">
+            <div class="row"><span>随系统启动</span><button class="switch" type="button" role="switch" aria-label="随系统启动" aria-checked="false"></button></div>
+            <div class="row"><span>外观</span><span class="caption">跟随系统 ›</span></div>
+            <div class="row"><span>文字大小</span><span class="caption">100% ›</span></div>
+            <div class="row"><span>关于 Mlash</span><span class="caption">›</span></div>
+          </div>
+        </div>
+      </div>
+    </article>
+    <article class="stage" aria-labelledby="config-title">
+      <header class="stage-title"><h2 id="config-title">配置</h2></header>
+      <div class="workspace">
+        <aside data-current="配置" aria-label="配置侧栏示例"></aside>
+        <div class="pane">
+          <div class="sample-bar"><h3>我的配置 <small>2 个</small></h3><span class="primary">添加配置</span></div>
+          <div class="profiles section-head">
+            <article class="profile"><div class="profile-top"><span class="profile-mark"><svg viewBox="0 0 16 16" aria-hidden="true"><use href="#icon-config"/></svg></span><h3>日常订阅</h3><span class="caption">↻　⋯</span></div><p class="profile-meta caption">daily.example　<time>11-20 10:42</time></p><div class="profile-line"><strong class="caption">当前使用</strong><span></span></div></article>
+            <article class="profile"><div class="profile-top"><span class="profile-mark"><svg viewBox="0 0 16 16" aria-hidden="true"><use href="#icon-config"/></svg></span><h3>本地测试</h3><span class="caption">⋯</span></div><p class="profile-meta caption">local.yaml　<time>11-20 10:42</time></p><div class="profile-line"><strong class="caption">未使用</strong><span class="primary">使用</span></div></article>
+          </div>
+          <div class="section-head"><h3>控件与状态</h3></div>
+          <div class="rows">
+            <div class="row"><span>自动更新</span><button class="switch" type="button" role="switch" aria-label="自动更新" aria-checked="false"></button></div>
+            <div class="row"><span>状态</span><span class="status-ok caption">已响应</span><span class="status-warn caption">待应用</span><span class="status-error caption">更新失败</span></div>
+          </div>
+        </div>
+      </div>
+    </article>
+  </div>
+  <div class="catalog">
+    <section class="specimen">
+      <h2>语义色</h2>
+      <div class="swatches">
+        <div class="swatch" style="--swatch: var(--accent)"><i></i><span>主操作</span><small data-color="--accent"></small></div>
+        <div class="swatch" style="--swatch: var(--brand-charcoal)"><i></i><span>品牌炭黑</span><small data-color="--brand-charcoal"></small></div>
+        <div class="swatch" style="--swatch: var(--action-blue)"><i></i><span>链接与焦点</span><small data-color="--action-blue"></small></div>
+        <div class="swatch" style="--swatch: var(--selected)"><i></i><span>选中面</span><small data-color="--selected"></small></div>
+        <div class="swatch" style="--swatch: var(--switch-on)"><i></i><span>开关启用</span><small data-color="--switch-on"></small></div>
+        <div class="swatch" style="--swatch: var(--canvas)"><i></i><span>画布</span><small data-color="--canvas"></small></div>
+        <div class="swatch" style="--swatch: var(--sidebar)"><i></i><span>侧栏</span><small data-color="--sidebar"></small></div>
+        <div class="swatch" style="--swatch: var(--surface)"><i></i><span>内容面</span><small data-color="--surface"></small></div>
+      </div>
+    </section>
+    <section class="specimen">
+      <h2>字阶</h2>
+      <div class="type-sample sample-bar"><span style="font-size: var(--brand); font-weight: 600">Mlash</span><small>品牌 16 pt</small></div>
+      <div class="type-sample sample-bar"><span class="metric">81 <span>ms</span></span><small>数据主值 15 pt</small></div>
+      <div class="type-sample sample-bar"><span style="font-size: var(--page-title); font-weight: 600">网络设置</span><small>页面标题 13 pt</small></div>
+      <div class="type-sample sample-bar"><span class="section">日常订阅</span><small>区块与卡片 11.5 pt</small></div>
+      <div class="type-sample sample-bar"><span>全局路由</span><small>正文与控件 10.5 pt</small></div>
+      <div class="type-sample sample-bar"><span class="caption">更新时间 10:24</span><small>辅助文字 9 pt</small></div>
+    </section>
+  </div>
+  <section class="specimen state-specimen">
+    <h2>交互状态</h2>
+    <div class="state-samples">
+      <span>默认</span><span class="hover">悬停</span><span class="pressed">按下</span>
+      <span class="selected">选中</span><span class="keyboard">键盘焦点</span><span class="disabled">禁用</span>
+    </div>
+  </section>
+</main>
+<svg xmlns="http://www.w3.org/2000/svg" width="0" height="0" aria-hidden="true" style="position: absolute">
+  <defs>
+    <g id="icon-home"><path d="M2.5 7.5 8 2.5l5.5 5v6h-4.1v-4H6.6v4H2.5z"/></g>
+    <g id="icon-config"><path d="M2 4h4l1.2 1.5H14v7H2z"/></g>
+    <g id="icon-data"><path d="M1.5 8h3l2-5 2.3 10 2-5h3.7"/></g>
+    <g id="icon-settings"><circle cx="8" cy="8" r="3"/><path d="M8 1.5v3m0 7v3M1.5 8h3m7 0h3M3.4 3.4l2.1 2.1m5 5 2.1 2.1m0-9.2-2.1 2.1m-5 5-2.1 2.1"/></g>
+    <g id="icon-proxy"><path d="M9 2H5.5L3 9h4l-.5 5L13 6H9z"/></g>
+    <g id="icon-route"><circle cx="4" cy="12" r="2"/><circle cx="12" cy="4" r="2"/><path d="M4 10V7a3 3 0 0 1 3-3h3"/></g>
+  </defs>
+</svg>
+<template id="sidebar">
+  <div class="wordmark"><span class="lockup" role="img" aria-label="Mlash"></span></div>
+  <div class="nav-label caption">工作区</div>
+  <div class="nav-item" data-page="首页" data-pane="sample-home"><svg aria-hidden="true"><use href="#icon-home"/></svg>首页</div>
+  <div class="nav-item" data-page="配置" data-pane="sample-profiles"><svg aria-hidden="true"><use href="#icon-config"/></svg>配置</div>
+  <div class="nav-item" data-page="数据" data-pane="sample-data"><svg aria-hidden="true"><use href="#icon-data"/></svg>数据</div>
+  <div class="nav-bottom"><div class="nav-item" data-page="设置" data-pane="sample-settings"><svg aria-hidden="true"><use href="#icon-settings"/></svg>设置</div></div>
+</template>
+<script>
+  const root = document.documentElement;
+  const options = new URLSearchParams(location.search);
+  for (const sidebar of document.querySelectorAll("aside")) {
+    sidebar.append(document.querySelector("#sidebar").content.cloneNode(true));
+    sidebar.querySelector(`[data-page="${sidebar.dataset.current}"]`).setAttribute("aria-current", "page");
+  }
+  const preview = document.querySelector("#workspace-sample");
+  for (const item of preview.querySelectorAll("[data-pane]")) {
+    const button = document.createElement("button");
+    button.type = "button";
+    for (const attribute of item.attributes) button.setAttribute(attribute.name, attribute.value);
+    button.append(...item.childNodes);
+    item.replaceWith(button);
+    button.addEventListener("click", () => {
+      preview.querySelector("[aria-current=page]").removeAttribute("aria-current");
+      button.setAttribute("aria-current", "page");
+      preview.querySelector("h2").textContent = button.dataset.page;
+      for (const pane of preview.querySelectorAll(".pane")) pane.hidden = pane.id !== button.dataset.pane;
+    });
+  }
+  document.querySelectorAll(".switch").forEach(button => button.addEventListener("click", () => {
+    button.setAttribute("aria-checked", button.getAttribute("aria-checked") !== "true");
+  }));
+  function setTheme(theme) {
+    root.dataset.theme = theme;
+    document.querySelector("#theme").setAttribute("aria-pressed", theme === "dark");
+    refreshSwatches();
+  }
+  function refreshSwatches() {
+    const colors = getComputedStyle(root);
+    document.querySelectorAll("[data-color]").forEach(swatch => {
+      swatch.textContent = colors.getPropertyValue(swatch.dataset.color).trim().toUpperCase();
+    });
+  }
+  function setContrast(high) {
+    root.dataset.contrast = high ? "high" : "normal";
+    document.querySelector("#contrast").setAttribute("aria-pressed", high);
+    refreshSwatches();
+  }
+  function setScale(large) {
+    root.dataset.scale = large ? "large" : "normal";
+    document.querySelector("#scale").setAttribute("aria-pressed", large);
+  }
+  document.querySelector("#theme").addEventListener("click", () => setTheme(root.dataset.theme === "dark" ? "light" : "dark"));
+  document.querySelector("#contrast").addEventListener("click", () => setContrast(root.dataset.contrast !== "high"));
+  document.querySelector("#scale").addEventListener("click", () => setScale(root.dataset.scale !== "large"));
+  setTheme(options.get("theme") === "dark" ? "dark" : "light");
+  setContrast(options.get("contrast") === "high");
+  setScale(options.get("scale") === "120");
+</script>
+</body>
+</html>

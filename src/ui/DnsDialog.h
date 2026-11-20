@@ -16,8 +16,9 @@ signals:
 private:
     void updateActions();
     void updateSourceHint();
+    void inspectSource();
     AppController* controller_;
-    QString id_, saved_;
+    QString id_, saved_, sourceError_;
     QJsonObject expected_;
     bool savedEnabled_ = false, saving_ = false;
     bool inspected_ = false, observedOverridden_ = false;
@@ -27,7 +28,7 @@ private:
     QPlainTextEdit *editor_, *source_, *effective_, *answer_;
     QLineEdit* name_;
     QComboBox* type_;
-    QPushButton *save_, *query_, *inherit_;
+    QPushButton *save_, *query_, *inherit_, *retry_;
     QLabel* hint_;
     QTabWidget* tabs_;
 };

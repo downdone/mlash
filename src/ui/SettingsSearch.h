@@ -3,12 +3,13 @@
 #include <QPointer>
 #include <QTimer>
 #include "Route.h"
-class QLineEdit; class QMenu; class QPushButton; class QScrollArea;
+class QLineEdit; class QListWidget; class QPushButton;
 namespace mlash {
 class SettingsSearch final : public QWidget {
     Q_OBJECT
 public:
-    SettingsSearch(QWidget* catalog,QScrollArea* scroll,QWidget* parent=nullptr);
+    explicit SettingsSearch(QWidget* catalog,QWidget* parent=nullptr);
+    void installResults(QWidget* resultsParent,QWidget* taskBody);
     void addRoute(const QString& title,const QString& terms,int page);
     // 路由级条目：title/terms 用于检索，route 决定跳转目标（见 Route.h）。
     void addRoute(const QString& title,const QString& terms,Route route);
@@ -21,7 +22,6 @@ signals:
     void anchorRequested(QWidget* anchor);
 protected:
     bool eventFilter(QObject* watched,QEvent* event) override;
-    void showEvent(QShowEvent* event) override;
     void hideEvent(QHideEvent* event) override;
 private:
     struct Entry { QString title,terms; QPointer<QWidget> anchor; int page=-1; Route route; bool hasRoute=false; };
@@ -29,13 +29,14 @@ private:
     void locate(int match);
     void clearMark();
     void showMatches();
+    void dismissMatches();
     QList<Entry> entries_;
     QList<int> matches_;
     int current_=-1;
     QLineEdit* search_;
     QPushButton* count_;
-    QMenu* menu_;
-    QScrollArea* scroll_;
+    QListWidget* results_=nullptr;
+    QWidget* taskBody_=nullptr;
     QPointer<QWidget> marked_;
     QTimer markTimer_;
 };

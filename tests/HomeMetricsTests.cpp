@@ -46,9 +46,13 @@ private slots:
         window.navigate(Route{ViewIds::Data, kNoCategory, HomeAnchor::Control, int(ViewIds::DataTab::Traffic)});
         QCoreApplication::processEvents();
         QCOMPARE(window.currentRoute().tab,int(ViewIds::DataTab::Traffic));
-        QVERIFY(!metrics->isHidden());
+        QVERIFY(metrics->isHidden());
         QVERIFY(!window.findChild<QPushButton*>("trafficDetails"));
-        window.show(); QTest::qWait(20); QVERIFY(metrics->isVisible());
+        window.show(); QTRY_VERIFY(window.findChild<QPushButton*>("trafficNextStep")->isVisible());
+        const_cast<QJsonObject&>(controller.homeMetrics()->snapshot())={{"active_count",0}};
+        emit const_cast<HomeMetrics*>(controller.homeMetrics())->changed();
+        QTRY_VERIFY(metrics->isVisible());
+        QVERIFY(!window.findChild<QPushButton*>("trafficNextStep")->isVisible());
         // 首页不含指标块；切回合页后它随数据页一起隐藏。
         window.setPage(0); QCoreApplication::processEvents();
         QCOMPARE(window.currentRoute().view,int(ViewIds::Home));

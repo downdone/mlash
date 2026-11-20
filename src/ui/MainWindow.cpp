@@ -1,6 +1,7 @@
 #include "app/AppController.h"
 #include "TaskDialog.h"
 #include "MainWindow.h"
+#include "BrandSignature.h"
 #include "WindowChrome.h"
 #include "ElidedLabel.h"
 #include "ConnectionOptions.h"
@@ -70,6 +71,15 @@
 #include <algorithm>
 
 namespace mlash {
+void MainWindow::resizeEvent(QResizeEvent* event) {
+    QMainWindow::resizeEvent(event);
+    if (auto* sidebar=findChild<QWidget*>("sidebar")) {
+        namespace style=design::ShadowrocketStyle;
+        const int desired=event->size().width()<style::narrowSidebarBreakpoint
+            ?style::narrowSidebarWidth:style::geometry.sidebarWidth;
+        if (sidebar->width()!=desired) sidebar->setFixedWidth(desired);
+    }
+}
 using namespace WindowParts;
 MainWindow::MainWindow(AppController* controller, QWidget* parent) : QMainWindow(parent), controller_(controller), model_(this), filter_(this) {
     setAcceptDrops(true);
@@ -82,14 +92,12 @@ MainWindow::MainWindow(AppController* controller, QWidget* parent) : QMainWindow
     central->setObjectName("mainSurface"); central->setAttribute(Qt::WA_StyledBackground, true);
     layout->setContentsMargins(0,0,0,0); layout->setSpacing(0);
     auto* sidebar = new QWidget; sidebar->setObjectName("sidebar"); sidebar->setFixedWidth(UiTheme::SidebarWidth); sidebar->setAttribute(Qt::WA_StyledBackground); auto* sideLayout = new QVBoxLayout(sidebar); sideLayout->setContentsMargins(design::ShadowrocketStyle::geometry.sidebarInset,design::ShadowrocketStyle::geometry.sidebarInset,design::ShadowrocketStyle::geometry.sidebarInset,design::ShadowrocketStyle::geometry.sidebarInset); sideLayout->setSpacing(design::ShadowrocketStyle::geometry.sidebarGap);
-    auto* brandHeader=new QWidget(sidebar); brandHeader->setObjectName("sidebarBrandHeader"); brandHeader->setFixedHeight(40);
-    auto* signature=new QHBoxLayout(brandHeader); signature->setContentsMargins(6,0,6,0); signature->setSpacing(10);
-    auto* mark=new QLabel(brandHeader); mark->setPixmap(TrayController::icon().pixmap(24,24)); mark->setFixedSize(24,24); signature->addWidget(mark);
-    auto* brand=new QLabel("Mlash",brandHeader); brand->setObjectName("sidebarBrand"); signature->addWidget(brand,1);
+    auto* brandHeader=makeBrandSignature(sidebar,28,"sidebarBrand"); brandHeader->setObjectName("sidebarBrandHeader"); brandHeader->setMinimumHeight(40);
     sideLayout->addWidget(brandHeader); sideLayout->addSpacing(14);
     auto* section=new QLabel("工作区",sidebar); section->setObjectName("sidebarSection"); section->setFixedHeight(22); sideLayout->addWidget(section);
     navigation_ = new QListWidget(sidebar); navigation_->setObjectName("navigation"); navigation_->addItems({"首页", "配置", "数据"}); navigation_->setIconSize(QSize(18, 18)); navigation_->setSpacing(design::ShadowrocketStyle::geometry.sidebarGap);
     navigation_->setFrameShape(QFrame::NoFrame); navigation_->setVerticalScrollBarPolicy(Qt::ScrollBarAlwaysOff); navigation_->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
+    navigation_->setMouseTracking(true);
     navigation_->setAccessibleName("工作区导航");
     const QList<int> pageOrder{ViewIds::Home,ViewIds::Profiles,ViewIds::Data};
     for (int i=0;i<pageOrder.size();++i) { navigation_->item(i)->setData(Qt::UserRole,pageOrder[i]); navigation_->item(i)->setIcon(navigationIcon(navKindOfView(pageOrder[i]))); navigation_->item(i)->setSizeHint(QSize(0,UiTheme::SidebarItemHeight)); }
@@ -107,10 +115,9 @@ MainWindow::MainWindow(AppController* controller, QWidget* parent) : QMainWindow
     settingsNav_=new QToolButton(sidebar); settingsNav_->setObjectName("sidebarSettings"); settingsNav_->setText("设置"); settingsNav_->setIcon(navigationIcon(NavKind::Settings));
     settingsNav_->setIconSize(QSize(18,18)); settingsNav_->setToolButtonStyle(Qt::ToolButtonTextBesideIcon); settingsNav_->setCheckable(true);
     settingsNav_->setSizePolicy(QSizePolicy::Expanding,QSizePolicy::Fixed);
-    settingsNav_->setFixedHeight(UiTheme::SidebarItemHeight); settingsNav_->setAccessibleName("设置"); settingsNav_->setCursor(Qt::PointingHandCursor);
+    settingsNav_->setAccessibleName("设置"); settingsNav_->setCursor(Qt::PointingHandCursor);
     sideLayout->addWidget(settingsNav_);
     connect(settingsNav_,&QToolButton::clicked,this,[this] { navigate(Route{ViewIds::Settings}); });
-    auto* version = new QLabel(QString("v" MLASH_VERSION),sidebar); version->setObjectName("sidebarVersion"); sideLayout->addWidget(version);
     // K1/K6：页面栈只有五个视图，顺序与 ViewIds 一致；数据页内部再分四个页签。
     pages_ = new QStackedWidget; pages_->setObjectName("mainPages");
     auto pagePolicy=pages_->sizePolicy(); pagePolicy.setRetainSizeWhenHidden(true); pages_->setSizePolicy(pagePolicy);
@@ -136,14 +143,8 @@ MainWindow::MainWindow(AppController* controller, QWidget* parent) : QMainWindow
     auto* content = new QWidget(central); content->setObjectName("contentSurface"); content->installEventFilter(this); auto* contentLayout = new QVBoxLayout(content); contentLayout->setContentsMargins(0,0,0,0); contentLayout->setSpacing(0); pages_->setContentsMargins(UiTheme::ContentInset,UiTheme::ContentTop,UiTheme::ContentInset,UiTheme::ContentTop);
     auto* topbar = new QWidget(content); topbar->setObjectName("topbar"); topbar->setFixedHeight(UiTheme::TopbarHeight);
     chromeDragArea_=topbar; topbar->installEventFilter(this);
-    // Equal-width edge slots keep the title centered independently of toolbar actions.
     auto* topbarLayout = new QHBoxLayout(topbar); topbarLayout->setContentsMargins(design::ShadowrocketStyle::geometry.topbarHorizontalInset,0,design::ShadowrocketStyle::geometry.topbarHorizontalInset,0); topbarLayout->setSpacing(0);
-    auto* leadingSlot = new QWidget(topbar); leadingSlot->setFixedWidth(design::ShadowrocketStyle::geometry.topbarActionSlotWidth); topbarLayout->addWidget(leadingSlot);
-    chromeLeading_=leadingSlot; leadingSlot->installEventFilter(this);
-    auto* leadingLayout=new QHBoxLayout(leadingSlot); leadingLayout->setContentsMargins(10,0,0,0); leadingLayout->setSpacing(6);
-    auto* chromeMark=new QLabel(leadingSlot); chromeMark->setObjectName("chromeMark"); chromeMark->setPixmap(TrayController::icon().pixmap(16,16)); chromeMark->setProperty("chromeDrag",true); chromeMark->installEventFilter(this); leadingLayout->addWidget(chromeMark);
-    auto* chromeName=new QLabel("Mlash",leadingSlot); chromeName->setObjectName("chromeBrand"); chromeName->setProperty("chromeDrag",true); chromeName->installEventFilter(this); leadingLayout->addWidget(chromeName); leadingLayout->addStretch();
-    topbarTitle_ = new QLabel; topbarTitle_->setObjectName("topbarTitle"); topbarTitle_->setTextFormat(Qt::PlainText); topbarTitle_->setAlignment(Qt::AlignCenter);
+    topbarTitle_ = new QLabel; topbarTitle_->setObjectName("topbarTitle"); topbarTitle_->setTextFormat(Qt::PlainText); topbarTitle_->setAlignment(Qt::AlignLeft | Qt::AlignVCenter);
     topbarTitle_->installEventFilter(this);
     topbarLayout->addWidget(topbarTitle_,1);
     // Retain readback labels for diagnostics without duplicating visible status.
@@ -261,7 +262,6 @@ void MainWindow::applyAppearance() {
     settingsNav_->setIcon(UiIcons::icon(UiIcons::Glyph::Settings,settingsNav_->isChecked()?UiTheme::Brand:UiTheme::Secondary));
     using G=UiIcons::Glyph;
     if (locateAction_) locateAction_->setIcon(UiIcons::icon(G::Locate,UiTheme::Secondary));
-    if (testAction_) testAction_->setIcon(UiIcons::icon(G::Gauge,UiTheme::Secondary));
     for (const auto& entry:QList<QPair<QString,G>>{{"browseGroup",G::Layers},{"nodeToolsButton",G::More},{"nodeSortButton",G::Sliders}}) if (auto* button=findChild<QToolButton*>(entry.first)) button->setIcon(UiIcons::icon(entry.second,UiTheme::Secondary));
     for (const auto& pair:QList<QPair<QString,G>>{{"addSubscription",G::Plus},{"updateProfile",G::Refresh},{"clearLogViewButton",G::Clear},{"followLatestLogs",G::Refresh},{"saveCustomRules",G::Save}}) if (auto* control=findChild<QAbstractButton*>(pair.first)) control->setIcon(UiIcons::icon(pair.second,control->property("primary").toBool()?UiTheme::OnPrimary:UiTheme::Secondary));
     for (const auto& name:{"nodeSearch","logSearch","connectionsSearch","activeRulesSearch"}) if (auto* field=findChild<QLineEdit*>(name)) {

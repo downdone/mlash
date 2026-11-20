@@ -249,9 +249,20 @@ if (proxyMasterSwitch_)         proxyMasterSwitch_->setEnabled(usable);
     // 行列表里选中的是子策略组时才能进入；顶层成员没有下一层。
     if (enterGroup_) { const bool groupSelected=!selectedName.isEmpty() && controller_->proxies().value(selectedName).toObject().value("all").isArray(); enterGroup_->setVisible(groupSelected); enterGroup_->setEnabled(state.ready && viewingActive && groupSelected && !state.exiting); }
     // 提交条已取消（ADR 0048）：手动组单击/Enter 即生效，自动组行内不提供切换。
-    if (testAction_) testAction_->setEnabled(idle && state.ready && viewingActive && model_.rowCount() > 0); if (testSelectedAction_) testSelectedAction_->setEnabled(idle && state.ready && viewingActive && hasNode);
-    static_cast<NodeCardView*>(nodeCards_)->setTestEnabled(testAction_->isEnabled());
-    static_cast<NodeRowView*>(nodeList_)->setTestEnabled(testAction_->isEnabled());
+    const bool canTest=idle && state.ready && viewingActive && model_.rowCount()>0;
+    if (testSelectedAction_) testSelectedAction_->setEnabled(canTest && hasNode);
+    static_cast<NodeCardView*>(nodeCards_)->setTestEnabled(canTest);
+    static_cast<NodeRowView*>(nodeList_)->setTestEnabled(canTest);
+    if (auto* update=findChild<QToolButton*>("nodeUpdateProfile")) {
+        const auto* active=findProfile(state.activeProfile);
+        const bool canUpdate=active && !active->source.isEmpty();
+        const bool local=canUpdate && active->sourceType=="file";
+        update->setText(local?"同步文件":"更新订阅");
+        update->setAccessibleName(update->text());
+        update->setEnabled(idle && canUpdate);
+        update->setToolTip(!canUpdate?"当前配置没有可更新的来源":
+            local?"从原文件同步配置，更新后可在配置页查看":"下载当前订阅的更新，在配置页查看和应用");
+    }
     if (automaticAction_) automaticAction_->setEnabled(idle && state.ready && viewingActive && !group.value("fixed").toString().isEmpty() && QStringList{"URLTest", "Fallback"}.contains(type)); automaticAction_->setText(group.value("fixed").toString().isEmpty()?"自动选择中":"恢复自动选择");
     if (automaticAction_) automaticAction_->setVisible(QStringList{"URLTest", "Fallback"}.contains(type));
     if (locateAction_) locateAction_->setEnabled(state.ready && viewingActive && !group.value("now").toString().isEmpty());

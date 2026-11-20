@@ -29,11 +29,22 @@ public:
 DnsDialog::DnsDialog(AppController* controller, const QString& profileId, QWidget* parent) : TaskDialog(parent), controller_(controller), id_(profileId) {
     Profile profile; for (const auto& item : controller_->profiles()) if (item.id==id_) profile=item; saved_=profile.dnsOverride; savedEnabled_=profile.dnsOverrideEnabled; expected_={{"yaml",profile.dnsOverride},{"enabled",profile.dnsOverrideEnabled},{"candidate",profile.candidate},{"active",profile.active}};
     setAttribute(Qt::WA_DeleteOnClose); setObjectName("dnsDialog"); setWindowTitle("DNS · "+profile.name); resize(640,460);
+    setProperty("editorOwnsScrolling",true);
     auto* layout=new QVBoxLayout(this); setMinimumSize(560,400);
     auto* viewRow=new QHBoxLayout; auto* viewTitle=new QLabel("当前 DNS"); viewTitle->setObjectName("dnsViewTitle"); viewRow->addWidget(viewTitle); viewRow->addStretch(); auto* views=new QPushButton("查看…"); views->setObjectName("dnsViews"); views->setProperty("quiet",true); viewRow->addWidget(views); layout->addLayout(viewRow);
     tabs_=new DnsTabs; auto* tabs=tabs_; tabs->setObjectName("dnsTabs"); auto* edit=new QWidget; auto* editLayout=new QVBoxLayout(edit); enabled_=new QCheckBox("自定义 DNS"); enabled_->setObjectName("dnsOverrideEnabled"); enabled_->setChecked(savedEnabled_); editLayout->addWidget(enabled_);
     hint_=new QLabel("正在读取当前 DNS…"); hint_->setObjectName("dnsHint"); hint_->setTextFormat(Qt::PlainText); hint_->setWordWrap(true); editLayout->addWidget(hint_);
+    retry_=new QPushButton("重新读取 DNS"); retry_->setObjectName("retryDnsSource"); retry_->hide();
+    editLayout->addWidget(retry_,0,Qt::AlignLeft);
+    connect(retry_,&QPushButton::clicked,this,&DnsDialog::inspectSource);
     editor_=new QPlainTextEdit; editor_->setObjectName("dnsOverrideEditor"); editor_->setPlaceholderText("例如：\nenable: true\nnameserver:\n  - https://dns.google/dns-query\n\n直接填写字段，不再包裹 dns 层"); editor_->setPlainText(saved_); fields_=new YamlFormEditor("dns",editor_,this); editLayout->addWidget(fields_,1); inherit_=new QPushButton("撤销自定义"); inherit_->setObjectName("resetDnsOverride"); editLayout->addWidget(inherit_,0,Qt::AlignLeft); editLayout->addStretch(1); tabs->addTab(edit,"当前 DNS");
+    auto* editYaml=new QPushButton; editYaml->setObjectName("dnsEditMode"); editYaml->setProperty("quiet",true);
+    viewRow->insertWidget(2,editYaml);
+    fields_->useModeButton(editYaml);
+    const auto showMode=[tabs,this,editYaml] { editYaml->setVisible(tabs->currentIndex()==0 && enabled_->isChecked()); };
+    connect(tabs,&QTabWidget::currentChanged,this,showMode);
+    connect(enabled_,&QCheckBox::toggled,this,showMode);
+    showMode();
     source_=new QPlainTextEdit; source_->setObjectName("sourceDnsPreview"); source_->setReadOnly(true); tabs->addTab(source_,"来源 DNS"); effective_=new QPlainTextEdit; effective_->setObjectName("effectiveDnsPreview"); effective_->setReadOnly(true); tabs->addTab(effective_,"已保存配置预览");
     auto* diagnostic=new QWidget; auto* diagnosticLayout=new QVBoxLayout(diagnostic); auto* row=new QHBoxLayout; name_=new QLineEdit("example.com"); name_->setObjectName("dnsQueryName"); name_->setMaxLength(253); row->addWidget(name_,1); type_=new CompactComboBox; type_->addItems({"A","AAAA"}); row->addWidget(type_); query_=new QPushButton("解析"); query_->setObjectName("queryDns"); row->addWidget(query_); diagnosticLayout->addLayout(row); auto* queryNote=new QLabel("使用当前配置进行解析。"); queryNote->setWordWrap(true); diagnosticLayout->addWidget(queryNote); answer_=new QPlainTextEdit; answer_->setObjectName("dnsQueryResult"); answer_->setReadOnly(true); diagnosticLayout->addWidget(answer_,1); tabs->addTab(diagnostic,"解析测试"); tabs->tabBar()->hide(); layout->addWidget(tabs,1);
     auto* viewMenu=new QMenu(views); viewMenu->setObjectName("dnsViewsMenu"); for (int i=0;i<tabs->count();++i) { auto* action=viewMenu->addAction(tabs->tabText(i)); action->setCheckable(true); action->setChecked(i==0); action->setData(i); connect(action,&QAction::triggered,tabs,[tabs,i] { tabs->setCurrentIndex(i); }); }
@@ -55,12 +66,35 @@ DnsDialog::DnsDialog(AppController* controller, const QString& profileId, QWidge
             guard->updateActions();
         }); updateActions();
     });
-    const QPointer<DnsDialog> guard(this); controller_->inspectDns(id_,[guard](Result result) { if (!guard) return; if (!result.ok) guard->hint_->setText(result.error); else { QSet<QString> keys; for (const auto& value:result.data.value("source_fields").toArray()) keys.insert(value.toString()); guard->fields_->setSourceFields(keys); guard->source_->setPlainText(result.data.value("source_yaml").toString()); guard->effective_->setPlainText(result.data.value("effective_yaml").toString()); guard->inspected_=true; guard->observedOverridden_=result.data.value("overridden").toBool(); guard->updateSourceHint(); } }); updateActions();
+    inspectSource(); updateActions();
     DialogDraftGuard::protect(this,[this] { return enabled_->isChecked()!=savedEnabled_ || editor_->toPlainText()!=saved_ || fields_->unapplied(); },[this] { return saving_; }); ensurePolished(); layout->activate(); resize(640,500);
 }
 DnsDialog::~DnsDialog() { if (queryToken_) controller_->cancelDnsQuery(queryToken_); }
+void DnsDialog::inspectSource() {
+    sourceError_.clear();
+    retry_->hide();
+    updateSourceHint();
+    const QPointer<DnsDialog> guard(this);
+    controller_->inspectDns(id_,[guard](Result result) {
+        if (!guard) return;
+        if (!result.ok) {
+            guard->sourceError_=result.error;
+            guard->retry_->show();
+        } else {
+            QSet<QString> keys;
+            for (const auto& value:result.data.value("source_fields").toArray()) keys.insert(value.toString());
+            guard->fields_->setSourceFields(keys);
+            guard->source_->setPlainText(result.data.value("source_yaml").toString());
+            guard->effective_->setPlainText(result.data.value("effective_yaml").toString());
+            guard->inspected_=true;
+            guard->observedOverridden_=result.data.value("overridden").toBool();
+        }
+        guard->updateSourceHint();
+    });
+}
 void DnsDialog::updateSourceHint() {
-    if (enabled_->isChecked()!=savedEnabled_) hint_->setText(enabled_->isChecked()?"保存后使用自定义 DNS":"保存后沿用来源 DNS");
+    if (!sourceError_.isEmpty()) hint_->setText("读取当前 DNS 失败："+sourceError_);
+    else if (enabled_->isChecked()!=savedEnabled_) hint_->setText(enabled_->isChecked()?"保存后使用自定义 DNS":"保存后沿用来源 DNS");
     else if (inspected_) hint_->setText(observedOverridden_?"当前使用自定义 DNS":"当前沿用来源 DNS");
     else hint_->setText("正在读取当前 DNS…");
 }

@@ -4,7 +4,7 @@
 #include "ui/NodeRowModel.h"
 #include "ui/NodeRowView.h"
 #include "ui/ProfileRowDelegate.h"
-#include "ui/ProfileCardDelegate.h"
+#include "ui/ProfileCardWidget.h"
 #include "ui/TaskWorkspace.h"
 #include "ui/TaskDialog.h"
 #include "ui/YamlFormEditor.h"
@@ -27,6 +27,8 @@
 #include <QPlainTextEdit>
 #include <QLineEdit>
 #include <QListView>
+#include <QListWidget>
+#include <QLabel>
 #include <QDialogButtonBox>
 #include <QTabBar>
 #include <QTabWidget>
@@ -103,6 +105,9 @@ private slots:
         QVERIFY(DialogDraftGuard::hasDrafts(import)); answer(QMessageBox::No); import->reject(); QVERIFY(import->isVisible());
         answer(QMessageBox::Yes); import->reject(); QCoreApplication::sendPostedEvents(nullptr,QEvent::DeferredDelete);
         window.setPage(7);
+        QVERIFY(!window.findChild<QToolButton*>("websiteResultDetails")->isVisible());
+        const_cast<AppState&>(controller.state()).activeProfile="layout-fixture";
+        emit controller.stateChanged();
         auto* info=window.findChild<QToolButton*>("websiteResultDetails"); QVERIFY(info&&info->isVisible()); info->click();
         QPointer<QDialog> evidence=window.findChild<QDialog*>("websiteResultSnapshot"); QVERIFY(evidence&&evidence->isVisible()); QVERIFY(!evidence->isWindow());
         auto* body=evidence->findChild<QPlainTextEdit*>("websiteResultEvidence"); QVERIFY(body->isReadOnly()); QVERIFY(body->toPlainText().contains("尚未开始"));
@@ -166,13 +171,71 @@ private slots:
         QCOMPARE(editor->toPlainText(),QString(5000,'x')); QVERIFY(bypass->isVisible());
         answer(QMessageBox::No); bypass->reject(); QVERIFY(bypass->isVisible()); QCOMPARE(editor->toPlainText(),QString(5000,'x'));
         answer(QMessageBox::Yes); bypass->reject(); QTRY_VERIFY(!window.findChild<ProxyBypassDialog*>());
-        window.setPage(6); window.findChild<QPushButton*>("settingsBackupRow")->click();
+        window.setPage(7);
+        auto* nav=window.findChild<QListWidget*>("navigation");
+        QVERIFY(!nav->selectedItems().isEmpty());
+        const_cast<AppState&>(controller.state()).autoStartConflict=true;
+        emit controller.stateChanged();
+        window.findChild<QToolButton*>("sidebarSettings")->click();
+        auto* search=window.findChild<QLineEdit*>("settingsSearch");
+        auto* startupHint=window.findChild<QLabel*>("startupLocationHint");
+        QVERIFY(search->isVisible());
+        QVERIFY(startupHint->isVisible());
+        QVERIFY(nav->selectedItems().isEmpty());
+        window.findChild<QPushButton*>("settingsToolsRow")->click();
+        QVERIFY(!search->isVisible());
+        QVERIFY(!startupHint->isVisible());
+        auto settingRow=[&window](const QString& name) -> QWidget* {
+            for (auto* row:window.findChildren<QWidget*>("settingRow"))
+                if (row->property("settingSearchName")==name) return row;
+            return nullptr;
+        };
+        QVERIFY(settingRow("日志目录")->isVisible());
+        QVERIFY(!settingRow("代理环境变量")->isVisible());
+        QVERIFY(!settingRow("链接导入")->isVisible());
+        auto* back=window.findChild<QPushButton*>("settingsBack");
+        auto* topbar=window.findChild<QLabel*>("topbarTitle");
+        QTRY_VERIFY(back->mapTo(&window,QPoint()).y()-topbar->mapTo(&window,QPoint(0,topbar->height())).y()<28);
+        snapshot(&window,"settings-tools");
+        back->click();
+        QVERIFY(search->isVisible());
+        search->setText("代理环境变量");
+        QTest::keyClick(search,Qt::Key_Return);
+        QVERIFY(settingRow("代理环境变量")->isVisible());
+        QVERIFY(!settingRow("日志目录")->isVisible());
+        back->click();
+        window.findChild<QPushButton*>("settingsBackupRow")->click();
         auto backups=window.findChildren<BackupDialog*>(); QCOMPARE(backups.size(),1); QVERIFY(!backups.first()->isWindow());
         workspace=nullptr; for (auto* candidate:window.findChildren<TaskWorkspace*>()) if (candidate->isVisible()) workspace=candidate; QVERIFY(workspace);
         auto* tabs=workspace->findChild<QTabBar*>("taskTabs"); int restore=-1; for (int i=0;i<tabs->count();++i) if (tabs->tabText(i)=="恢复备份") restore=i; QVERIFY(restore>=0);
         auto* password=backups.first()->findChild<QLineEdit*>("backupPassword"); QVERIFY(password); password->setText("local-test-password");
+        auto* heading=workspace->findChild<QLabel*>("taskTitle");
+        QCOMPARE(heading->text(),QString("备份与恢复"));
+        auto* form=backups.first()->findChild<QWidget*>("backupForm");
+        QVERIFY(form && form->isVisible());
+        QVERIFY(form->width()<=640);
+        auto* pathField=form->findChild<QLineEdit*>("backupPath");
+        auto* include=form->findChild<QCheckBox*>("backupIncludeProfiles");
+        auto* backupScroll=backups.first()->findChild<QScrollArea*>("backupScroll");
+        QTRY_VERIFY(backupScroll->viewport()->rect().contains(QRect(pathField->mapTo(backupScroll->viewport(),QPoint()),pathField->size())));
+        QVERIFY(backupScroll->viewport()->rect().contains(QRect(include->mapTo(backupScroll->viewport(),QPoint()),include->size())));
+        QVERIFY(password->y()-pathField->mapTo(password->parentWidget(),QPoint()).y()<70);
+        QVERIFY(include->mapTo(form,QPoint()).y()<210);
+        password->clear();
+        snapshot(&window,"backup-create");
+        password->setText("local-test-password");
         tabs->setCurrentIndex(restore); QCOMPARE(window.findChildren<BackupDialog*>().size(),2); QVERIFY(DialogDraftGuard::hasDrafts(workspace));
+        QCOMPARE(heading->text(),QString("备份与恢复"));
+        auto* restoreForm=workspace->editor("backup:restore");
+        QVERIFY(restoreForm->findChild<QListWidget*>("backupSelection")->isHidden());
+        QVERIFY(restoreForm->findChild<QPushButton*>("previewBackup")->isVisible());
+        QVERIFY(!restoreForm->findChild<QPushButton*>("submitBackup")->isEnabled());
         snapshot(&window,"backup");
+        workspace->findChild<QPushButton*>("taskBack")->click();
+        search->setText("恢复与迁移");
+        QTest::keyClick(search,Qt::Key_Return);
+        QCOMPARE(tabs->currentIndex(),restore);
+        QVERIFY(workspace->isVisible());
         // The isolated window is disposed without issuing an OS exit or real write.
     }
     void profileContentAndInspectorKeepShellGeometry() {
@@ -233,7 +296,7 @@ private slots:
         auto* list=window.findChild<QListView*>("profileList"); QVERIFY(list);
         const auto index=list->model()->index(0,0); QVERIFY(index.isValid());
         QVERIFY(!list->findChild<QPushButton*>("emptyStateAction")->isVisible()); snapshot(&window,"profiles");
-        QTest::mouseClick(list->viewport(),Qt::LeftButton,{},ProfileCardDelegate::menu(list->visualRect(index)).center());
+        QTest::mouseClick(qobject_cast<ProfileCardWidget*>(list->indexWidget(index))->button(ProfileCardWidget::Action::Menu),Qt::LeftButton);
         auto* profileMenu=window.findChild<QMenu*>("profileContextMenu"); QVERIFY(profileMenu);
         profileMenu->hide(); profileMenu->actions().first()->trigger();
         auto* profileWorkspace=window.findChild<TaskWorkspace*>("taskWorkspace"); QVERIFY(profileWorkspace);
@@ -245,13 +308,20 @@ private slots:
         auto* dnsToggle=dns->findChild<QCheckBox*>("dnsOverrideEnabled"); QVERIFY(dnsToggle);
         dnsToggle->setChecked(true); QVERIFY(dnsFields->isVisible());
         auto* dnsEditor=dns->findChild<QPlainTextEdit*>("dnsOverrideEditor"); QVERIFY(dnsEditor);
+        auto* dnsMode=dns->findChild<QPushButton*>("dnsEditMode"); QVERIFY(dnsMode&&dnsMode->isVisible());
+        dnsMode->click(); QVERIFY(dnsEditor->isVisible()); QCOMPARE(dnsMode->text(),QString("常用字段"));
+        dnsMode->click(); QVERIFY(!dnsEditor->isVisible());
         dnsEditor->setPlainText("enable: true\n"); snapshot(&window,"profile-dns-editing");
         profileTabs->setCurrentIndex(1); profileTabs->setCurrentIndex(2);
         QCOMPARE(dnsEditor->toPlainText(),QString("enable: true\n"));
         window.setPage(0); QVERIFY(!profileWorkspace->isVisible());
         window.setPage(1); QVERIFY(profileWorkspace->isVisible());
         QCOMPARE(dnsEditor->toPlainText(),QString("enable: true\n"));
-        window.resize(840,560); QCoreApplication::processEvents(); snapshot(&window,"profile-dns-compact");
+        window.resize(840,560); QCoreApplication::processEvents();
+        QCOMPARE(window.findChild<QWidget*>("sidebar")->width(),144);
+        for (auto* parent=dns->parentWidget();parent;parent=parent->parentWidget())
+            QVERIFY(parent->objectName()!="taskScroll");
+        snapshot(&window,"profile-dns-compact");
         dnsEditor->clear(); dnsToggle->setChecked(false);
         QTimer::singleShot(0,[] { if (auto* box=qobject_cast<QMessageBox*>(QApplication::activeModalWidget())) box->button(QMessageBox::Yes)->click(); });
         profileWorkspace->findChild<QPushButton*>("taskBack")->click();

@@ -6,6 +6,8 @@ Windows GUI 入口在创建 `QApplication` 前选择 Qt Windows 插件的 FreeTy
 
 ## 1. 进程与依赖图
 
+U34 的视觉契约由 [VI 规范](design/u32-mlash-visual-identity.md) 维护。UiTheme 提供语义色和缩放字阶，应用级输入来源驱动键盘焦点；侧栏和关于复用品牌组合。托盘在同一应用图标上绘制状态徽标，内核、代理和路由状态仍由原状态投影提供。
+
 ```mermaid
 flowchart TD
   Domain[domain / 纯值对象与有界校验]
@@ -37,9 +39,9 @@ Mlash.exe 的 FileDescription 和 ProductName 均为 Mlash。mihomo 仍是 QProc
 普通模式使用 Windows Job 管理生命周期；TUN 模式由单独 SCM 权限服务拥有 Job。服务保留安装但核心绑定客户端心跳/管道，不能脱离客户端无限运行。任务管理器分组显示不是父子进程契约。
 界面不持有 Windows 句柄、文件事务或子进程；所有动作通过 Controller 方法。一级导航按首页/配置/数据/设置组织，内部使用五个主视图与数据四页签，历史八页入口由 ViewIds 适配；规则属于配置详情，跨页导航同步页签及分区，不增加持久化字段。
 
-U22 配置入口使用一个 `ProfileRowModel` 与 `ProfileCardDelegate` 绘制远程/本地同列卡片。委托只绘制及计算独立命中区，`MainWindow` 将卡片使用、来源更新、候选查看/应用和对象菜单映射为 Controller 命令或所属工作区；内容工作区按配置 ID 组织节点、规则、DNS、拨号链、规则源和兼容性，同级切换不改变运行对象。列表排序属于列表级工具，版本回滚属于来源维护。规则编辑的左侧新建与右侧现有规则共享一份未提交草稿，由 Controller 校验保存。
+配置页由 `ProfileRowModel` 提供数据，`ProfileCardWidget` 在列表等宽网格中呈现远程或本地配置。卡片主体打开编辑工作区，使用、更新、查看候选和应用各有独立动作。`MainWindow` 负责将动作路由至 Controller 或对应工作区。内容工作区按配置 ID 管理节点、规则、DNS、拨号链、规则源和兼容性，各任务保留自身草稿。列表排序属于集合工具，回滚属于来源维护。
 
-U24 只更换配置列表的展示层：`ProfileCardDelegate` 的尺寸跟随有上限的 `QListView` 网格，避免 Qt 图标视图居中固定尺寸内容；卡片的使用、更新、候选和菜单命中区仍独立。添加配置时，同一个 `ImportDialog` 以子控件形式挂载在配置页列表上方，业务校验和 Controller 命令不另建一份；外部协议导入仍保留独立确认窗口。明暗配色由 `ui/design` 的语义 token 驱动，其余页面通过共用 `UiTheme` / 样式表消费。
+快速导入在配置页可见，独立 `ImportDialog` 承载高级新增及外部来源确认。两种入口共用 Controller 的校验和导入命令，导入成功后仍由用户决定何时启用。布局与控件状态见[视觉识别规范](design/u32-mlash-visual-identity.md)，任务细节见[交互契约](ui-interactions.md)。
 
 U18：整组延迟由 Controller 有界队列调度 12 个异步请求，MihomoClient 使用两条独立本地 HTTP 连接池突破单池连接数限制；代次与取消仍由 Controller 统一处理，不产生每节点一个 OS 线程。窗口标题栏是纯偏好 `window_chrome=native|integrated`，应用内栏复用页面顶栏；Win32 边缘命中测试仅在 `platform/windows`，UI 只消费 Qt 事件与平台适配结果。应用在线更新由 `AppUpdateSource` 只读检查固定 GitHub Release，Controller 在有界 worker 校验大小/SHA-256 并原子保存独立候选包；运行 EXE 与内核不被覆盖，UI 显式打开候选包。发布策略与限制见 [U18 设计](design/u18-fast-tests-window-chrome-update.md)。
 
@@ -95,7 +97,7 @@ UI 公开头只前向声明 `AppController`，在需要调用命令的实现文�
 程序退出事件循环后才等待后台池清理和日志线程结束。
 GuiHost 在托盘/展示请求时创建窗口。默认轻量模式关闭窗口接受 close 并删除整个主窗口对象树；保留几何位置、页面号、成员视图索引及不持有 QObject 的有界节点视图书签，所有页面视图/模型/定时器随主窗口销毁。快速重开在旧窗口销毁后排队创建，dispose 以代次撤销排队重开。GUI 析构/隐藏清空规则与连接 UI 快照并停止日志/页面刷新；Controller、Job 管理的内核和托盘继续运行。无托盘关闭走安全退出；规则/设置有未保存内容时确认丢弃或取消。
 关闭 lightweight_mode 则仅隐藏窗口。设置字段兼容旧索引缺失时默认 true，仅影响 GUI 生命周期，不重启内核或修改系统代理。Qt/系统可能保留分配器、字体等全局缓存和运行库页面，不以对象释放证明任何特定工作集降幅。
-TrayController 从观测 AppState 派生小象状态键，只有键变化才 setIcon；最多懒缓存 13 个 64px QIcon，使用同一品牌静态变体，无动画定时器。busy/意图不代替实际 core/ready/proxy/mode；提示说明实际归属与内核模式，图标不作为节点健康证据。
+TrayController 从观测 AppState 派生托盘图标状态键，只有键变化才 setIcon；最多懒缓存 13 个 64px QIcon，使用同一品牌静态变体，无动画定时器。busy/意图不代替实际 core/ready/proxy/mode；提示说明实际归属与内核模式，图标不作为节点健康证据。
 托盘菜单按打开请求重建；清空 QAction 后显式释放旧子菜单树，防止 Qt addMenu 的 QObject 所有权使旧菜单随打开次数累积。
 菜单位置图标按固定地区/组/内置/未知键共享 QIcon，最多 55 种；根菜单重建释放缓存，避免每个节点重复生成位图。
 具体组菜单停留 300ms 后可调用 Controller.testTrayGroup；只在展开期间运行，最多 500 个去重成员/三个客户端请求，排除内置直连/拒绝/Pass。Controller 独立只读队列不设置 busy、不自动选节点；写命令 begin、关闭菜单、内核离开 Running、退出时只 abort 自有 reply，代次丢弃旧结果。MihomoClient 返回借用请求句柄以局部取消，不用 cancelAll 影响其他操作。Controller 有界内存缓存最多 500 条，单调时钟 60 秒、操作代次隔离，与 GUI 手测结果共享；不持久化。托盘只增加按展开启停的 single-shot，不创建主窗口，不增加周期性后台任务。已开始的内核探测可能在客户端取消后继续至 5 秒上限。

@@ -133,11 +133,15 @@ int main(int argc, char** argv) {
                             smokeUiOk=false; controller.requestExit(); return;
                         }
                         search->setText(QStringLiteral("外观"));
+                        auto* results=readyWindow->findChild<QWidget*>("settingsInlineResults");
+                        if (!results || !results->isVisible() || directory->isVisible() ||
+                            !readyWindow->grab().save(output+"/settings-search.png")) {
+                            smokeUiOk=false; controller.requestExit(); return;
+                        }
                         QKeyEvent enter(QEvent::KeyPress,Qt::Key_Return,Qt::NoModifier);
                         QApplication::sendEvent(search,&enter);
                         if (stack->currentIndex()!=0 || !directory->isVisible() ||
-                            !appearance->isVisible() || !appearance->property("located").toBool() ||
-                            !readyWindow->grab().save(output+"/settings-search.png")) {
+                            !appearance->isVisible() || !appearance->property("located").toBool()) {
                             smokeUiOk=false; controller.requestExit(); return;
                         }
                         readyWindow->setPage(0);

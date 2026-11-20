@@ -27,7 +27,7 @@ public:
         const auto* profile = this->profile(index.row());
         if (!profile) return {};
         const bool active = !activeId_.isEmpty() && profile->id == activeId_;
-        const bool pending = profile->candidate != profile->active;
+        const bool pending = !profile->active.isEmpty() && profile->candidate != profile->active;
         const auto stamp = QDateTime::fromString(profile->updated, Qt::ISODate).toLocalTime();
         const auto when = stamp.isValid() ? stamp.toString("MM-dd HH:mm") : QStringLiteral("尚未获取");
         switch (role) {
@@ -63,7 +63,7 @@ public:
             const auto summary = SubscriptionInfo::summary(profile->subscriptionInfo);
             return summary;
         }
-        case Qt::ToolTipRole: return profile->name + "\n" + data(index, Detail).toString() + (profile->updateError.isEmpty() ? QString() : "\n" + profile->updateError);
+        case Qt::ToolTipRole: return profile->name + "\n点击卡片打开配置内容\n" + data(index, Detail).toString() + (profile->updateError.isEmpty() ? QString() : "\n" + profile->updateError);
         default: return {};
         }
     }

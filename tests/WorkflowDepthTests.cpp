@@ -1,8 +1,9 @@
+#include "ui/SettingsSearch.h"
 #include "app/AppController.h"
 #include "profile/ProfileStore.h"
 #include "storage/Storage.h"
 #include "ui/MainWindow.h"
-#include "ui/ProfileCardDelegate.h"
+#include "ui/ProfileCardWidget.h"
 #include "ui/DialogDraftGuard.h"
 #include "ui/ProfileChangesDialog.h"
 #include "profile/VersionChanges.h"
@@ -65,12 +66,80 @@ class WorkflowDepthTests final : public QObject {
 private slots:
     void initTestCase() { WidgetStyle::install(); UiTheme::install(); }
     void settingsSearchLocatesWithoutEditingOrDiscardingDrafts() {
-        QTemporaryDir root; auto platform=std::make_shared<DepthPlatform>(); AppController c(root.path(),true,nullptr,platform); QSignalSpy init(&c,&AppController::initialized),finished(&c,&AppController::operationFinished); c.initialize(); QTRY_COMPARE(init.size(),1); MainWindow window(&c); window.resize(840,560); window.setPage(6); window.show(); QTest::qWait(60); auto* stack=window.findChild<QStackedWidget*>("settingsTaskStack"); QCOMPARE(stack->currentIndex(),0); auto* search=window.findChild<QLineEdit*>("settingsSearch"); auto* count=window.findChild<QPushButton*>("settingsSearchResults"); QVERIFY(search); QVERIFY(search->isVisible()); QVERIFY(count); const auto screenshotRoot=qEnvironmentVariable("MLASH_UI_SCREENSHOTS"); if (!screenshotRoot.isEmpty()) { QVERIFY(QDir().mkpath(screenshotRoot)); QVERIFY(window.grab().save(screenshotRoot+"/settings-directory-search.png")); } window.findChild<QPushButton*>("settingsNetworkRow")->click(); auto* port=window.findChild<QSpinBox*>("mixedPort"); const auto saved=c.settings().mixedPort; port->setValue(saved+1); auto* target=window.findChild<QLineEdit*>("connectivityTestUrl"); target->setText("https://private-search-fixture.test/"); auto* scroll=window.findChild<QScrollArea*>("settingsScroll"); const auto geometry=scroll->geometry();
-        window.activateWindow(); port->setFocus(); QTest::keyClick(port,Qt::Key_F,Qt::ControlModifier); QTRY_VERIFY(search->hasFocus()); search->setText("本地端口"); QCOMPARE(count->text(),QString("1 项")); QTest::keyClick(search,Qt::Key_Return); QWidget* marked=nullptr; for (auto* row:window.findChildren<QWidget*>("settingRow")) if (row->property("located").toBool()) marked=row; QVERIFY(marked); QVERIFY(marked->isAncestorOf(port)); QVERIFY(search->hasFocus()); QVERIFY(scroll->viewport()->rect().intersects(QRect(marked->mapTo(scroll->viewport(),QPoint()),marked->size()))); QCOMPARE(scroll->geometry(),geometry); QCOMPARE(port->value(),saved+1); QCOMPARE(c.settings().mixedPort,saved);
-        QTest::keyClick(search,Qt::Key_Escape); QVERIFY(search->text().isEmpty()); QVERIFY(!marked->property("located").toBool()); search->setText("private-search-fixture"); QCOMPARE(count->text(),QString("0 项")); QTest::keyClick(search,Qt::Key_Return); QCOMPARE(window.page(),6); QCOMPARE(scroll->geometry(),geometry); // 侧栏没有规则条目：规则视图深链不影响侧栏高亮（K1）。
-        window.setPage(3); QCOMPARE(window.page(),3); QCOMPARE(window.findChild<QListWidget*>("navigation")->currentRow(),1);
-        search->setText("DNS"); QVERIFY(count->text()!="0 项"); QTest::keyClick(search,Qt::Key_Return); QVERIFY(!window.findChild<QDialog*>("dnsDialog")); search->setText("登录 启动"); QVERIFY(count->text()!="0 项"); QTest::keyClick(search,Qt::Key_Return); QVERIFY(count->accessibleName().contains("登录启动"));
-        search->setText("规则 自定义"); QVERIFY(count->text()!="0 项"); count->click(); auto* menu=window.findChild<QMenu*>("settingsSearchMenu"); QTRY_VERIFY(menu->isVisible()); QVERIFY(menu->actions()[0]->text().contains("自定义规则")); const auto output=qEnvironmentVariable("MLASH_UI_SCREENSHOTS"); if (!output.isEmpty()) { QVERIFY(QDir().mkpath(output)); QVERIFY(window.grab().save(output+"/settings-search.png")); QVERIFY(menu->grab().save(output+"/settings-search-menu.png")); } menu->actions()[0]->trigger(); QCOMPARE(window.currentRoute().view,int(ViewIds::Rules)); QVERIFY(!menu->isVisible()); QCOMPARE(port->value(),saved+1); QCOMPARE(target->text(),QString("https://private-search-fixture.test/")); window.setPage(6); search->setText("启动"); QTest::keyClick(search,Qt::Key_Return); const auto first=count->accessibleName(); QTest::keyClick(search,Qt::Key_Return); QVERIFY(count->accessibleName()!=first); QTest::keyClick(search,Qt::Key_Return,Qt::ShiftModifier); QCOMPARE(count->accessibleName(),first); window.hide(); for (auto* row:window.findChildren<QWidget*>("settingRow")) QVERIFY(!row->property("located").toBool()); QCOMPARE(finished.size(),0); QCOMPARE(platform->writes,0); QVERIFY(!QFile::exists(root.path()+"/state.dat"));
+        QTemporaryDir root;
+        auto platform=std::make_shared<DepthPlatform>();
+        AppController controller(root.path(),true,nullptr,platform);
+        QSignalSpy initialized(&controller,&AppController::initialized),finished(&controller,&AppController::operationFinished);
+        controller.initialize();
+        QTRY_COMPARE(initialized.size(),1);
+        MainWindow window(&controller);
+        window.resize(840,560);
+        window.setPage(6);
+        window.show();
+        auto* stack=window.findChild<QStackedWidget*>("settingsTaskStack");
+        auto* search=window.findChild<QLineEdit*>("settingsSearch");
+        auto* results=window.findChild<QListWidget*>("settingsInlineResults");
+        auto* count=window.findChild<QPushButton*>("settingsSearchResults");
+        auto* locator=window.findChild<SettingsSearch*>();
+        QCOMPARE(stack->currentIndex(),0);
+        QVERIFY(search->isVisible());
+        window.activateWindow();
+        QApplication::setActiveWindow(&window);
+        auto* network=window.findChild<QPushButton*>("settingsNetworkRow");
+        network->setFocus();
+        QTRY_VERIFY(network->hasFocus());
+        QTest::keyClick(network,Qt::Key_F,Qt::ControlModifier);
+        QTRY_VERIFY(search->hasFocus());
+        const auto output=qEnvironmentVariable("MLASH_UI_SCREENSHOTS");
+        if (!output.isEmpty()) {
+            QVERIFY(QDir().mkpath(output));
+            QVERIFY(window.grab().save(output+"/settings-directory-search.png"));
+        }
+
+        search->setText("private-search-fixture");
+        QCOMPARE(count->text(),QString("0 项"));
+        QVERIFY(results->isVisible());
+        QVERIFY(results->item(0)->text().contains("未找到"));
+        QTest::keyClick(search,Qt::Key_Escape);
+        QVERIFY(search->text().isEmpty());
+
+        search->setText("规则 自定义");
+        QVERIFY(results->isVisible());
+        QVERIFY(results->item(0)->text().contains("自定义规则"));
+        if (!output.isEmpty()) QVERIFY(window.grab().save(output+"/settings-search.png"));
+        QTest::mouseClick(results->viewport(),Qt::LeftButton,{},results->visualItemRect(results->item(0)).center());
+        QCOMPARE(window.currentRoute().view,int(ViewIds::Rules));
+        QCOMPARE(window.findChild<QListWidget*>("navigation")->currentRow(),1);
+
+        window.setPage(6);
+        search->setText("本地端口");
+        QCOMPARE(count->text(),QString("1 项"));
+        QTest::keyClick(search,Qt::Key_Return);
+        QCOMPARE(stack->currentIndex(),1);
+        QVERIFY(!search->isVisible());
+        auto* port=window.findChild<QSpinBox*>("mixedPort");
+        auto* target=window.findChild<QLineEdit*>("connectivityTestUrl");
+        auto* scroll=window.findChild<QScrollArea*>("settingsScroll");
+        QVERIFY(port->isVisible());
+        const auto saved=controller.settings().mixedPort;
+        port->setValue(saved+1);
+        target->setText("https://private-search-fixture.test/");
+        const auto geometry=scroll->geometry();
+        port->setFocus();
+        QTest::keyClick(port,Qt::Key_F,Qt::ControlModifier);
+        QVERIFY(!search->hasFocus());
+        emit locator->anchorRequested(window.findChild<QWidget*>("settingsAutostartRow"));
+        QCOMPARE(stack->currentIndex(),1);
+        QCOMPARE(scroll->geometry(),geometry);
+        window.setPage(7);
+        window.setPage(6);
+        QVERIFY(port->isVisible());
+        QCOMPARE(port->value(),saved+1);
+        QCOMPARE(target->text(),QString("https://private-search-fixture.test/"));
+        QCOMPARE(controller.settings().mixedPort,saved);
+        QCOMPARE(finished.size(),0);
+        QCOMPARE(platform->writes,0);
+        QVERIFY(!QFile::exists(root.path()+"/state.dat"));
     }
     void unchangedFileWatchDoesNotResaveItsOwnIndexForever() {
         QTemporaryDir root; auto platform=std::make_shared<DepthPlatform>(); ProfileStore store(root.path(),platform); QVERIFY(store.load().result.ok); Settings settings; settings.startCore=false; settings.corePath=QCoreApplication::applicationDirPath()+"/fake_core.exe"; Profile p; p.id=newId(); p.name="Watch"; p.sourceType="file"; p.autoUpdate=true; p.source=root.path()+"/watched.yaml"; const QByteArray source="proxies: [{name: A, type: direct}]\nrules: [\"MATCH,DIRECT\"]\n"; QVERIFY(writeAtomic(p.source,source).ok); const auto prepared=store.prepare(p,source,settings,19090,QString(64,'a')); QVERIFY(prepared.result.ok); p=prepared.profile; p.sourceHash=QString::fromLatin1(QCryptographicHash::hash(source,QCryptographicHash::Sha256).toHex()); QVERIFY(store.save(settings,{p}).ok);
@@ -195,12 +264,19 @@ private slots:
     void droppedImportsAndQrShareRequireExplicitAction() {
         QTemporaryDir root; auto platform=std::make_shared<DepthPlatform>(); AppController c(root.path(),true,nullptr,platform); QSignalSpy init(&c,&AppController::initialized); c.initialize(); QTRY_COMPARE(init.size(),1); MainWindow window(&c); window.show();
         QMimeData mime; mime.setUrls({QUrl("https://example.test/sub?token=PRIVATE")}); QDragEnterEvent enter(QPoint(20,20),Qt::CopyAction,&mime,Qt::LeftButton,Qt::NoModifier); QApplication::sendEvent(&window,&enter); QVERIFY(enter.isAccepted()); QDropEvent drop(QPointF(20,20),Qt::CopyAction,&mime,Qt::LeftButton,Qt::NoModifier); QApplication::sendEvent(&window,&drop);
-        auto* import=window.findChild<QDialog*>("importDialog"); QVERIFY(import); QCOMPARE(import->findChild<QLineEdit*>("subscriptionUrl")->text(),QString("https://example.test/sub?token=PRIVATE")); QVERIFY(!c.state().busy); QCOMPARE(c.profiles().size(),0); import->reject(); QCoreApplication::sendPostedEvents(nullptr,QEvent::DeferredDelete);
+        auto* input=window.findChild<QLineEdit*>("profileImportInput"); QVERIFY(input&&input->isVisible());
+        QCOMPARE(input->text(),QString("https://example.test/sub?token=PRIVATE"));
+        QCOMPARE(input->echoMode(),QLineEdit::Password);
+        QVERIFY(!window.findChild<QDialog*>("importDialog"));
+        QVERIFY(!c.state().busy); QCOMPARE(c.profiles().size(),0);
         Profile p; p.id=newId(); p.name="Share"; p.sourceType="url"; p.source="https://example.test/sub?token=PRIVATE"; const_cast<QVector<Profile>&>(c.profiles()).append(p); emit c.profilesChanged(); window.setPage(1);
         auto* remote=window.findChild<QListView*>("profileList"); QVERIFY(remote); QTRY_COMPARE(remote->model()->rowCount(),1);
-        QTest::mouseClick(remote->viewport(),Qt::LeftButton,{},ProfileCardDelegate::menu(remote->visualRect(remote->model()->index(0,0))).center());
+        QTest::mouseClick(qobject_cast<ProfileCardWidget*>(remote->indexWidget(remote->model()->index(0,0)))->button(ProfileCardWidget::Action::Menu),Qt::LeftButton);
         auto* detailsMenu=window.findChild<QMenu*>("profileContextMenu"); QVERIFY(detailsMenu);
-        detailsMenu->hide(); detailsMenu->actions().at(2)->trigger();
+        QAction* shareAction=nullptr;
+        for (auto* action:detailsMenu->actions()) if (action->text()=="分享配置…") shareAction=action;
+        QVERIFY(shareAction);
+        detailsMenu->hide(); shareAction->trigger();
         auto* share=window.findChild<QDialog*>("profileShareDialog"); QVERIFY(share); auto* image=share->findChild<QLabel*>("profileQrImage"); QVERIFY(image->pixmap().isNull()); share->findChild<QPushButton*>("revealProfileQr")->click(); QCoreApplication::processEvents(); QVERIFY(!image->pixmap().isNull()); const auto pixels=image->pixmap().toImage(); QCOMPARE(pixels.pixelColor(0,0),QColor(Qt::white));
         const auto output=qEnvironmentVariable("MLASH_UI_SCREENSHOTS"); if (!output.isEmpty()) { QVERIFY(QDir().mkpath(output)); QVERIFY(image->pixmap().save(output+"/subscription-qr.png")); QVERIFY(share->grab().save(output+"/subscription-share.png")); } share->close(); QCOMPARE(platform->writes,0);
     }
@@ -241,6 +317,7 @@ private slots:
         state.tunObserved=true; state.proxy=ProxyState::External; emit c.stateChanged();
         auto* proxySwitch=window.findChild<QCheckBox*>("systemProxy"); QVERIFY(proxySwitch);
         QTRY_VERIFY(proxySwitch->isChecked());
+        QCOMPARE(currentMember->text(),QString("DIRECT"));
         QVERIFY(!window.findChild<QLabel*>("homeStateLine"));
         auto* control=window.findChild<QWidget*>("homeControlCard"); QVERIFY(control);
         const auto rows=control->findChildren<QWidget*>("homeControlRow"); QCOMPARE(rows.size(),2);
@@ -256,7 +333,7 @@ private slots:
         const auto prepared=store.prepare(p,"proxies: [{name: Leaf, type: direct}]\nproxy-groups: [{name: Test, type: select, proxies: [Leaf]}]\nrules: [\"MATCH,Test\"]\n",settings,19090,QString(64,'a')); QVERIFY(prepared.result.ok); QVERIFY(store.save(settings,{prepared.profile}).ok);
         AppController c(root.path(),true,nullptr,platform); QSignalSpy init(&c,&AppController::initialized),finished(&c,&AppController::operationFinished); c.initialize(); QTRY_COMPARE(init.size(),1); MainWindow window(&c); window.show(); window.setPage(1);
         auto* list=window.findChild<QListView*>("profileList"); QVERIFY(list); QTRY_COMPARE(list->model()->rowCount(),1);
-        QTest::mouseClick(list->viewport(),Qt::LeftButton,{},ProfileCardDelegate::menu(list->visualRect(list->model()->index(0,0))).center());
+        QTest::mouseClick(qobject_cast<ProfileCardWidget*>(list->indexWidget(list->model()->index(0,0)))->button(ProfileCardWidget::Action::Menu),Qt::LeftButton);
         auto* menu=window.findChild<QMenu*>("profileContextMenu"); QVERIFY(menu); menu->hide(); menu->actions().at(1)->trigger();
         auto* dialog=window.findChild<QDialog*>("profilePolicyDialog"); QVERIFY(dialog); auto* automatic=dialog->findChild<QCheckBox*>("profileAutoUpdate"); const auto output=qEnvironmentVariable("MLASH_UI_SCREENSHOTS"); if (!output.isEmpty()) { QCoreApplication::processEvents(); QVERIFY(dialog->grab().save(output+"/subscription-details.png")); } automatic->setChecked(true); dialog->findChild<QSpinBox*>("profileUpdateHours")->setValue(6); platform->failSeal=true; dialog->findChild<QDialogButtonBox*>()->button(QDialogButtonBox::Save)->click(); QTRY_COMPARE(finished.size(),1); QVERIFY(!finished.last()[0].toBool()); QVERIFY(dialog->isVisible()); QVERIFY(automatic->isChecked()); QVERIFY(!c.profiles()[0].autoUpdate); QVERIFY(!store.load().profiles[0].autoUpdate);
         platform->failSeal=false; dialog->findChild<QDialogButtonBox*>()->button(QDialogButtonBox::Save)->click(); QTRY_COMPARE(finished.size(),2); QVERIFY(finished.last()[0].toBool()); QVERIFY(c.profiles()[0].autoUpdate); QCOMPARE(c.profiles()[0].updateIntervalHours,6); QCOMPARE(platform->writes,0);

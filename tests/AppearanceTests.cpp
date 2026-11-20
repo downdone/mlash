@@ -1,7 +1,7 @@
 #include "app/AppController.h"
 #include "TestPorts.h"
 #include "ui/MainWindow.h"
-#include "ui/ProfileCardDelegate.h"
+#include "ui/ProfileCardWidget.h"
 #include "ui/UiTheme.h"
 #include "ui/UiIcons.h"
 #include "ui/WidgetStyle.h"
@@ -23,7 +23,9 @@
 #include "storage/Storage.h"
 #include "MockHttp.h"
 #include <QtTest>
+#include <algorithm>
 #include <QListView>
+#include <QListWidget>
 #include <QComboBox>
 #include <QFrame>
 #include <QLabel>
@@ -82,6 +84,60 @@ class AppearanceTests : public QObject {
 private slots:
     void initTestCase() { WidgetStyle::install(); }
     void cleanup() { UiTheme::setPreferences("system",100); UiTheme::applyAppearance(Qt::ColorScheme::Light); }
+    void brandSignatureAndNavigationFeedbackShareVi() {
+        QTemporaryDir dir;
+        auto platform=std::make_shared<ReviewPlatform>();
+        AppController controller(dir.path(),true,nullptr,platform);
+        QSignalSpy init(&controller,&AppController::initialized);
+        controller.initialize();
+        QTRY_COMPARE(init.size(),1);
+        MainWindow window(&controller);
+        window.resize(840,560);
+        window.show();
+        QApplication::setActiveWindow(&window);
+        auto* navigation=window.findChild<QListWidget*>("navigation");
+        auto* settings=window.findChild<QToolButton*>("sidebarSettings");
+        auto* brand=window.findChild<QLabel*>("sidebarBrand");
+        QVERIFY(navigation && settings && brand);
+        for (const auto& theme : {"light","dark"}) {
+            UiTheme::setPreferences(theme,120);
+            QCOMPARE(brand->font().weight(),QFont::Bold);
+            QCOMPARE(brand->font().variableAxisValue("wght"),700.0f);
+            QCOMPARE(brand->font().pointSizeF(),19.2);
+            const auto bounds=navigation->visualItemRect(navigation->item(0));
+            QTest::mouseClick(navigation->viewport(),Qt::LeftButton,{},bounds.center());
+            QTRY_VERIFY(!navigation->property("keyboardFocus").toBool());
+            const auto includesFocus=[](const QImage& image) {
+                const QColor focus(UiTheme::Focus);
+                for (int y=0; y<3; ++y)
+                    for (int x=8; x<image.width()-8; ++x)
+                        if (image.pixelColor(x,y)==focus || image.pixelColor(x,image.height()-1-y)==focus) return true;
+                return false;
+            };
+            QTRY_VERIFY(!includesFocus(navigation->viewport()->grab(bounds).toImage()));
+            save(&window,QString("vi-%1-selected").arg(theme));
+            navigation->setFocus();
+            QTRY_VERIFY(navigation->hasFocus());
+            QTest::keyClick(navigation,Qt::Key_Home);
+            QTRY_VERIFY(navigation->property("keyboardFocus").toBool());
+            QTRY_VERIFY(includesFocus(navigation->viewport()->grab(bounds).toImage()));
+            save(&window,QString("vi-%1-keyboard-focus").arg(theme));
+        }
+        settings->click();
+        auto* about=window.findChild<QPushButton*>("settingsAboutRow");
+        QVERIFY(about);
+        about->click();
+        auto* aboutBrand=window.findChild<QLabel*>("aboutBrand");
+        QVERIFY(aboutBrand && aboutBrand->isVisible());
+        QCOMPARE(aboutBrand->font(),brand->font());
+        const auto* mainMark=brand->parentWidget()->findChild<QLabel*>("brandMark");
+        const auto* aboutMark=aboutBrand->parentWidget()->findChild<QLabel*>("brandMark");
+        QVERIFY(mainMark && aboutMark);
+        QVERIFY(!mainMark->pixmap().isNull() && !aboutMark->pixmap().isNull());
+        QCOMPARE(mainMark->width(),28);
+        QCOMPARE(aboutMark->width(),40);
+        save(&window,"vi-dark-about");
+    }
     void windowChromePreferenceIsReversible() {
         QTemporaryDir dir; auto platform=std::make_shared<ReviewPlatform>();
         AppController controller(dir.path(),true,nullptr,platform); QSignalSpy init(&controller,&AppController::initialized);
@@ -111,6 +167,8 @@ private slots:
             UiTheme::applyAppearance(scheme,high);
             for (const auto foreground:{UiTheme::Ink,UiTheme::Secondary,UiTheme::Muted,UiTheme::Brand,UiTheme::Success,UiTheme::Warning,UiTheme::Error}) for (const auto background:{UiTheme::Surface,UiTheme::Window,UiTheme::Sidebar}) QVERIFY2(contrast(foreground,background)>=4.5,qUtf8Printable(QString("%1 on %2: %3").arg(foreground,background).arg(contrast(foreground,background))));
             QVERIFY(contrast(UiTheme::OnPrimary,UiTheme::Primary)>=4.5); QVERIFY(contrast(UiTheme::Ink,UiTheme::Selection)>=4.5);
+            QVERIFY(contrast(UiTheme::OnPrimary,UiTheme::PrimaryPressed)>=4.5);
+            QVERIFY(contrast(UiTheme::Brand,UiTheme::Selection)>=4.5);
             // 高对比是第四套并行取值：表面分级、焦点环、选中底与开关轨道都必须单独达标，
             // 不能只靠加深边框（分层设计 6.3 规则 3）。
             QVERIFY2(contrast(UiTheme::Focus,UiTheme::Window)>=3.0,qUtf8Printable(QString("focus/canvas %1 (%2)").arg(contrast(UiTheme::Focus,UiTheme::Window)).arg(high?"high":"normal")));
@@ -172,7 +230,12 @@ private slots:
                 }
                 save(&window,QString("%1-%2x%3-page-%4").arg(scheme==Qt::ColorScheme::Dark?"dark":"light").arg(size.width()).arg(size.height()).arg(page));
             }
-            for (auto* scroll:window.findChildren<QScrollArea*>()) QCOMPARE(scroll->horizontalScrollBar()->maximum(),0);
+            for (auto* scroll:window.findChildren<QScrollArea*>()) {
+                // The columns popup is sized on open and checked at 120% in the populated-page fixture.
+                if (scroll->objectName()=="connectionColumnScroll" && !scroll->isVisible()) continue;
+                QVERIFY2(scroll->horizontalScrollBar()->maximum()==0,qUtf8Printable(QString("%1 at %2: %3 px")
+                    .arg(scroll->objectName()).arg(size.width()).arg(scroll->horizontalScrollBar()->maximum())));
+            }
             window.setPage(0); QVERIFY(!window.findChild<QWidget*>("homeOnboarding")); QVERIFY(window.findChild<QWidget*>("homeControlCard")->isVisible());
             // 首页六卡已删除（U08 H2）：控制区与节点列表都不应越出窗口。
             for (auto* widget:QList<QWidget*>{window.findChild<QWidget*>("homeControlCard"),window.findChild<QWidget*>("homeInlineStat")}) if (widget && widget->isVisible()) QVERIFY(window.rect().contains(widget->mapTo(&window,widget->rect().bottomRight())));
@@ -216,12 +279,16 @@ private slots:
         for (int scale:{100,120}) for (const auto scheme:{Qt::ColorScheme::Light,Qt::ColorScheme::Dark}) {
             settings.appearance=scheme==Qt::ColorScheme::Dark?"dark":"light"; settings.textScale=scale;
             UiTheme::setPreferences(settings.appearance,scale);
-            for (const auto size:{QSize(840,560),QSize(940,620),QSize(1180,810)}) {
+            for (const auto size:{QSize(840,560),QSize(940,620),QSize(1440,810)}) {
                 window.resize(size);
                 for (int page=0;page<8;++page) {
                     window.setPage(page); QCoreApplication::processEvents(); QTest::qWait(20);
                     QCOMPARE(window.size(),size);
                     if (page==0) {
+                        auto* brand=window.findChild<QLabel*>("sidebarBrand"); QVERIFY(brand);
+                        QVERIFY2(brand->contentsRect().width()>=brand->fontMetrics().horizontalAdvance(brand->text()),
+                            qUtf8Printable(QString("brand at %1%, window %2: available %3, required %4")
+                                .arg(scale).arg(size.width()).arg(brand->contentsRect().width()).arg(brand->fontMetrics().horizontalAdvance(brand->text()))));
                         auto* control=window.findChild<QWidget*>("homeControlCard"); QVERIFY(control);
                         const auto rows=control->findChildren<QWidget*>("homeControlRow"); QCOMPARE(rows.size(),2);
                         auto* route=control->findChild<QWidget*>("homeRouteRow"); QVERIFY(route);
@@ -368,10 +435,11 @@ private slots:
         window.setPage(3); QVERIFY(window.findChild<QWidget*>("rulesNoProfile")->isVisible());
         QVERIFY(!window.findChild<QWidget*>("rulesEditorSurface")->isVisible());
         window.findChild<QPushButton*>("rulesImportProfile")->click();
-        QCOMPARE(window.currentRoute().view,int(ViewIds::Profiles)); QTRY_VERIFY(window.findChild<ImportDialog*>());
-        window.findChild<ImportDialog*>()->reject(); QCoreApplication::sendPostedEvents(nullptr,QEvent::DeferredDelete);
+        QCOMPARE(window.currentRoute().view,int(ViewIds::Profiles));
+        auto* quickImport=window.findChild<QLineEdit*>("profileImportInput"); QTRY_VERIFY(quickImport->isVisible());
+        QVERIFY(!window.findChild<ImportDialog*>());
         window.setPage(0);
-        homeEmpty->findChild<QPushButton*>()->click(); QTRY_VERIFY(window.findChild<ImportDialog*>()); auto* import=window.findChild<ImportDialog*>(); import->reject(); QCoreApplication::sendPostedEvents(nullptr,QEvent::DeferredDelete); QCOMPARE(operations.size(),0); QVERIFY(!window.findChild<QAction*>("nodePreferences")->isEnabled()); QVERIFY(!window.findChild<QPushButton*>("ruleProviders")->isEnabled());
+        homeEmpty->findChild<QPushButton*>()->click(); QTRY_VERIFY(quickImport->isVisible()); QVERIFY(!window.findChild<ImportDialog*>()); QCOMPARE(operations.size(),0); QVERIFY(!window.findChild<QAction*>("nodePreferences")->isEnabled()); QVERIFY(!window.findChild<QPushButton*>("ruleProviders")->isEnabled());
         auto& state=const_cast<AppState&>(controller.state()); state.busy=true; controller.stateChanged(); QVERIFY(!window.findChild<QAction*>("exportDiagnostics")->isEnabled()); state.busy=false; controller.stateChanged(); QVERIFY(window.findChild<QAction*>("exportDiagnostics")->isEnabled());
         // 无配置时连接页从同一空态动作进入配置，不再重复显示顶端跳转按钮。
         QVERIFY(!window.findChild<QPushButton*>("nodeNextStep"));
@@ -379,7 +447,7 @@ private slots:
         auto* connectionEmpty=window.findChild<QTableView*>("connectionsTable")->viewport()->findChild<QPushButton*>("emptyStateAction");
         QVERIFY(connectionEmpty&&connectionEmpty->isVisible()); QCOMPARE(connectionEmpty->text(),QString("选择配置"));
         connectionEmpty->click(); QCOMPARE(window.page(),1);
-        window.setPage(7); auto* websiteNext=window.findChild<QPushButton*>("websiteNextStep"); QVERIFY(websiteNext->isVisible()); QCOMPARE(websiteNext->text(),QString("选择配置")); websiteNext->click(); QCOMPARE(window.page(),1);
+        window.setPage(7); auto* websiteNext=window.findChild<QPushButton*>("websiteNextStep"); QVERIFY(websiteNext->isVisible()); QCOMPARE(websiteNext->text(),QString("前往配置")); websiteNext->click(); QCOMPARE(window.page(),1);
           // A running core can be unready while its API is being confirmed. Do not offer a second start.
           state.activeProfile="pending-profile"; state.core=CoreState::Running; state.ready=false; controller.stateChanged();
           window.setPage(7); QVERIFY(!websiteNext->isVisible()); QVERIFY(window.findChild<QLabel*>("websiteProgress")->text().contains("正在确认内核"));
@@ -391,18 +459,25 @@ private slots:
         // K8：设置没有分类页签，三组同屏；这里改端口再「放弃修改」，验证动作条出现与回滚。
         window.setPage(6); auto* port=window.findChild<QSpinBox*>("mixedPort"); const int original=port->value();
         auto* search=window.findChild<QLineEdit*>("settingsSearch"); search->setText("本地端口"); QTest::keyClick(search,Qt::Key_Return); QCoreApplication::processEvents(); QVERIFY(port->isVisible()); QCOMPARE(port->value(),original);
-        search->setText("WebDAV"); QTest::keyClick(search,Qt::Key_Return); QVERIFY(window.findChild<QPushButton*>("configureRemoteBackup")->isVisible()); QCOMPARE(port->value(),original);
+        window.findChild<QPushButton*>("settingsBack")->click();
+        search->setText("WebDAV"); QTest::keyClick(search,Qt::Key_Return);
+        auto* webdav=window.findChild<RemoteBackupDialog*>();
+        QVERIFY(webdav && webdav->isVisible());
+        QCOMPARE(port->value(),original);
+        for (auto* back:window.findChildren<QPushButton*>("taskBack")) if (back->isVisible()) { back->click(); break; }
+        QVERIFY(search->isVisible());
         search->setText("DNS"); QTest::keyClick(search,Qt::Key_Return); QCOMPARE(window.page(),1);
         QVERIFY(!window.findChild<QPushButton*>("configureDns")); QVERIFY(!window.findChild<QPushButton*>("openOutboundFromSettings")); QVERIFY(!window.findChild<QPushButton*>("proxyManagement"));
         // K7：远程和本地使用同一张卡片网格；卡片激活配置，就近菜单进入内容工作区。
         Profile first; first.id=newId(); first.name="订阅甲"; first.sourceType="url"; first.source="https://example.test/a"; first.candidate=newId(); Profile second=first; second.id=newId(); second.name="订阅乙"; const_cast<QVector<Profile>&>(controller.profiles())={first,second}; controller.profilesChanged();
         auto* cards=window.findChild<QListView*>("profileList"); QVERIFY(cards);
         QTRY_COMPARE(cards->model()->rowCount(),2);
-        QTest::mouseClick(cards->viewport(),Qt::LeftButton,{},ProfileCardDelegate::menu(cards->visualRect(cards->model()->index(0,0))).center());
+        QTest::mouseClick(qobject_cast<ProfileCardWidget*>(cards->indexWidget(cards->model()->index(0,0)))->button(ProfileCardWidget::Action::Menu),Qt::LeftButton);
         auto* cardMenu=window.findChild<QMenu*>("profileContextMenu"); QVERIFY(cardMenu);
         cardMenu->hide(); cardMenu->actions().first()->trigger(); QCoreApplication::processEvents();
-        QVERIFY(window.findChild<QWidget*>("taskWorkspace")->isVisible());
-        window.findChild<QToolButton*>("toolbarAdd")->click(); QTRY_VERIFY(window.findChild<ImportDialog*>()); import=window.findChild<ImportDialog*>(); Profile added=first; added.id=newId(); added.name="新增订阅"; const_cast<QVector<Profile>&>(controller.profiles()).append(added); controller.profilesChanged(); import->done(QDialog::Accepted); QCOMPARE(window.page(),1);
+        const auto workspaces=window.findChildren<QWidget*>("taskWorkspace");
+        QVERIFY(std::any_of(workspaces.cbegin(),workspaces.cend(),[](auto* workspace) { return workspace->isVisible(); }));
+        window.findChild<QToolButton*>("toolbarAdd")->click(); QTRY_VERIFY(quickImport->isVisible()); window.findChild<QPushButton*>("importSubscription")->click(); QTRY_VERIFY(window.findChild<ImportDialog*>()); auto* import=window.findChild<ImportDialog*>(); Profile added=first; added.id=newId(); added.name="新增订阅"; const_cast<QVector<Profile>&>(controller.profiles()).append(added); controller.profilesChanged(); import->done(QDialog::Accepted); QCOMPARE(window.page(),1);
         QCOMPARE(operations.size(),0); QCOMPARE(platform->writes,0);
     }
     void ruleListAndHomeSelectionRequireExplicitApply() {

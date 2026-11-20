@@ -23,18 +23,18 @@ public:
     bool canClose(QWidget* editor);
     void clear();
     void note(const QString& text);
-    void setContextSummary(const QString& text);
     std::function<void()> requested;
 private:
     struct Entry { Task task; QPointer<QWidget> editor, surface, owner; };
     void activate(int index);
+    void updateHeading(const QString& taskTitle);
     void removeEditor(const QString& key);
     int indexOf(const QString& key) const;
     QString context_, contextTitle_, creatingKey_;
     QList<Entry> entries_;
     QTabBar* tabs_;
     QStackedWidget* panels_;
-    QLabel *title_, *hint_, *summary_;
+    QLabel *title_, *hint_;
     QPushButton* back_;
     QHBoxLayout* header_;
     std::function<void()> backAction_;

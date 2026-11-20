@@ -8,6 +8,7 @@
 #include <QPlainTextEdit>
 #include <QPushButton>
 #include <QScrollArea>
+#include <QTabBar>
 #include <QTabWidget>
 #include <QVBoxLayout>
 namespace mlash {
@@ -33,6 +34,18 @@ YamlFormEditor::YamlFormEditor(QString kind,QPlainTextEdit* editor,QWidget* pare
     auto* reveal=new QCheckBox("显示凭据"); reveal->setObjectName("revealYamlCredentials"); reveal->setVisible(kind_=="nodes"); form->addRow(reveal); connect(reveal,&QCheckBox::toggled,this,[this](bool visible) { for (const auto& field:yamlFields(kind_)) if (field.kind=="secret") if (auto* text=qobject_cast<QLineEdit*>(controls_.value(field.key))) text->setEchoMode(visible?QLineEdit::Normal:QLineEdit::Password); });
     tabs_->setToolTip("表单修改会重新排版 YAML，不保留注释；未修改的字段保留。留空字段的含义以对应输入提示为准。"); tabs_->setAccessibleDescription(tabs_->toolTip()); tabs_->addTab(scroll,"常用字段"); tabs_->addTab(editor_,"高级 YAML"); layout->addWidget(tabs_,1); hint_=new QLabel("正在读取草稿…"); hint_->setObjectName("yamlFormHint"); hint_->setTextFormat(Qt::PlainText); hint_->setWordWrap(true); hint_->setMinimumHeight(fontMetrics().lineSpacing()+4); layout->addWidget(hint_); undo_=new QPushButton("撤销未同步修改"); undo_->setObjectName("undoUnappliedYamlFields"); undo_->hide(); layout->addWidget(undo_,0,Qt::AlignLeft);
     timer_.setSingleShot(true); timer_.setInterval(160); connect(&timer_,&QTimer::timeout,this,&YamlFormEditor::pump); connect(undo_,&QPushButton::clicked,this,[this] { changes_={}; failed_=false; readQueued_=true; pump(); }); connect(editor_,&QPlainTextEdit::textChanged,this,[this] { if (settingText_) return; ++revision_; changes_={}; failed_=false; readQueued_=true; updateState(); timer_.start(); }); setReferenceOptions({},{}); updateState(); QTimer::singleShot(0,this,&YamlFormEditor::pump);
+}
+void YamlFormEditor::useModeButton(QPushButton* button) {
+    tabs_->tabBar()->hide();
+    const auto sync=[this,button] {
+        const bool yaml=tabs_->currentIndex()==1;
+        button->setText(yaml?"常用字段":"编辑 YAML");
+        button->setEnabled(yaml || !unapplied());
+    };
+    connect(button,&QPushButton::clicked,this,[this] { tabs_->setCurrentIndex(1-tabs_->currentIndex()); });
+    connect(tabs_,&QTabWidget::currentChanged,button,sync);
+    connect(this,&YamlFormEditor::activityChanged,button,sync);
+    sync();
 }
 void YamlFormEditor::enqueue(const YamlField& field,const QString& value) { if (updating_) return; changes_[field.key]=value.isEmpty()?QJsonValue(QJsonValue::Null):QJsonValue(value); failed_=false; updateState(); timer_.start(); }
 void YamlFormEditor::pump() {

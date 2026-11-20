@@ -75,7 +75,10 @@ void MainWindow::syncSectionNavigation(const Route& route) {
     // 三个工作区入口与底部设置共用同一路由；规则深链归属配置。
     const int row = route.view == ViewIds::Rules ? ViewIds::Profiles : route.view;
     { const QSignalBlocker block(navigation_);
-      if (row == ViewIds::Settings) navigation_->setCurrentRow(-1);
+      if (row == ViewIds::Settings) {
+          navigation_->clearSelection();
+          navigation_->setCurrentRow(-1);
+      }
       else for (int i = 0; i < navigation_->count(); ++i) if (navigation_->item(i)->data(Qt::UserRole).toInt() == row) { navigation_->setCurrentRow(i); break; } }
     settingsNav_->setChecked(row==ViewIds::Settings);
     settingsNav_->setIcon(UiIcons::icon(UiIcons::Glyph::Settings,settingsNav_->isChecked()?UiTheme::Brand:UiTheme::Secondary));
@@ -335,7 +338,7 @@ void MainWindow::updateTopbar() {
     // With no configuration the Home empty state is the sole import action.
     const bool configActions=route_.view==ViewIds::Home && !controller_->profiles().isEmpty();
     if (auto* button=findChild<QToolButton*>("toolbarAdd")) { button->setVisible(configActions); button->setIcon(UiIcons::icon(UiIcons::Glyph::Plus,UiTheme::Brand)); }
-    WindowParts::updateTopbar(this, route_.view==ViewIds::Home?QString("Mlash"):route_.view==ViewIds::Rules?QString("配置"):ViewIds::title(route_.view), ViewIds::subtitle(route_.view), status, dotState);
+    WindowParts::updateTopbar(this, route_.view==ViewIds::Rules?QString("配置"):ViewIds::title(route_.view), ViewIds::subtitle(route_.view), status, dotState);
     if (topbarStatusText_) topbarStatusText_->setToolTip(sentence.line1);
 }
 void MainWindow::updateWindowTitle() {

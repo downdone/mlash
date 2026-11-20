@@ -49,7 +49,9 @@ def check(root,names):
 
 
 def main():
-    names=subprocess.check_output(['git','ls-files','-z'],cwd=ROOT).decode().split('\0')
+    names=subprocess.check_output(
+        ['git', 'ls-files', '--cached', '--others', '--exclude-standard', '-z'], cwd=ROOT
+    ).decode().split('\0')
     count,errors=check(ROOT,names)
     for name,error in errors:print(f'{name}: {error}',file=sys.stderr)
     print(f'Document links/navigation: {count} Markdown files, {len(errors)} findings')

@@ -99,8 +99,12 @@ private slots:
         c.importFile("Switch",file); QTRY_COMPARE_WITH_TIMEOUT(finished.size(),2,12000); QVERIFY(finished.last()[0].toBool());
         c.activateProfile(c.profiles()[0].id); QTRY_COMPARE_WITH_TIMEOUT(finished.size(),3,12000); QVERIFY(finished.last()[0].toBool());
         const auto pid=c.coreProcessId(); const auto original=platform->current;
+        MainWindow window(&c); window.show();
+        auto* proxySwitch=window.findChild<QCheckBox*>("systemProxy"); QVERIFY(proxySwitch);
+        auto* overview=window.findChild<QLabel*>("overviewTitle"); QVERIFY(overview);
         // 开启：内核已运行 → 只接管系统代理，内核进程不变。
-        c.setProxyEnabled(true); QTRY_COMPARE_WITH_TIMEOUT(finished.size(),4,12000); QVERIFY2(finished.last()[0].toBool(),qUtf8Printable(finished.last()[1].toString()));
+        proxySwitch->click(); QTRY_COMPARE_WITH_TIMEOUT(finished.size(),4,12000); QVERIFY2(finished.last()[0].toBool(),qUtf8Printable(finished.last()[1].toString()));
+        QVERIFY(proxySwitch->isChecked()); QCOMPARE(overview->text(),c.homeNode().isEmpty()?QString("已开启代理"):c.homeNode());
         QCOMPARE(c.state().proxy,ProxyState::Owned); QVERIFY(c.settings().desiredProxy); QCOMPARE(c.coreProcessId(),pid); QCOMPARE(platform->current.value("flags").toInt(),3);
         // 关闭：只撤销接管，内核继续运行（ADR 0048）。
         c.setProxyEnabled(false); QTRY_COMPARE_WITH_TIMEOUT(finished.size(),5,12000); QVERIFY(finished.last()[0].toBool());
@@ -109,7 +113,8 @@ private slots:
         const auto writesAfterOff=platform->writes; c.setProxyEnabled(false); QTRY_COMPARE(finished.size(),6); QVERIFY(finished.last()[0].toBool()); QCOMPARE(platform->writes,writesAfterOff);
         // 写入失败：开关不能虚报成功，接管意图回到点击前。
         platform->failNextWrites=1; const auto intentBefore=c.settings().desiredProxy; const auto beforeWrites=platform->writes;
-        c.setProxyEnabled(true); QTRY_COMPARE_WITH_TIMEOUT(finished.size(),7,12000); QVERIFY(!finished.last()[0].toBool());
+        proxySwitch->click(); QTRY_COMPARE_WITH_TIMEOUT(finished.size(),7,12000); QVERIFY(!finished.last()[0].toBool());
+        QVERIFY(!proxySwitch->isChecked()); QCOMPARE(overview->text(),c.homeNode().isEmpty()?QString("代理未开启"):c.homeNode());
         QCOMPARE(c.settings().desiredProxy,intentBefore); QCOMPARE(c.state().core,CoreState::Running); QCOMPARE(c.coreProcessId(),pid); QVERIFY(platform->writes>beforeWrites); QCOMPARE(platform->current,original);
         // 恢复能力保留：失败后仍可正常开启。
         c.setProxyEnabled(true); QTRY_COMPARE_WITH_TIMEOUT(finished.size(),8,12000); QVERIFY2(finished.last()[0].toBool(),qUtf8Printable(finished.last()[1].toString())); QCOMPARE(c.state().proxy,ProxyState::Owned);

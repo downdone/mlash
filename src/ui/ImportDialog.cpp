@@ -11,6 +11,7 @@
 #include <QPushButton>
 #include <QDialogButtonBox>
 #include <QCheckBox>
+#include <QCloseEvent>
 #include <QFileDialog>
 #include <QFormLayout>
 #include <QVBoxLayout>
@@ -55,8 +56,7 @@ ImportDialog::ImportDialog(QWidget* parent) : TaskDialog(parent) {
     auto* form = new QFormLayout; name_ = new QLineEdit; name_->setObjectName("subscriptionName"); name_->setMaxLength(120); name_->setPlaceholderText("可选，留空使用默认名称"); form->addRow("名称", name_); layout->addLayout(form);
     auto* advanced = new QPushButton("下载设置"); advanced->setObjectName("importAdvanced"); advanced->setCheckable(true); advanced->setAutoDefault(false); layout->addWidget(advanced, 0, Qt::AlignLeft);
     download_ = new DownloadPolicyEditor; download_->hide(); layout->addWidget(download_); connect(advanced, &QPushButton::toggled, download_, &QWidget::setVisible);
-    connect(tabs_, &QTabWidget::currentChanged, this, [this, advanced](int index) { advanced->setVisible(index == 0); download_->setVisible(index == 0 && advanced->isChecked()); if (inlineMode_) setFixedHeight(index==2 || (index==0 && advanced->isChecked())?430:300); });
-    connect(advanced,&QPushButton::toggled,this,[this](bool expanded) { if (inlineMode_) setFixedHeight(expanded?430:300); });
+    connect(tabs_, &QTabWidget::currentChanged, this, [this, advanced](int index) { advanced->setVisible(index == 0); download_->setVisible(index == 0 && advanced->isChecked()); });
     connect(download_->userAgentEditor(), &QLineEdit::textChanged, this, &ImportDialog::inputChanged);
     hint_ = new ElidedLabel; hint_->setObjectName("importHint"); hint_->setSizePolicy(QSizePolicy::Ignored,QSizePolicy::Preferred); hint_->setMinimumHeight(hint_->fontMetrics().height()+6); outer->addWidget(hint_);
     auto* note = new QLabel("导入后需手动使用。"); note->setToolTip("端口、控制接口和 TUN 由 Mlash 设置管理；仅监听本机。"); note->setObjectName("importNote"); note->setProperty("secondary",true); note->setWordWrap(true); layout->addWidget(note);
@@ -71,35 +71,9 @@ ImportDialog::ImportDialog(QWidget* parent) : TaskDialog(parent) {
     DialogDraftGuard::protect(this,[this] { return !pending_&&inputs()!=initialInputs_; },[this] { return pending_||links_->checking(); });
     validateInput();
 }
-void ImportDialog::setInlinePresentation() {
-    // The same validation and Controller command serve the page-local form.
-    // Only the presentation changes: a bounded child panel beside the list.
-    setWindowFlags(Qt::Widget);
-    if (auto* scroll=findChild<QScrollArea*>("importScroll")) {
-        auto* body=scroll->takeWidget();
-        auto* outer=qobject_cast<QVBoxLayout*>(layout());
-        delete outer->replaceWidget(scroll,body);
-        scroll->deleteLater();
-    }
-    inlineMode_=true;
-    auto* outer=qobject_cast<QVBoxLayout*>(layout());
-    outer->setContentsMargins(10,8,10,8);
-    outer->setSpacing(6);
-    if (auto* body=findChild<QWidget*>("importBody")) {
-        auto* content=qobject_cast<QVBoxLayout*>(body->layout());
-        content->setSpacing(6);
-        if (content->count() && content->itemAt(content->count()-1)->spacerItem()) delete content->takeAt(content->count()-1);
-    }
-    for (auto* page:findChildren<QWidget*>("importSource")) if (auto* sourceLayout=qobject_cast<QVBoxLayout*>(page->layout())) {
-        sourceLayout->setContentsMargins(2,2,2,2);
-        sourceLayout->setSpacing(4);
-    }
-    if (auto* note=findChild<QLabel*>("importNote")) note->hide();
-    hint_->hide();
-    setMinimumSize(0,0);
-    setFixedHeight(isNodeLinks()?430:300);
-    setProperty("inlineImport",true);
-    setProperty("embeddedTask",true);
+bool ImportDialog::acceptsUrl(const QUrl& url) {
+    return url.isValid() && (url.scheme()=="http" || url.scheme()=="https") &&
+           !url.host().isEmpty() && url.userInfo().isEmpty() && !url.hasFragment();
 }
 bool ImportDialog::isUrl() const { return tabs_->currentIndex() == 0; }
 bool ImportDialog::isNodeLinks() const { return tabs_->currentIndex()==2; }
@@ -129,7 +103,7 @@ void ImportDialog::accept() {
     auto* close=findChild<QDialogButtonBox*>()->button(QDialogButtonBox::Cancel);
     close->setText("关闭"); close->setToolTip("返回页面后，已提交的导入仍继续；结果显示在状态栏。");
     tabs_->setEnabled(false); name_->setEnabled(false); download_->setEnabled(false);
-    import_->setEnabled(false); hint_->setText("正在导入并校验；返回后可在状态栏查看结果。"); if (inlineMode_) hint_->show();
+    import_->setEnabled(false); hint_->setText("正在导入并校验；返回后可在状态栏查看结果。");
     if (isNodeLinks()) controller_->importNodeLinks(profileName(),source());
     else if (isUrl()) controller_->importUrl(profileName(),QUrl(source()),downloadPolicy());
     else controller_->importFile(profileName(),source());
@@ -139,6 +113,12 @@ void ImportDialog::reject() {
     // continues and reports through the status bar. Drafts still use the guard.
     if (pending_) QDialog::reject();
     else TaskDialog::reject();
+}
+void ImportDialog::closeEvent(QCloseEvent* event) {
+    // The window close follows the standalone tools' close policy; Cancel and
+    // Escape use the explicit draft confirmation in TaskDialog::reject.
+    event->accept();
+    QDialog::reject();
 }
 QString ImportDialog::source() const { return isNodeLinks()?links_->text():(isUrl() ? url_ : file_)->text().trimmed(); }
 QString ImportDialog::profileName() const { return name_->text().trimmed(); }
@@ -153,13 +133,12 @@ void ImportDialog::validateInput() {
     if (isNodeLinks()) { valid=links_->ready(); hint=valid?"检查已完成；导入后创建本地订阅快照，仍需明确使用。":"请先检查链接并确认节点预览。"; }
     else if (isUrl()) {
         const QUrl url(source());
-        valid = valid && url.isValid() && QStringList{"http", "https"}.contains(url.scheme()) && !url.host().isEmpty() && url.userInfo().isEmpty() && !url.hasFragment();
+        valid = valid && acceptsUrl(url);
         hint = valid||source().isEmpty()?QString():QString("地址无效：需 HTTP/HTTPS，且不含账户信息或片段。");
     } else hint.clear();
     if (isUrl() && !download_->policy().valid()) { valid = false; hint = "User-Agent 仅支持最多 256 个单行 ASCII 字符"; }
     if (!pending_) {
         hint_->setText(failure_.isEmpty()?hint:failure_);
-        if (inlineMode_) hint_->setVisible(!hint_->text().isEmpty());
         hint_->setToolTip(failure_); hint_->setAccessibleDescription(failure_);
     }
     import_->setEnabled(valid&&available_&&!pending_);

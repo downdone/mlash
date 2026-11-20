@@ -26,8 +26,9 @@ inline constexpr double BodyPoints=design::ShadowrocketStyle::typography.bodyPoi
 #else
 inline constexpr double BodyPoints=design::ShadowrocketStyle::typography.bodyPointsWindows;
 #endif
-inline constexpr int DialogPoints=design::ShadowrocketStyle::typography.dialogPoints, SectionPoints=design::ShadowrocketStyle::typography.sectionPoints, ValuePoints=design::ShadowrocketStyle::typography.valuePoints, TitlePoints=design::ShadowrocketStyle::typography.titlePoints;
-inline QFont rowCaptionFont(QFont font) { font.setPointSizeF(qMax(design::ShadowrocketStyle::typography.captionFloor,font.pointSizeF()*design::ShadowrocketStyle::typography.captionRatio)); return font; }
+inline constexpr double DialogPoints=design::ShadowrocketStyle::typography.dialogPoints, SectionPoints=design::ShadowrocketStyle::typography.sectionPoints, ValuePoints=design::ShadowrocketStyle::typography.valuePoints, TitlePoints=design::ShadowrocketStyle::typography.titlePoints;
+inline constexpr double CaptionPoints=design::ShadowrocketStyle::typography.captionPoints;
+inline QFont rowCaptionFont(QFont font) { font.setPointSizeF(font.pointSizeF()*CaptionPoints/BodyPoints); font.setWeight(QFont::Normal); return font; }
 inline int twoLineRowHeight(const QFont& font,int minimum=NodeRowHeight) {
     return qMax(minimum,QFontMetrics(font).height()+QFontMetrics(rowCaptionFont(font)).height()+4);
 }

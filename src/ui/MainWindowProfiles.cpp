@@ -8,7 +8,7 @@
 #include "DownloadPolicyEditor.h"
 #include "ImportDialog.h"
 #include "ProfileChangesDialog.h"
-#include "ProfileCardDelegate.h"
+#include "ProfileCardWidget.h"
 #include "ProviderPolicyDialog.h"
 #include "PrototypeUi.h"
 #include "ProxyChainDialog.h"
@@ -29,10 +29,23 @@
 #include "profile/NodeLinks.h"
 #include "WrapLayout.h"
 #include <QSet>
+#include <QStyledItemDelegate>
 #include <QTimer>
 
 namespace mlash {
 using namespace WindowParts;
+namespace {
+class ProfileCardCell final : public QStyledItemDelegate {
+public:
+    using QStyledItemDelegate::QStyledItemDelegate;
+    QSize sizeHint(const QStyleOptionViewItem& option,const QModelIndex&) const override {
+        const auto* list=qobject_cast<const QListView*>(option.widget);
+        return list ? list->gridSize() : QSize(320,ProfileCardWidget::CellHeight);
+    }
+    void paint(QPainter*,const QStyleOptionViewItem&,const QModelIndex&) const override {}
+};
+}
+
 // The subscription surface follows ADR 0057: URL and file profiles share one
 // ordered card model. Card body, refresh, candidate and menu have distinct hits.
 QWidget* MainWindow::profilesPage() {
@@ -43,6 +56,74 @@ QWidget* MainWindow::profilesPage() {
     layout->setContentsMargins(20, 18, 20, 18);
     layout->setSpacing(10);
 
+    auto* quick = new QWidget(page);
+    quick->setObjectName("profileQuickImport");
+    auto* quickRow = new QHBoxLayout(quick);
+    quickRow->setContentsMargins(0,0,0,0);
+    quickRow->setSpacing(8);
+    quickImport_ = new QLineEdit(quick);
+    quickImport_->setObjectName("profileImportInput");
+    quickImport_->setAccessibleName("订阅地址或 YAML 文件路径");
+    quickImport_->setPlaceholderText("粘贴订阅 URL 或 YAML 文件路径");
+    quickImport_->setMaxLength(4096);
+    quickImport_->setClearButtonEnabled(true);
+    quickRow->addWidget(quickImport_,1);
+    auto* browse = new QPushButton("选文件…",quick);
+    browse->setObjectName("profileBrowseImport");
+    quickRow->addWidget(browse);
+    auto* submit = new QPushButton("导入",quick);
+    submit->setObjectName("profileQuickSubmit");
+    submit->setProperty("primary",true);
+    quickRow->addWidget(submit);
+    auto* advanced = new QPushButton("高级新增…",quick);
+    advanced->setObjectName("importSubscription");
+    quickRow->addWidget(advanced);
+    layout->addWidget(quick);
+    auto* submitHint = new ElidedLabel;
+    submitHint->setObjectName("profileSubmitHint");
+    submitHint->setProperty("secondary",true);
+    submitHint->setSizePolicy(QSizePolicy::Ignored,QSizePolicy::Preferred);
+    submitHint->setAccessibleName("订阅操作结果");
+    submitHint->hide();
+    layout->addWidget(submitHint);
+
+    connect(browse,&QPushButton::clicked,this,[this] {
+        const auto path=QFileDialog::getOpenFileName(this,"选择配置文件",{},"YAML (*.yaml *.yml)");
+        if (!path.isEmpty()) quickImport_->setText(QDir::toNativeSeparators(path));
+    });
+    connect(submit,&QPushButton::clicked,this,&MainWindow::submitQuickImport);
+    connect(quickImport_,&QLineEdit::returnPressed,this,&MainWindow::submitQuickImport);
+    connect(advanced,&QPushButton::clicked,this,&MainWindow::openAdvancedImport);
+    const auto syncImport=[this,browse,submit,advanced] {
+        const auto& state=controller_->state();
+        const bool enabled=!state.busy&&!state.readOnly&&!state.exiting&&!quickImportPending_;
+        quickImport_->setReadOnly(!enabled);
+        browse->setEnabled(enabled);
+        advanced->setEnabled(enabled);
+        submit->setEnabled(enabled&&!quickImport_->text().trimmed().isEmpty());
+        submit->setText(quickImportPending_?"导入中…":"导入");
+    };
+    connect(controller_,&AppController::stateChanged,quick,syncImport);
+    connect(quickImport_,&QLineEdit::textChanged,quick,[this,syncImport](const QString& text) {
+        auto input=text.trimmed();
+        if (input.startsWith('"')) input.remove(0,1);
+        const auto scheme=input.section(':',0,0).toLower();
+        const bool sensitive=scheme=="https" || scheme=="http" || NodeLinks::acceptsScheme(scheme);
+        if (quickImport_->echoMode()!=(sensitive?QLineEdit::Password:QLineEdit::Normal))
+            quickImport_->setEchoMode(sensitive?QLineEdit::Password:QLineEdit::Normal);
+        syncImport();
+    });
+    connect(controller_,&AppController::operationFinished,quick,[this,syncImport](bool ok,const QString&,OperationId operation) {
+        if (!quickImportPending_ || operation!=OperationId::ProfileImport) return;
+        quickImportPending_=false;
+        if (ok) {
+            quickImport_->clear();
+            if (!controller_->profiles().isEmpty()) selectProfile(controller_->profiles().back().id);
+        }
+        syncImport();
+    });
+    syncImport();
+
     auto* listTools = new QHBoxLayout;
     auto* heading = new QLabel("我的配置",page);
     heading->setObjectName("profileCollectionHeading");
@@ -51,18 +132,6 @@ QWidget* MainWindow::profilesPage() {
     count->setObjectName("profileCollectionCount");
     listTools->addWidget(count);
     listTools->addStretch();
-    auto* import = new QPushButton("添加配置", page);
-    import->setObjectName("importSubscription");
-    import->setProperty("primary",true);
-    listTools->addWidget(import);
-    connect(import, &QPushButton::clicked, this, [this] {
-        if (profileImport_) profileImport_->reject();
-        else addSubscription(true);
-    });
-    auto* paste = new QPushButton(page);
-    paste->setObjectName("pasteSubscription");
-    paste->hide();
-    connect(paste, &QPushButton::clicked, this, [this] { importPayload(QApplication::clipboard()->text()); });
     auto* order = new QToolButton(page);
     order->setObjectName("profileOrder");
     order->setText("排序");
@@ -91,22 +160,14 @@ QWidget* MainWindow::profilesPage() {
     listTools->addWidget(batch);
     layout->addLayout(listTools);
     connect(batch, &QPushButton::clicked, this, [this] { showProfileBatch(false); });
-    mutations_ += {import, batch};
-
-    profileImportHost_ = new QFrame(page);
-    profileImportHost_->setObjectName("profileImportHost");
-    auto* importLayout = new QVBoxLayout(profileImportHost_);
-    importLayout->setContentsMargins(8,8,8,8);
-    importLayout->setSpacing(0);
-    profileImportHost_->hide();
-    layout->addWidget(profileImportHost_);
+    mutations_ += {batch};
 
     profileRowsModel_ = new ProfileRowModel(this);
     profileRowsModel_->setObjectName("profileRows");
     profiles_ = new QListView(page);
     profiles_->setObjectName("profileList");
     profiles_->setModel(profileRowsModel_);
-    profiles_->setItemDelegate(new ProfileCardDelegate(profiles_));
+    profiles_->setItemDelegate(new ProfileCardCell(profiles_));
     profiles_->setFrameShape(QFrame::NoFrame);
     profiles_->setEditTriggers(QAbstractItemView::NoEditTriggers);
     profiles_->setSelectionMode(QAbstractItemView::ExtendedSelection);
@@ -120,21 +181,14 @@ QWidget* MainWindow::profilesPage() {
     profiles_->setMovement(QListView::Static);
     profiles_->setSpacing(0);
     profiles_->setUniformItemSizes(true);
-    profiles_->setGridSize(QSize(320, 112));
+    profiles_->setGridSize(QSize(320, ProfileCardWidget::CellHeight));
     profiles_->setMouseTracking(true);
     profiles_->installEventFilter(this);
     profiles_->viewport()->installEventFilter(this);
     profiles_->setAccessibleName("订阅卡片");
-    profiles_->setAccessibleDescription("方向键选择卡片，回车使用，F5 检查更新，菜单键打开操作；有待应用更新时按 Ctrl+Shift+V 查看变化、Ctrl+Shift+A 应用更新");
+    profiles_->setAccessibleDescription("方向键选择卡片，回车打开配置内容，菜单键可使用此配置，F5 检查更新；Ctrl+Shift+V 查看变化，Ctrl+Shift+A 应用更新");
     layout->addWidget(profiles_, 1);
     emptyState(profiles_, "还没有配置");
-    auto* submitHint = new ElidedLabel;
-    submitHint->setObjectName("profileSubmitHint");
-    submitHint->setProperty("secondary", true);
-    submitHint->setSizePolicy(QSizePolicy::Ignored, QSizePolicy::Preferred);
-    submitHint->setAccessibleName("订阅操作结果");
-    submitHint->hide();
-    layout->addWidget(submitHint);
     wireProfileList(profiles_);
     updateProfileGrid();
     return page;
@@ -142,12 +196,15 @@ QWidget* MainWindow::profilesPage() {
 
 void MainWindow::updateProfileGrid() {
     if (!profiles_) return;
-    const int available = qMax(1, profiles_->viewport()->width());
-    const int columns = profileRowsModel_ && profileRowsModel_->rowCount() > 1 && available >= 900 ? 2 : 1;
-    // Leave a few pixels for the view's own layout rounding and scrollbar.
-    // An exact half can wrap the second card onto a new row at fractional DPI.
-    const int width = qMax(1, columns == 2 ? qMin((available - 20) / 2, 448) : qMin(available - 8, 448));
-    if (profiles_->gridSize() != QSize(width, 112)) profiles_->setGridSize(QSize(width, 112));
+    // Reserve scrollbar space in both states so the column width does not
+    // change when adding a card makes the list start scrolling.
+    constexpr int minimumCardWidth=288;
+    const int scrollbar=profiles_->style()->pixelMetric(QStyle::PM_ScrollBarExtent,nullptr,profiles_);
+    const int available=qMax(1,profiles_->maximumViewportSize().width()-scrollbar-2);
+    const int columns=available>=2*(minimumCardWidth+8)?2:1;
+    const int width=available/columns;
+    const QSize size(width,ProfileCardWidget::CellHeight);
+    if (profiles_->gridSize() != size) profiles_->setGridSize(size);
 }
 
 QString MainWindow::profileAt(const QModelIndex& index) {
@@ -184,10 +241,15 @@ void MainWindow::showProfileMenu(const QString& id, const QPoint& globalPoint) {
     menu->clear();
     menu->setProperty("contextProfileId", id);
     menu->setProperty("profileKind", remote ? "remote" : "local");
-    auto* content = menu->addAction("查看配置内容");
+    auto* content = menu->addAction("编辑配置内容");
     connect(content, &QAction::triggered, this, [this, id] { showProfileDetails(id); });
     auto* edit = menu->addAction(remote ? "编辑来源与更新" : "管理本地文件");
     connect(edit, &QAction::triggered, this, [this, id] { openProfileTask(id, "source"); });
+    if (id!=controller_->state().activeProfile) {
+        auto* use=menu->addAction("使用此配置");
+        use->setEnabled(!controller_->state().busy && !controller_->state().readOnly);
+        connect(use,&QAction::triggered,this,[this,id] { controller_->activateProfile(id); });
+    }
     if (remote) {
         auto* share = menu->addAction("分享配置…");
         connect(share, &QAction::triggered, this, [this, id] {
@@ -207,26 +269,92 @@ void MainWindow::showProfileMenu(const QString& id, const QPoint& globalPoint) {
     WidgetStyle::popupMenu(menu, globalPoint);
 }
 void MainWindow::wireProfileList(QListView* list) {
+    using Action = ProfileCardWidget::Action;
+    const auto writable=[this] {
+        const auto& state=controller_->state();
+        return !state.busy&&!state.readOnly&&!state.exiting;
+    };
+    const auto syncCard=[list,writable](const QModelIndex& index) {
+        if (auto* card=qobject_cast<ProfileCardWidget*>(list->indexWidget(index))) {
+            card->setProfile(index);
+            card->setWritable(writable());
+            card->setSelected(list->selectionModel()->isSelected(index));
+        }
+    };
+    connect(profileRowsModel_,&QAbstractItemModel::modelReset,list,[this,list,syncCard,writable] {
+        for (int row=0;row<list->model()->rowCount();++row) {
+            const QPersistentModelIndex index=list->model()->index(row,0);
+            auto* card=new ProfileCardWidget;
+            list->setIndexWidget(index,card);
+            syncCard(index);
+            connect(card,&ProfileCardWidget::actionRequested,this,[this,list,card,index,writable](Action action) {
+                if (!index.isValid()) return;
+                const auto id=profileAt(index);
+                list->setCurrentIndex(index);
+                switch (action) {
+                case Action::Menu: {
+                    auto* button=card->button(action);
+                    showProfileMenu(id,button->mapToGlobal(QPoint(0,button->height())));
+                    break;
+                }
+                case Action::Review:
+                    if (index.data(ProfileRowModel::HasCandidate).toBool()) openProfileTask(id,"candidate");
+                    break;
+                case Action::Refresh:
+                    if (writable() && index.data(ProfileRowModel::CanRefresh).toBool()) controller_->updateProfile(id);
+                    break;
+                case Action::Apply:
+                    if (writable() && index.data(ProfileRowModel::HasCandidate).toBool()) controller_->activateProfile(id);
+                    break;
+                case Action::Use:
+                    if (writable() && !index.data(ProfileRowModel::IsCurrent).toBool()) controller_->activateProfile(id);
+                    break;
+                }
+            });
+        }
+    });
+    connect(profileRowsModel_,&QAbstractItemModel::dataChanged,list,[list,syncCard](const QModelIndex& first,const QModelIndex& last) {
+        for (int row=first.row();row<=last.row();++row) syncCard(list->model()->index(row,0));
+    });
+    connect(list->selectionModel(),&QItemSelectionModel::selectionChanged,list,
+            [list](const QItemSelection& selected,const QItemSelection& deselected) {
+        for (const auto& index:deselected.indexes())
+            if (auto* card=qobject_cast<ProfileCardWidget*>(list->indexWidget(index))) card->setSelected(false);
+        for (const auto& index:selected.indexes())
+            if (auto* card=qobject_cast<ProfileCardWidget*>(list->indexWidget(index))) card->setSelected(true);
+    });
+    connect(controller_,&AppController::stateChanged,list,[list,writable] {
+        const bool enabled=writable();
+        for (int row=0;row<list->model()->rowCount();++row)
+            if (auto* card=qobject_cast<ProfileCardWidget*>(list->indexWidget(list->model()->index(row,0)))) card->setWritable(enabled);
+    });
+    connect(qApp,&QApplication::focusChanged,list,[list](QWidget*,QWidget* focused) {
+        const auto* card=focused?qobject_cast<ProfileCardWidget*>(focused->parentWidget()):nullptr;
+        if (!card || card->parentWidget()!=list->viewport()) return;
+        for (int row=0;row<list->model()->rowCount();++row) {
+            const auto index=list->model()->index(row,0);
+            if (list->indexWidget(index)!=card) continue;
+            list->selectionModel()->setCurrentIndex(index,QItemSelectionModel::NoUpdate);
+            list->scrollTo(index);
+            break;
+        }
+    });
     profileContextMenu_ = new QMenu(this);
     profileContextMenu_->setObjectName("profileContextMenu");
     connect(list, &QListView::clicked, this, [this](const QModelIndex& index) {
         if (QApplication::keyboardModifiers() & (Qt::ControlModifier | Qt::ShiftModifier)) return;
         const auto id = profileAt(index);
-        if (!id.isEmpty() && id != controller_->state().activeProfile &&
-            !controller_->state().busy && !controller_->state().readOnly)
-            controller_->activateProfile(id);
+        if (!id.isEmpty()) openProfileTask(id,"nodes");
     });
     connect(list, &QAbstractItemView::activated, this, [this](const QModelIndex& index) {
         const auto id = profileAt(index);
-        if (!id.isEmpty() && id != controller_->state().activeProfile &&
-            !controller_->state().busy && !controller_->state().readOnly)
-            controller_->activateProfile(id);
+        if (!id.isEmpty()) openProfileTask(id,"nodes");
     });
     connect(list->selectionModel(), &QItemSelectionModel::selectionChanged, this, &MainWindow::updateActions);
     list->setContextMenuPolicy(Qt::CustomContextMenu);
     connect(list, &QWidget::customContextMenuRequested, this, [this, list](const QPoint& point) {
         const auto index = list->indexAt(point);
-        if (index.isValid() && ProfileCardDelegate::card(list->visualRect(index)).contains(point)) {
+        if (index.isValid() && ProfileCardWidget::surfaceRect(list->visualRect(index)).contains(point)) {
             list->setCurrentIndex(index);
             showProfileMenu(profileAt(index), list->viewport()->mapToGlobal(point));
         }
@@ -286,11 +414,6 @@ void MainWindow::openProfileTask(const QString& id, const QString& task) {
         };
     }
     if (!workspace->configure(context, profile.name, tasks, [this] { returnFromWorkspace(); })) return;
-    const auto sourceLabel = profile.sourceType == "url" ? QUrl(profile.source).host() :
-        (profile.source.isEmpty() ? QStringLiteral("本地快照") : QFileInfo(profile.source).fileName());
-    workspace->setContextSummary(sourceLabel + " · " +
-        (id == controller_->state().activeProfile ? QStringLiteral("当前使用") : QStringLiteral("未使用")) +
-        (task == "candidate" ? QStringLiteral(" · 对比候选版本") : QStringLiteral(" · 已保存版本")));
     if (profiles_ && contentStack_->currentIndex() == 0)
         profileListReturnScroll_ = profiles_->verticalScrollBar()->value();
     profileDetailId_ = id;
@@ -408,19 +531,65 @@ QString MainWindow::selectedProfile() const {
         return profiles_->currentIndex().data(ProfileRowModel::ProfileId).toString();
     return {};
 }
+namespace {
+struct ImportSource {
+    QString value;
+    bool remote = false;
+};
+ImportSource classifyImport(const QString& input) {
+    auto text=input.trimmed();
+    if (text.size()>4096 || text.contains('\n') || text.contains('\r')) return {};
+    if (text.size()>1 && text.startsWith('"') && text.endsWith('"')) text=text.mid(1,text.size()-2);
+    const QUrl url(text);
+    if (ImportDialog::acceptsUrl(url)) return {text,true};
+    const auto path=url.isLocalFile()?url.toLocalFile():text;
+    if (QFileInfo(path).isAbsolute() && QStringList{"yaml","yml"}.contains(QFileInfo(path).suffix().toLower()))
+        return {path,false};
+    return {};
+}
+bool isNodeImport(const QString& value) {
+    const auto scheme=value.section(':',0,0).toLower();
+    return value.size()<=64*1024 && scheme!="http" && scheme!="https" && NodeLinks::acceptsScheme(scheme);
+}
+}
 void MainWindow::addUrl() {
-    addSubscription(true);
+    navigate(Route{ViewIds::Profiles});
+    if (quickImport_->isVisible()) quickImport_->setFocus(Qt::ShortcutFocusReason);
+}
+
+void MainWindow::submitQuickImport() {
+    const auto& state=controller_->state();
+    if (quickImportPending_ || state.busy || state.readOnly || state.exiting || quickImport_->text().trimmed().isEmpty()) return;
+    const auto source=classifyImport(quickImport_->text());
+    if (source.value.isEmpty()) {
+        setPageFeedback(ViewIds::Profiles,isNodeImport(quickImport_->text().trimmed())?
+            "节点链接请从「高级新增」检查后导入":"请输入 HTTP/HTTPS 订阅地址或本地 YAML 文件的完整路径");
+        return;
+    }
+    quickImportPending_=true;
+    setPageFeedback(ViewIds::Profiles,{});
+    if (source.remote) controller_->importUrl({},QUrl(source.value));
+    else controller_->importFile({},source.value);
 }
 
 void MainWindow::importPayload(const QString& input) {
-    if (controller_->state().busy || controller_->state().readOnly || findChild<ImportDialog*>()) return;
-    const auto text=input.trimmed(); const auto scheme=text.section(':',0,0).toLower();
-    if (text.toUtf8().size()<=64*1024&&NodeLinks::acceptsScheme(scheme)&&scheme!="http"&&scheme!="https") { auto* dialog=new ImportDialog(this); dialog->setNodeLinks(text); presentImport(dialog); return; }
-    if (text.isEmpty() || text.size()>4096 || text.contains('\n') || text.contains('\r')) { setPageFeedback(ViewIds::Profiles,"请提供一个订阅地址、本地 YAML 文件或每行一个节点链接"); return; }
-    const QUrl url(text); const bool remote=QStringList{"http","https"}.contains(url.scheme())&&!url.host().isEmpty()&&url.userInfo().isEmpty()&&!url.hasFragment();
-    const auto path=url.isLocalFile()?url.toLocalFile():text;
-    if (!remote && (!QFileInfo(path).isAbsolute() || !QStringList{"yaml","yml"}.contains(QFileInfo(path).suffix().toLower()))) { setPageFeedback(ViewIds::Profiles,"仅支持一个 HTTP/HTTPS 订阅或本地 YAML 文件"); return; }
-    auto* dialog=new ImportDialog(this); dialog->setPrefill(remote?text:path,remote); presentImport(dialog);
+    const auto& state=controller_->state();
+    if (state.busy || state.readOnly || state.exiting || findChild<ImportDialog*>()) return;
+    const auto text=input.trimmed();
+    if (isNodeImport(text)) {
+        auto* dialog=new ImportDialog(this);
+        dialog->setNodeLinks(text);
+        presentImport(dialog);
+        return;
+    }
+    addUrl();
+    if (!quickImport_->isVisible()) return;
+    const auto source=classifyImport(text);
+    if (source.value.isEmpty()) {
+        setPageFeedback(ViewIds::Profiles,"仅支持一个 HTTP/HTTPS 订阅或本地 YAML 文件");
+        return;
+    }
+    quickImport_->setText(source.remote?source.value:QDir::toNativeSeparators(source.value));
 }
 
 void MainWindow::dragEnterEvent(QDragEnterEvent* event) {
@@ -459,37 +628,24 @@ void MainWindow::presentImport(ImportDialog* dialog) {
     // 导入成功后在统一卡片网格中定位新对象，不以来源类型改变落点。
     connect(dialog,&QDialog::accepted,this,[this,before] { navigate(Route{ViewIds::Profiles}); if (route_.view!=ViewIds::Profiles) return; for (const auto& profile:controller_->profiles()) if (!before.contains(profile.id)) { selectProfile(profile.id); break; } });
     navigate(Route{ViewIds::Profiles});
-    if (route_.view!=ViewIds::Profiles || !profileImportHost_) { dialog->deleteLater(); return; }
-    dialog->setInlinePresentation();
-    dialog->setParent(profileImportHost_,Qt::Widget);
+    if (route_.view!=ViewIds::Profiles) { dialog->deleteLater(); return; }
     profileImport_=dialog;
-    profileImportHost_->layout()->addWidget(dialog);
-    connect(dialog,&QDialog::finished,this,[this,guard=QPointer<ImportDialog>(dialog)] {
-        if (profileImportHost_) profileImportHost_->hide();
+    dialog->setProperty("guardReject",true);
+    connect(dialog,&QDialog::finished,this,[this] {
         profileImport_=nullptr;
-        if (auto* add=findChild<QPushButton*>("importSubscription")) add->setText("添加配置");
-        if (guard) guard->deleteLater();
-        if (profiles_) profiles_->setFocus(Qt::OtherFocusReason);
+        if (quickImport_->isVisible()) quickImport_->setFocus(Qt::OtherFocusReason);
     });
-    profileImportHost_->show(); dialog->show();
-    if (auto* add=findChild<QPushButton*>("importSubscription")) add->setText("收起");
-    if (auto* field=dialog->findChild<QLineEdit*>(dialog->isUrl()?"subscriptionUrl":"subscriptionFile"))
-        field->setFocus(Qt::OtherFocusReason);
+    dialog->open();
 }
-void MainWindow::addSubscription(bool url) {
-    if (profileImport_) {
-        navigate(Route{ViewIds::Profiles});
-        profileImport_->setSourceTab(url);
-        profileImportHost_->show(); profileImport_->show();
-        return;
-    }
-    auto* dialog = new ImportDialog(this); dialog->setSourceTab(url); presentImport(dialog);
-}
-
-void MainWindow::addFile(bool replace) {
-    if (!replace) { addSubscription(false); return; }
-    const auto id = replace ? selectedProfile() : QString(); if (replace && id.isEmpty()) return;
-    const auto path = QFileDialog::getOpenFileName(this, "导入完整 YAML", {}, "YAML (*.yaml *.yml)"); if (!path.isEmpty()) controller_->importFile({}, path, id);
+void MainWindow::openAdvancedImport() {
+    if (profileImport_) { profileImport_->raise(); profileImport_->activateWindow(); return; }
+    auto* dialog=new ImportDialog(this);
+    dialog->setWindowTitle("高级新增配置 · Mlash");
+    const auto text=quickImport_->text().trimmed();
+    const auto source=classifyImport(text);
+    if (!source.value.isEmpty()) dialog->setPrefill(source.value,source.remote);
+    else if (isNodeImport(text)) dialog->setNodeLinks(text);
+    presentImport(dialog);
 }
 
 void MainWindow::showProfileCompatibility(const QString& id) {

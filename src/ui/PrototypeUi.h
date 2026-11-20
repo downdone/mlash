@@ -34,6 +34,7 @@ public:
             chevron_->setPixmap(UiIcons::icon(UiIcons::Glyph::ChevronRight,UiTheme::Secondary).pixmap(13,18));
         });
     }
+    QPoint trailingMenuAnchor() const { return mapToGlobal(QPoint(chevron_->geometry().right()+1,height())); }
     void setTitle(const QString& title) { title_->setText(title); setAccessibleName(title); }
     void setValue(const QString& value) { value_->setText(value); setAccessibleDescription(value); }
     void setSubtitle(const QString& text) { subtitle_->setText(text); subtitle_->setVisible(!text.isEmpty()); updateGeometry(); }

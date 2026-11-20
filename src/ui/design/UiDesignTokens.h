@@ -23,8 +23,8 @@ struct Geometry {
 };
 
 struct Typography {
-    double bodyPointsWindows, bodyPointsMac, captionRatio, captionFloor;
-    int dialogPoints, sectionPoints, valuePoints, titlePoints;
+    double bodyPointsWindows, bodyPointsMac, captionPoints;
+    double dialogPoints, sectionPoints, valuePoints, titlePoints;
 };
 
 } // namespace mlash::design
