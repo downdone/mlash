@@ -45,7 +45,33 @@ private slots:
         delay=200; token=diagnostics.prepare({{"route","direct"}}); diagnostics.runIp(token,0); QTRY_COMPARE(target.requests.size(),2); diagnostics.cancel(); QTest::qWait(300); QVERIFY(diagnostics.result().isEmpty()); QVERIFY(!diagnostics.busy()); diagnostics.fail(token,"late"); QVERIFY(diagnostics.result().isEmpty()); token=diagnostics.prepare({{"route","direct"}}); diagnostics.runIp(token,0); QTRY_VERIFY(!diagnostics.busy()); QVERIFY(diagnostics.result().contains("ip"));
     }
     void uiExplicitPathAndHideCleanup() {
-        QTemporaryDir root; AppController controller(root.path(),true); MainWindow window(&controller); window.show(); window.setPage(7); QTRY_VERIFY(window.findChild<QPushButton*>("websiteDiagnostics")->isVisible()); window.findChild<QPushButton*>("websiteDiagnostics")->click(); QTRY_VERIFY(window.findChild<OutboundDialog*>("outboundDialog")); auto* dialog=window.findChild<OutboundDialog*>("outboundDialog"); QVERIFY(!dialog->findChild<QPushButton*>("startIpProbe")->isEnabled()); QVERIFY(controller.outboundDiagnostics()->result().isEmpty()); dialog->findChild<QTabWidget*>("outboundTabs")->setCurrentIndex(1); QCOMPARE(dialog->findChild<QPushButton*>("startIpProbe")->text(),QString("检测全部服务")); window.hide(); QTRY_VERIFY(!window.findChild<OutboundDialog*>("outboundDialog")); QVERIFY(!controller.outboundDiagnostics()->busy());
+        QTemporaryDir root;
+        AppController controller(root.path(),true);
+        MainWindow window(&controller);
+        window.show();
+        window.setPage(7);
+        auto* nextStep=window.findChild<QPushButton*>("websiteNextStep");
+        auto* diagnostics=window.findChild<QPushButton*>("websiteDiagnostics");
+        QVERIFY(nextStep&&diagnostics);
+        QTRY_VERIFY(nextStep->isVisible()&&diagnostics->isVisible());
+        QCOMPARE(nextStep->text(),QString("导入配置"));
+
+        diagnostics->click();
+        QTRY_VERIFY(window.findChild<OutboundDialog*>("outboundDialog"));
+        auto* dialog=window.findChild<OutboundDialog*>("outboundDialog");
+        auto* start=dialog->findChild<QPushButton*>("startIpProbe");
+        auto* routes=dialog->findChild<QComboBox*>("outboundRoute");
+        QVERIFY(start&&routes);
+        QCOMPARE(routes->currentData().toString(),QString("core"));
+        QVERIFY(!start->isEnabled());
+        QVERIFY(routes->findData("direct")>=0);
+        QVERIFY(controller.outboundDiagnostics()->result().isEmpty());
+
+        dialog->findChild<QTabWidget*>("outboundTabs")->setCurrentIndex(1);
+        QCOMPARE(start->text(),QString("检测全部服务"));
+        window.hide();
+        QTRY_VERIFY(!window.findChild<OutboundDialog*>("outboundDialog"));
+        QVERIFY(!controller.outboundDiagnostics()->busy());
     }
 };
 QTEST_MAIN(OutboundTests)

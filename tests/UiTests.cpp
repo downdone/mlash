@@ -1451,13 +1451,16 @@ private slots:
         QVERIFY(!window.findChild<QToolButton*>("homeDetailsDisclosure"));
         // K5：指标视图移进「数据 › 流量」，首页不再有它；控件本身仍在，只需断言首屏不可见。
         auto* metrics = window.findChild<QWidget*>("homeMetrics"); QVERIFY(!metrics || !metrics->isVisible());
-        // 首页主控件是代理总开关（ADR 0048）：没有订阅时点击只引导添加订阅，不发起任何操作。
-        auto* master=window.findChild<QCheckBox*>("systemProxy"); QVERIFY(master); QVERIFY(master->text().isEmpty()); QVERIFY(master->accessibleName().contains("系统代理"));
+        auto* master=window.findChild<QCheckBox*>("systemProxy"); QVERIFY(master); QVERIFY(master->text().isEmpty());
+        QCOMPARE(master->accessibleName(),QString("代理总开关"));
         QSignalSpy noStart(&controller,&AppController::operationStarted);
         // K5：空态下总开关禁用；节点区有唯一的就近导入动作。
         QVERIFY(!master->isEnabled()); QVERIFY(!master->isChecked());
         auto* emptyHome=window.findChild<QWidget*>("prototypeHomeEmpty"); QVERIFY(emptyHome); QVERIFY(emptyHome->isVisible());
-        auto* importHome=emptyHome->findChild<QPushButton*>(); QVERIFY(importHome); QCOMPARE(importHome->text(),QString("导入配置"));
+        auto* importHome=emptyHome->findChild<QPushButton*>("homeSetupAction"); QVERIFY(importHome); QCOMPARE(importHome->text(),QString("导入配置"));
+        importHome->click();
+        QCOMPARE(window.currentRoute().view,int(ViewIds::Profiles));
+        auto* input=window.findChild<QLineEdit*>("profileImportInput"); QVERIFY(input&&input->isVisible());
         QCOMPARE(noStart.size(),0); QVERIFY(!controller.state().ready);
         QVERIFY(!window.findChild<QPushButton*>("saveCustomRules")->isEnabled());
         QVERIFY(!window.findChild<QPushButton*>("addCustomRule")->isEnabled()); QVERIFY(!window.findChild<QComboBox*>("ruleType")->isEnabled());

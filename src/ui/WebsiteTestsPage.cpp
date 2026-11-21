@@ -67,11 +67,10 @@ WebsiteTestsPage::WebsiteTestsPage(AppController* controller,QWidget* parent):QW
     layout->addWidget(setup); layout->addWidget(scroll,1);
     auto* emptySpace=new QWidget;
     layout->addWidget(emptySpace,1);
-    const auto updateSurface=[this,controls,scroll,emptySpace,diagnostic] {
+    const auto updateSurface=[this,controls,scroll,emptySpace] {
         const bool hasProfile=!controller_->state().activeProfile.isEmpty();
         controls->setVisible(hasProfile);
         scroll->setVisible(hasProfile);
-        diagnostic->setVisible(hasProfile);
         emptySpace->setVisible(!hasProfile);
     };
     connect(controller_,&AppController::stateChanged,this,updateSurface);
