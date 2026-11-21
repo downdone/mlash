@@ -7,6 +7,7 @@
 #include "NodeRowView.h"
 #include "StatusShape.h"
 #include "SkeletonBlock.h"
+#include "TaskDialog.h"
 #include <algorithm>
 #include <QDragEnterEvent>
 #include <QDropEvent>
@@ -30,6 +31,7 @@
 #include <QListWidget>
 #include <QMessageBox>
 #include <QPlainTextEdit>
+#include <QTextEdit>
 #include <QPushButton>
 #include <QSignalBlocker>
 #include <QSpinBox>
@@ -68,11 +70,73 @@ using namespace WindowParts;
 void MainWindow::refreshStatusSegments() {
     const auto& state = controller_->state();
     const bool externalConsent = state.proxy==ProxyState::External && state.lastError.contains(QStringLiteral("需明确允许接管"));
-    const auto alarm = !state.lastError.isEmpty() && !externalConsent ? state.lastError
-        : state.readOnly ? QString("只读保护：状态文件不可用，修改不会写入") : QString();
-    operationAlarm_->setText(alarm); operationAlarm_->setToolTip(alarm); operationAlarm_->setVisible(!alarm.isEmpty());
-    operationAlarm_->setProperty("state", state.readOnly && (state.lastError.isEmpty() || externalConsent) ? "warning" : "error");
-    operationAlarm_->style()->unpolish(operationAlarm_); operationAlarm_->style()->polish(operationAlarm_);
+    const bool runtimeAlarm = !state.lastError.isEmpty() && !externalConsent;
+    const bool persistent = state.readOnly || runtimeAlarm;
+    const auto reason = state.readOnly ? controller_->readOnlyReason() : runtimeAlarm ? state.lastError : QString();
+    const auto summary = state.readOnly ? QString("只读保护") : runtimeAlarm ? QString("运行告警") : QString();
+    operationAlarm_->setText(summary);
+    operationAlarm_->setToolTip(reason);
+    operationAlarm_->setVisible(persistent);
+    statusAlarmMark_->setVisible(persistent);
+    if (persistent) statusAlarmMark_->setPixmap(StatusShape::pixmap(state.readOnly?"warning":"error",statusAlarmMark_->devicePixelRatioF()));
+    statusAlarmDetails_->setVisible(state.readOnly);
+    statusResolve_->setVisible(!state.readOnly && (runtimeAlarm || !feedbackError_.isEmpty()));
+    statusAlarm_->setVisible(persistent || !feedbackError_.isEmpty());
+}
+
+void MainWindow::showStatusAlarm() {
+    const bool readOnly=controller_->state().readOnly;
+    auto reason=operationAlarm_->toolTip();
+    if (reason.isEmpty()) reason=readOnly?QString("应用数据无法加载"):feedbackError_;
+    if (reason.isEmpty()) return;
+    if (auto* previous=qobject_cast<QDialog*>(taskWorkspace()->editor("alarm-details"))) previous->reject();
+
+    auto* task=new TaskDialog(this);
+    task->setObjectName("statusAlarmDialog");
+    task->setWindowTitle(readOnly?"只读保护":"运行告警");
+    task->setAttribute(Qt::WA_DeleteOnClose);
+    auto* outer=new QVBoxLayout(task);
+    auto* panel=new QFrame(task);
+    panel->setObjectName("panel");
+    panel->setMaximumWidth(600);
+    panel->setSizePolicy(QSizePolicy::Expanding,QSizePolicy::Preferred);
+    outer->addWidget(panel);
+    outer->addStretch();
+    auto* layout=new QVBoxLayout(panel);
+    layout->setContentsMargins(16,14,16,14);
+    layout->setSpacing(10);
+    if (readOnly) {
+        auto* summary=new QLabel("应用数据无法加载，写入已暂停。请先备份数据目录。",panel);
+        summary->setWordWrap(true);
+        layout->addWidget(summary);
+    }
+    auto* detail=new QTextEdit(panel);
+    detail->setObjectName("statusAlarmReason");
+    detail->setAccessibleName("告警原因");
+    detail->setPlainText(reason);
+    detail->setReadOnly(true);
+    detail->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
+    detail->setFixedHeight(detail->fontMetrics().lineSpacing()*(readOnly?3:5)+12);
+    layout->addWidget(detail);
+    if (readOnly) {
+        auto* guidance=new QLabel("如果数据来自另一 Windows 账户，请在原账户中打开原始数据并导出密码备份。",panel);
+        guidance->setProperty("secondary",true);
+        guidance->setWordWrap(true);
+        layout->addWidget(guidance);
+    }
+
+    auto* buttons=new QDialogButtonBox(QDialogButtonBox::Close,panel);
+    buttons->button(QDialogButtonBox::Close)->setText("完成");
+    auto* copy=buttons->addButton("复制原因",QDialogButtonBox::ActionRole);
+    connect(copy,&QPushButton::clicked,task,[reason] { QApplication::clipboard()->setText(reason); });
+    if (readOnly) {
+        auto* directory=buttons->addButton("打开数据目录",QDialogButtonBox::ActionRole);
+        directory->setObjectName("openReadOnlyDataDirectory");
+        connect(directory,&QPushButton::clicked,task,[this] { openDirectory(controller_->dataRoot()); });
+    }
+    connect(buttons,&QDialogButtonBox::rejected,task,&QDialog::reject);
+    layout->addWidget(buttons);
+    presentTask(task,"alarm-details");
 }
 void MainWindow::updateState() {
     const auto& state = controller_->state();
@@ -108,18 +172,19 @@ void MainWindow::updateState() {
     // 连接是用户意图；Controller 在必要时自行启动内核并处理回滚。
     const bool activeProfileExists=std::any_of(controller_->profiles().cbegin(),controller_->profiles().cend(),
         [&state](const Profile& profile) { return profile.id==state.activeProfile; });
-    proxyEnabled_->setEnabled(!state.busy && !state.exiting && !state.readOnly
+    const auto wg=controller_->wireGuardObservation();
+    const bool wireGuardOwnsRoutes=wg.value("active").toBool()||wg.value("cleanup_pending").toBool();
+    proxyEnabled_->setEnabled(!wireGuardOwnsRoutes && !state.busy && !state.exiting && !state.readOnly
         && (activeProfileExists || state.proxy==ProxyState::Owned || state.tunObserved));
     { const QSignalBlocker block(proxyEnabled_); proxyEnabled_->setChecked(state.proxy == ProxyState::Owned || state.tunObserved); }
-    proxyEnabled_->setToolTip("代理总开关：接管系统代理（必要时先启动内核）；只影响遵循系统代理设置的应用。外部代理/PAC 需要确认接管。");
+    proxyEnabled_->setToolTip(wireGuardOwnsRoutes ? "WireGuard 并行期间使用 Mihomo 本地代理" :
+        "代理总开关：接管系统代理（必要时先启动内核）；只影响遵循系统代理设置的应用。外部代理/PAC 需要确认接管。");
     autoStart_->setToolTip(!state.autoStartKnown ? "系统自启状态无法确认；应用设置时重新读取" : state.autoStartConflict ? "系统自启项指向其他路径，修改会被拒绝" : state.autoStartEnabled ? "系统当前已启用 Mlash 自启；勾选修改后点击应用" : "系统当前未启用 Mlash 自启；勾选修改后点击应用");
     for (auto* control : proxyModes_) { const QSignalBlocker block(control); control->setChecked(control->property("mode").toString() == state.mode); control->setEnabled(state.ready && !state.busy && !state.exiting && !state.readOnly); }
     refreshStatusSegments();
     // 「最近操作」段不再被 lastError 覆盖：告警有自己的段（P4.1 / N10）。
     if (feedbackError_.isEmpty() && !recentFeedback_ && noticeOperation_ == OperationId::Unspecified && !state.busy) { message_->clear(); message_->setToolTip({}); }
     findChild<QToolButton*>("statusDetails")->setVisible(!message_->text().isEmpty());
-    const bool externalConsent = state.proxy==ProxyState::External && state.lastError.contains(QStringLiteral("需明确允许接管"));
-    findChild<QToolButton*>("statusResolve")->setVisible(!feedbackError_.isEmpty() || (!state.lastError.isEmpty() && !externalConsent));
     updateActions(); updateCurrentMember(); updateHome();
 }
 void MainWindow::updateActions() {
@@ -332,7 +397,11 @@ if (homeControlHint_)         homeControlHint_->setVisible(show);
             else controller_->refresh();
         });
     }}
-bool MainWindow::logMatches(const QString& line) const { return line.contains(logSearch_->text(),Qt::CaseInsensitive) && (logFilter_->currentData().toString() == "all" || Diagnostics::levelOf(line) == logFilter_->currentData().toString()); }
+bool MainWindow::logMatches(const QString& line) const {
+    if (!line.contains(logSearch_->text(),Qt::CaseInsensitive)) return false;
+    const auto filter=logFilter_->currentData().toString();
+    return filter=="all" || (filter=="wireguard" ? line.size()>20&&line.sliced(20).startsWith("[wireguard] ") : Diagnostics::levelOf(line)==filter);
+}
 void MainWindow::updateLogs() {
     const auto& all = logsPaused_ ? pausedLogs_ : controller_->diagnostics()->lines();
     QStringList filtered; for (const auto& line : all) if (logMatches(line)) filtered.append(line);

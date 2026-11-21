@@ -28,10 +28,13 @@
 #include <QNetworkReply>
 
 namespace mlash {
-void AppController::updateDiagnosticStream() { api_.setLogsVisible(diagnosticsVisible_ && state_.ready && diagnosticsLevel_ != "app", diagnosticsLevel_ == "all" ? "debug" : diagnosticsLevel_); }
+void AppController::updateDiagnosticStream() {
+    const bool coreLogs=diagnosticsLevel_!="app"&&diagnosticsLevel_!="wireguard";
+    api_.setLogsVisible(diagnosticsVisible_&&state_.ready&&coreLogs,diagnosticsLevel_=="all"||!coreLogs?"debug":diagnosticsLevel_);
+}
 void AppController::setDiagnosticsVisible(bool visible) { if (diagnosticsVisible_ == visible) return; diagnosticsVisible_ = visible; updateDiagnosticStream(); }
 void AppController::setDiagnosticsLevel(const QString& level) {
-    if (!QStringList{"all", "debug", "info", "warning", "error", "app"}.contains(level) || level == diagnosticsLevel_) return;
+    if (!QStringList{"all", "debug", "info", "warning", "error", "app","wireguard"}.contains(level) || level == diagnosticsLevel_) return;
     diagnosticsLevel_ = level; updateDiagnosticStream();
 }
 void AppController::clearLogView() { diagnostics_.clearView(); }

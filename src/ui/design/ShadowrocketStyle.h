@@ -6,8 +6,9 @@ namespace mlash::design::ShadowrocketStyle {
 
 inline constexpr Geometry geometry{30,28,8,8, 14,12,12,200, 42,32,34,36, 36,38,52,350, 10,2,16,76,4};
 inline constexpr int narrowSidebarWidth=144;
-inline constexpr int narrowSidebarBreakpoint=960;
-inline constexpr int collapsedSidebarWidth=44;
+inline constexpr int minimumSidebarWindowWidth=840;
+inline constexpr int fullSidebarWindowWidth=1040;
+inline constexpr int collapsedSidebarWidth=60;
 inline constexpr int navigationRowHeight=38;
 inline constexpr Typography typography{10.5,10.5,9, 13,11.5,15,13};
 inline constexpr int brandPoints=16;

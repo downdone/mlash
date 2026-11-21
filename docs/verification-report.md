@@ -1,5 +1,61 @@
 # 验证报告
 
+## 双内核 Qt 界面交付
+
+Windows x64 `windows-mingw` 构建通过。完整默认回归通过 63 组，系统代理实改 1 组按门禁跳过。最终卡片宽度修正后复测 7 组全部通过，覆盖双内核界面、配置与清理协议、卡片、导航、反馈、外观和架构边界。管道夹具确认可以主动检查先前会话清理，收到清理未确认后保留待清理状态。Qt 用例核对按内容导入、保留无效粘贴草稿、按类型打开子页、候选更新与密钥变更摘要、鼠标与键盘返回原卡、流量页跳转后回原页签、日志筛选和权限服务读取。
+
+原生 Qt FreeType 在 1040×720／840×560 DIP 下验证两条交互用例，分别在实际 150% 和 Qt 进程 200% DPI 运行。查看浅色、深色、模拟高对比及 100%／120% 应用字号截图。首轮发现双类型卡片状态逐字截断，复测覆盖状态标签可见区域宽度，并在两档 DPI 截图核对类型、时间及完整状态。复核流量分组、Peer 行高和深色页签样式。截图位于 `build/wireguard-ui-review/delivery/` 和 `build/wireguard-ui-review/delivery-dpi200/`。
+
+便携预览包为 `dist/Mlash-1.23.0-dual-engine-ui-windows-x64-preview.zip`，大小 56,903,750 字节，SHA-256 为 `ba069e17565d454c4d9330ddc0eda25515fb644744aa30849dbc8f6549ab3e80`。实际解压验证 40 个文件的哈希和白名单，在隔离数据目录启动并通过八个路由、设置搜索及返回和 Schannel 冒烟。证据位于 `build/dual-engine-ui-delivery-smoke/`。
+
+目标 IP 检查验证本地前缀匹配。实际出口、Windows Wintun、DNS 及服务异常后恢复待隔离 VM。包的发行资格为 `release_qualified=false`。 [界面设计与完成定义](design/mihomo-wireguard-ui.md#qt-交付设计)
+
+## Windows 双链路接入与便携预览
+
+Windows x64 的 `scripts/build.ps1 -Preset windows-mingw` 构建成功。最终默认 CTest 通过 63 组，系统代理实改 1 组按门禁跳过，耗时 159.23 秒。第一轮完整回归发现本地路径不存在时旧导入流程失去原位反馈，恢复操作结果和原位提示后，节点导入回归通过。Qt 用例覆盖真实格式文件导入、类型详情、流量入口和粘贴预览取消后还可编辑原输入。命名管道夹具核对启停、清理确认和超过 53 位安全整数范围的收发计数。Go SDK `-WithMihomo` 五条通过，实测回环 WireGuard 握手、TCP 往返、计数和独立 Mihomo 运行。发行工具 17 条通过。
+
+`scripts/package.ps1` 生成 `dist/Mlash-1.23.0-wireguard-x64-preview.zip`（56,872,897 字节），SHA-256 为 `8c5d12d40d7bccd5462488b04fbf23b923037dc75f4095bab969abd769529622`。固定 Go helper 哈希、Wintun 签名、解压后 40 项文件白名单及完整性通过。解压产物使用隔离数据目录通过八个路由、设置搜索及返回和 Schannel 冒烟。证据位于 `build/wireguard-compat-smoke/`。
+
+本机未找到可用的隔离 Windows 来宾。本轮未安装特权服务或运行真实 Windows 网络写入。仍需在隔离 VM 核对服务安装、真实 Wintun 与双栈分流、接口 MTU／DNS 读回、WireGuard／Mihomo／直连三路的实际出接口以及断线、切网与服务异常后的系统恢复。便携包资格为 `release_qualified=false`。 [系统级验收要求](adr/0059-wireguard-windows-service-scope.md#验收与启用)
+
+## WireGuard 配置导入与设备控制
+
+Windows `windows-mingw` 构建完成。最终七组 CTest 全部通过，包含内核回归、TUN 夹具、核心就绪、节点导入、YAML 表单和架构边界。新配置定向组覆盖按内容识别错后缀 CONF、脱敏预览、拆分默认网段识别、重叠拒绝、候选原子更新和损坏索引保护。用预览后替换原文件、重复提交和取消验证一次性令牌只保存已预览的输入。使用隔离目录实测 DPAPI 密文与回读，既有 `state.dat` 逐字节保持原值。受限环境首次运行遇到测试进程 DLL 路径及回环访问问题，设置工具链路径并允许回环后通过相关定向组。
+
+Go 私有控制帧验证了启停、拒绝旧序号和超长帧、观测不含配置密钥，以及输入关闭后 UDP 端口释放。带锁定 Mihomo 的 SDK 五条用例连续通过三轮。单个 Mihomo 进程分别收到 DIRECT 本机目标和 WireGuard 对端的响应，并核对 WireGuard 握手、收发；无 Mihomo 路径四条通过，实际核心用例按条件跳过。新增实际核心用例首轮本地监听拒绝，加入退出观测后复测通过。 [Mihomo WireGuard 配置说明](https://wiki.metacubex.one/en/config/proxies/wg/)
+
+官方 Wintun 0.14.1 ZIP 的 SHA-256 为 `07c256185d6ee3652e09fa55c0b673e2624b565e02c4b9091c79ca7d2f24ef51`，x64 DLL 的 SHA-256 为 `e5da8447dc2c320edc0fc52fa01885c103de8c118481f683643cacc3220dafce`。Authenticode 签名检查结果为 Valid，签名者为 WireGuard LLC。该检查用于依赖预检。 [官方分发](https://www.wintun.net/builds/wintun-0.14.1.zip) · [ADR 0059](adr/0059-wireguard-windows-service-scope.md)
+
+## 双内核架构与首轮 SDK 验证
+
+审视 `CoreManager`、`CoreApi`、`AppController`、配置合成和 ADR 0036 后，确定配置类型和运行会话分开建模。在 Windows x64 的 Go 1.27.0 上锁定 `wireguard-go` 对应 0.0.20250522，模块内容与用户提供目录中的对应 107 个文件逐项 SHA-256 相同。Go 模块校验、构建、静态分析和架构边界检查通过。
+
+应用测试脚本的 `-WireGuardSdk` 和 `-WireGuardSdk -WithMihomo` 均各通过 2 条定向用例。回环 UDP 上的两个真实 WireGuard 设备经内存 TUN 完成 TCP 负载往返，确认首次握手、双向字节计数和停止后的端口释放；跨 Peer 网段重叠被拒绝并关闭测试 TUN。校验锁定的 Mihomo 可执行文件哈希后，验证其 HTTP 代理在 WireGuard 会话运行期间及客户端断开后仍可访问回环目标。受限执行的 UDP 握手超时，经允许本机回环后通过。Windows Wintun、持久化、Controller 启停、应用级三路路由和系统恢复需另外验收。 [实施门禁](design/mihomo-wireguard-dual-engine.md#实施顺序与完成定义)
+
+## 双内核界面原型核对
+
+用 Edge 打开本地交互原型，分别点击两类配置卡，核对详情功能、返回列表焦点、样例导入类型和失败输入保留。复测带 WireGuard 节点的 YAML 仍打开 Mihomo 详情、保存不启动、同类切换可取消，以及分别启停两条样例链路和各自的采样状态。检查浏览器 1024／840／352 px 窗口下的布局与折叠导航，截图在 `build/ui-dual-design/`。这些结果适用于样例原型，Qt 集成、真实配置识别、系统网络写入和受控 VM 用例待验收。 [界面设计与 DoD](design/mihomo-wireguard-ui.md)
+
+## Mihomo 与 WireGuard 双内核设计核对
+
+静态核对现有 `ConfigBuilder` 的 WireGuard 节点类型、`CoreManager` 的 Mihomo 会话、`AppController` 的版本提交与回滚、`TunSession` 的管道接口和 ADR 0036 权限范围。对照用户提供的 WireGuard-Go 版本声明、模块依赖、Windows 入口、Wintun 接口和设备控制输出。在 [双内核设计草案](design/mihomo-wireguard-dual-engine.md) 中记录了选型、配置和协议边界、兼容与验证矩阵。该项验收限于设计阶段的源码与文档核对，运行原型和 Windows 网络写入待实现后验收。
+
+并行方案静态核对了本地 Mihomo 1.19.32 的 Windows socket 接口绑定、全局配置入口与连接统计。设计区分 Windows 路由、应用回环代理入口和实际出接口，并按引擎分开统计。锁定产物的 TCP、UDP、DNS 和两引擎真实并发路径待受控 VM 验收。 [并行方案](design/mihomo-wireguard-dual-engine.md#并行运行与流量归属)
+
+## U42 侧栏折叠与位置稳定性
+
+Windows 构建及界面原型、导航契约、配置返回、底栏和外观 5 组定向回归通过，耗时 47.36 秒。受限运行中的本机回环夹具请求及监听身份读取失败，放行隔离夹具后通过。Windows 原生侧栏用例通过，检查浅深主题、120% 字号、鼠标和键盘切页、当前选中、隐藏重开及设置入口。
+
+首轮复测发现折叠后的正文几何和宽窗抓图可能读到上次布局，统一在侧栏宽度改变时同步激活布局。复测在 956–964 DIP 逐 DIP 改变窗宽，侧栏每步变化不超过 1 DIP；同一窗宽各区切换时正文左边界一致。检查 840 DIP 折叠和 1040 DIP 展开的原生截图，折叠后的三枚工作区图标和底部设置可见，顶部按钮及设置坐标保持一致。原生证据在 `build/u42-sidebar-rail/native-delivery/`。
+
+本地便携包 `dist/Mlash-1.23.0-u42-windows-x64-portable.zip` 包含 U41 底栏告警与 U42 侧栏修复，SHA-256 为 `00d2ed940a30b17b9395d2b98335a9cb44b200b0916bef1ddc931a5cdc80886d`。ZIP 侧车、35 文件白名单和逐文件哈希、主程序与构建产物一致性、固定内核与双 EXE 七级图标均已验证。从 ZIP 解压后隔离启动，复核八个路由、设置搜索和返回，以及 Schannel TLS。证据在 `build/u42-portable-delivery/`，资格标记为 `release_qualified=false`。
+
+## U41 底栏告警精修
+
+Windows `windows-mingw-open` 构建通过。状态栏、配置返回、反馈路由、语义形状和架构边界 5 组定向回归通过，耗时 7.68 秒。3 条 Windows 原生用例通过，覆盖告警详情打开、取消与重开，切页和状态变化时底栏边界稳定，运行告警菜单可查看完整信息。
+
+检查 840 DIP、120% 字号的浅深色原生截图。右端告警有留白，短标签可读，详情框换行且无横向滚动条。用损坏状态文件触发只读保护，尝试导入后仍显示原始失败原因，两个隔离状态文件按字节比对完整。证据在 `build/u41-status-alarm/native-final/`。本轮验收到本机源码构建。
+
 ## v1.23.0 Windows x64 预发布
 
 [Windows 发布流程](https://github.com/downdone/mlash/actions/runs/44873723125)从 `5e3935a3c171b5661ba917f23d19ff32f365eb10` 构建并发布 [v1.23.0](https://github.com/downdone/mlash/releases/tag/v1.23.0)，标签与来源清单均指向该提交。Windows CI 完整隔离回归 61 组通过、0 失败，耗时 456.52 秒，真实系统写入门禁按默认设置跳过 1 组。macOS 未执行。

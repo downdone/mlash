@@ -25,7 +25,22 @@ TunDialog::TunDialog(AppController* c,QWidget* parent):TaskDialog(parent),contro
     layout->addWidget(contextNote("Windows 服务管理需要管理员授权。","通过虚拟网卡接管流量，界面保持普通权限。安装、修复和移除服务需要 Windows 管理员授权。"));
     status_=new QLabel("正在读取服务…"); status_->setTextFormat(Qt::PlainText); status_->setWordWrap(true); status_->setObjectName("tunServiceStatus"); layout->addWidget(status_);
     auto* tools=new QHBoxLayout; install_=new QPushButton("安装服务…"); install_->setObjectName("installTunService"); repair_=new QPushButton("修复服务…"); repair_->setObjectName("repairTunService"); remove_=new QPushButton("移除服务…"); remove_->setObjectName("removeTunService"); refresh_=new QPushButton("刷新"); refresh_->setObjectName("refreshTunService"); tools->addWidget(install_); tools->addWidget(repair_); tools->addWidget(remove_); tools->addStretch(); tools->addWidget(refresh_); layout->addLayout(tools);
-    auto* form=new QFormLayout; form->setVerticalSpacing(10); enabled_=new QCheckBox("启用 TUN"); enabled_->setObjectName("tunEnabledDraft"); enabled_->setChecked(initial_.tunEnabled); form->addRow("流量接管",enabled_);
+    auto* wireGuardRow=new QHBoxLayout;
+    wireGuardStatus_=new QLabel;
+    wireGuardStatus_->setObjectName("wireGuardServiceCapability");
+    wireGuardStatus_->setTextFormat(Qt::PlainText);
+    wireGuardStatus_->setWordWrap(true);
+    wireGuardStatus_->setSizePolicy(QSizePolicy::Ignored,QSizePolicy::Preferred);
+    wireGuardRow->addWidget(wireGuardStatus_,1);
+    wireGuardCleanup_=new QPushButton("确认清理");
+    wireGuardCleanup_->setObjectName("verifyWireGuardCleanup");
+    wireGuardRow->addWidget(wireGuardCleanup_);
+    layout->addLayout(wireGuardRow);
+    connect(wireGuardCleanup_,&QPushButton::clicked,this,[this] {
+        controller_->disconnectWireGuard(!controller_->wireGuardObservation().value("cleanup_pending").toBool());
+    });
+    connect(c,&AppController::wireGuardChanged,this,&TunDialog::updateActions);
+    auto* form=new QFormLayout; form->setVerticalSpacing(10); enabled_=new QCheckBox("启用 TUN"); enabled_->setObjectName("tunEnabledDraft"); enabled_->setChecked(initial_.tunEnabled); form->addRow("Mihomo 流量接管",enabled_);
     stack_=new CompactComboBox; stack_->setObjectName("tunStack"); stack_->addItem("混合（推荐）","mixed"); stack_->addItem("系统","system"); stack_->addItem("gVisor","gvisor"); stack_->setCurrentIndex(stack_->findData(initial_.tunStack)); form->addRow("协议栈",stack_);
     strict_=new QCheckBox("减少绕过虚拟网卡的流量"); strict_->setObjectName("tunStrictRoute"); strict_->setChecked(initial_.tunStrictRoute); strict_->setToolTip("可能影响局域网或部分应用，默认关闭"); form->addRow("严格路由",strict_); layout->addLayout(form);
     auto* advancedToggle=new QPushButton("高级选项与诊断"); advancedToggle->setObjectName("tunAdvancedToggle"); advancedToggle->setCheckable(true); layout->addWidget(advancedToggle,0,Qt::AlignLeft); auto* advanced=new QWidget; auto* advancedLayout=new QVBoxLayout(advanced); advancedLayout->setContentsMargins(0,0,0,0); auto* advancedForm=new QFormLayout;
@@ -52,11 +67,27 @@ void TunDialog::inspect() {
         const auto data=result.data; const auto session=data.value("session").toObject(); QStringList lines{"服务版本："+data.value("version").toString("未知"),"服务内核："+(!data.contains("core_matches")?QString("未知"):data.value("core_matches").toBool()?QString("与随包版本匹配"):QString("不匹配，需要修复")),"所选内核："+(!data.contains("client_core_matches")?QString("未检查"):data.value("client_core_matches").toBool()?QString("随包版本匹配"):QString("不匹配，请在设置恢复随包 mihomo")),"高级选项："+(data.value("advanced_options").toBool()?QString("支持"):QString("旧版或未安装，修复后支持")),"会话："+(session.value("active").toBool()?QString("活动"):session.value("cleanup_pending").toBool()?QString("清理待确认"):QString("未活动")),"恢复标记："+(data.value("recovery_marker").toBool()?QString("存在（运行中正常，停止后须确认清理）"):QString("无"))}; if (session.value("active").toBool()) lines<<"接口："+(session.value("adapter_up").toBool()?QString("已启动"):QString("未确认"))<<"自动路由："+(session.value("routes").toBool()?QString("已观察"):QString("未确认"))<<"DNS接口："+(session.value("dns_configured").toBool()?QString("已配置"):QString("未确认")); if (session.contains("mtu")) lines<<"接口 MTU："+QString::number(session.value("mtu").toInt()); guard->details_->setPlainText(lines.join('\n')); guard->updateActions(); });
 }
 void TunDialog::updateActions() {
-    const auto& state=controller_->state(); const bool idle=!state.busy&&!state.exiting&&!state.readOnly&&!waiting_; const bool removable=!controller_->settings().tunEnabled&&!state.tunObserved&&state.core!=CoreState::Failed;
+    const auto& state=controller_->state();
+    const auto wireGuard=controller_->wireGuardObservation();
+    const bool active=wireGuard.value("active").toBool(), pendingWireGuard=wireGuard.value("cleanup_pending").toBool();
+    const bool wireGuardBusy=!wireGuard.value("phase").toString().isEmpty();
+    const bool supportsWireGuard=service_.value("wireguard").toBool();
+    const auto wireGuardError=wireGuard.value("error").toString();
+    const QString capability=loading_?"正在读取":!known_?"服务状态无法确认":
+        !installed_?"安装服务后可用":!supportsWireGuard?"需要修复旧版服务":QString("服务协议 v2");
+    const QString session=active?" · 路由已生效":pendingWireGuard?" · 路由待清理":wireGuardBusy?" · 正在检查":QString();
+    wireGuardStatus_->setText("WireGuard · "+capability+session+(wireGuardError.isEmpty()?QString():"\n"+wireGuardError));
+    wireGuardCleanup_->setVisible(pendingWireGuard||supportsWireGuard);
+    wireGuardCleanup_->setText(pendingWireGuard?"重试清理":"确认清理");
+    wireGuardCleanup_->setEnabled(!active&&!wireGuardBusy&&!state.busy&&!state.exiting&&!state.tunObserved&&
+        !controller_->settings().tunEnabled&&(pendingWireGuard||supportsWireGuard));
+    const bool idle=!state.busy&&!state.exiting&&!state.readOnly&&!waiting_;
+    const bool removable=!active&&!pendingWireGuard&&!wireGuardBusy&&!controller_->settings().tunEnabled&&!state.tunObserved&&state.core!=CoreState::Failed;
     install_->setEnabled(idle&&!loading_&&known_&&!installed_&&removable); repair_->setEnabled(idle&&!loading_&&known_&&installed_&&removable); remove_->setEnabled(idle&&!loading_&&known_&&installed_&&removable); refresh_->setEnabled(!loading_&&!waiting_);
     const bool pending=service_.value("session").toObject().value("cleanup_pending").toBool()||(service_.value("recovery_marker").toBool()&&!service_.value("session").toObject().value("active").toBool()); cleanup_->setEnabled(idle&&known_&&installed_&&!state.ready&&(pending||state.core==CoreState::Failed));
     const auto checked=normalizeTunRoutes(routes_->toPlainText()); const auto options=draft(); const bool stale=tunOptionsJson(initial_)!=tunOptionsJson(controller_->settings()); const bool changed=tunOptionsJson(options)!=tunOptionsJson(initial_); validation_->setText(!checked.ok?checked.error:stale?QString("设置已在其他窗口改变，请重新打开；此处草稿保持不变"):enabled_->isChecked()&&known_&&installed_&&!service_.value("client_core_matches").toBool()?QString("启用需要随包锁定版本，请先在设置恢复随包内核"):QString());
-    apply_->setEnabled(idle&&!stale&&checked.ok&&changed&&(!options.tunEnabled||(known_&&installed_&&service_.value("client_core_matches").toBool()))); enabled_->setEnabled(idle&&(installed_||initial_.tunEnabled)); for (auto* widget:QList<QWidget*>{stack_,strict_,mtu_,dnsHijack_,routes_}) widget->setEnabled(idle);
+    const bool canEnableTun=!active&&!pendingWireGuard&&!wireGuardBusy;
+    apply_->setEnabled(idle&&!stale&&checked.ok&&changed&&(!options.tunEnabled||(canEnableTun&&known_&&installed_&&service_.value("client_core_matches").toBool()))); enabled_->setEnabled(idle&&canEnableTun&&(installed_||initial_.tunEnabled)); for (auto* widget:QList<QWidget*>{stack_,strict_,mtu_,dnsHijack_,routes_}) widget->setEnabled(idle);
 }
 void TunDialog::showInterfaces() {
     auto* dialog=new TaskDialog(this); dialog->setAttribute(Qt::WA_DeleteOnClose); dialog->setObjectName("networkInterfacesDialog"); dialog->setWindowTitle("网络接口（只读）"); dialog->resize(660,410); auto* layout=new QVBoxLayout(dialog); auto* info=new QLabel("正在读取本机接口…"); info->setWordWrap(true); info->setTextFormat(Qt::PlainText); layout->addWidget(info); auto* table=new QTableWidget(0,3); table->setHorizontalHeaderLabels({"接口","状态","本机地址"}); table->setEditTriggers(QAbstractItemView::NoEditTriggers); table->setShowGrid(false); table->verticalHeader()->hide(); table->horizontalHeader()->setSectionResizeMode(2,QHeaderView::Stretch); layout->addWidget(table,1); auto* buttons=new QDialogButtonBox(QDialogButtonBox::Close); buttons->button(QDialogButtonBox::Close)->setText("关闭"); layout->addWidget(buttons); connect(buttons,&QDialogButtonBox::rejected,dialog,&QDialog::reject); presentTaskDialog(dialog); const QPointer<QDialog> guard(dialog);

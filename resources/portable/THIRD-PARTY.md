@@ -10,6 +10,8 @@ Mlash 自有代码采用 GPL-3.0-or-later，完整文本见包根目录 LICENSE�
 | QR Code generator 1.8.0 | 静态链接 | qrcodegen-MIT.txt；[源码](https://github.com/nayuki/QR-Code-generator) |
 | MinGW GCC 13.1 / winpthreads | 动态运行库 | GPL-3.0.txt、GCC-Runtime-Exception.txt、winpthreads.txt；[GCC](https://gcc.gnu.org/)、[MinGW-w64](https://www.mingw-w64.org/) |
 | mihomo @CORE_VERSION@ | 独立进程，含半关闭回收补丁 | mihomo-GPL-3.0.txt；[上游](https://github.com/MetaCubeX/mihomo)，实际提交与SHA见 cores/manifest.json |
+| WireGuard-Go 0.0.20250522、Wintun Go API、Go 运行时与 x 系列库 | 静态链接至 MlashWireGuard.exe | WireGuard LLC，wireguard-go-MIT.txt；The Go Authors，golang-BSD.txt |
+| Wintun 0.14.1 x64 | 原始签名 DLL | Wintun.txt；[官方 SDK](https://www.wintun.net/) |
 | Twemoji 14.0.2 国旗 | 内置 PNG | CC BY 4.0，twemoji-graphics.txt、twemoji-NOTICE.md |
 | 服务标记 | 内置 PNG | Simple Icons CC0 及各自商标，simple-icons-CC0.txt、services-NOTICE.md |
 | Noto Sans SC 可变字体 | 内置于 Mlash.exe | SIL Open Font License 1.1，NotoSansSC-OFL.txt；[Google Fonts 源码](https://github.com/google/fonts/tree/main/ofl/notosanssc) |

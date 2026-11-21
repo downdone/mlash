@@ -14,10 +14,12 @@
 #include <QDeadlineTimer>
 #include "core/CoreManager.h"
 #include "core/MihomoClient.h"
+#include "core/WireGuardSession.h"
 #include "core/CoreUpdate.h"
 #include "core/OfficialCoreSource.h"
 #include "AppUpdateSource.h"
 #include "profile/ProfileStore.h"
+#include "profile/WireGuardStore.h"
 #include "profile/SubscriptionDownloader.h"
 #include "profile/WebDavClient.h"
 #include "platform/ProxyCoordinator.h"
@@ -36,10 +38,18 @@ public:
     const AppState& state() const { return state_; }
     const Settings& settings() const { return settings_; }
     const QVector<Profile>& profiles() const { return profiles_; }
+    const QVector<WireGuardProfile>& wireGuardProfiles() const { return wireGuardProfiles_; }
+    const QString& wireGuardStoreError() const { return wireGuardStoreError_; }
+    const QString& runningWireGuardProfile() const { return runningWireGuardProfile_; }
+    QJsonObject wireGuardObservation() const;
+    void compareWireGuardVersions(const QString& id, Completion done);
+    void connectWireGuard(const QString& id, const QString& expected = {});
+    void disconnectWireGuard(bool verifyIdle = false);
     const QJsonObject& proxies() const { return proxies_; }
     qint64 coreProcessId() const { return core_.processId(); }
     Diagnostics* diagnostics() { return &diagnostics_; }
     QString dataRoot() const { return root_; }
+    const QString& readOnlyReason() const { return readOnlyError_; }
     void startCore(bool allowProxyRestore = true);
     void stopCore();
     void setTunEnabled(bool enabled);
@@ -61,6 +71,11 @@ public:
     void clearAutomaticSelection(const QString& group);
     void importUrl(const QString& name, const QUrl& url, const DownloadPolicy& policy = {});
     void importFile(const QString& name, const QString& path, const QString& replaceId = {});
+    void previewWireGuardText(const QByteArray& source, Completion done);
+    void previewWireGuardFile(const QString& path, Completion done);
+    void saveWireGuardPreview(const QString& name, const QString& token,
+                              const QString& id = {}, const QString& expectedCandidate = {});
+    void cancelWireGuardPreview();
     void importNodeLinks(const QString& name,const QString& text);
     void previewNodeLinks(const QString& text,const QStringList& reserved,Completion done);
     void updateProfile(const QString& id);
@@ -197,6 +212,7 @@ public:
     void closeAllConnections();
     void requestExit();
 signals:
+    void wireGuardChanged();
     void profileBatchChanged();
     void remoteBackupChanged();
     void remoteBackupDownloaded(const QString& path);
@@ -245,6 +261,9 @@ private:
     void saveSnapshot(Settings settings, QVector<Profile> profiles, Completion done);
     void checkPrepared(PreparedProfile prepared, std::function<void(PreparedProfile)> done, const QString& executable = {});
     void stageSource(Profile profile, QByteArray source);
+    void previewWireGuardSource(QString path, QByteArray source, Completion done);
+    void storeWireGuardCandidate(const QString& name, QByteArray source, const QString& id = {},
+                                 const QString& expectedCandidate = {});
     void prepareActivation(Profile profile, const QString& version, Settings settings);
     void transact(PreparedProfile prepared, Settings settings);
     void verifyRuleOverlay(const QStringList& prepend, const QStringList& append, int expectedCount, Completion done);
@@ -324,6 +343,13 @@ private:
     AppState state_;
     Settings settings_;
     QVector<Profile> profiles_;
+    QVector<WireGuardProfile> wireGuardProfiles_;
+    QString wireGuardStoreError_;
+    bool wireGuardPreviewPending_ = false;
+    quint64 wireGuardPreviewEpoch_ = 0;
+    QString wireGuardPreviewToken_;
+    QByteArray wireGuardPreviewBytes_;
+    QDeadlineTimer wireGuardPreviewDeadline_;
     QJsonObject proxies_;
     std::shared_ptr<PlatformServices> platform_;
     std::unique_ptr<GlobalHotkeys> hotkeys_;
@@ -340,6 +366,12 @@ private:
     quint64 hotkeyCaptureSerial_=0,hotkeyCaptureToken_=0;
     QDeadlineTimer hotkeyQuietUntil_;
     std::shared_ptr<ProfileStore> store_;
+    std::shared_ptr<WireGuardStore> wireGuardStore_;
+    WireGuardSession wireGuard_;
+    QString runningWireGuardProfile_;
+    QString wireGuardPhase_, wireGuardError_, wireGuardSample_;
+    QString wireGuardConnectBlock() const;
+    void finishWireGuard(Result result);
     std::shared_ptr<ProxyCoordinator> proxy_;
     Diagnostics diagnostics_;
     MihomoClient api_;

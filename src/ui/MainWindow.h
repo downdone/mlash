@@ -76,6 +76,11 @@ private:
     QString selectedProfile() const;
     void presentImport(ImportDialog* dialog);
     void addUrl(); void submitQuickImport(); void openAdvancedImport(); void applySettings();
+    void reviewWireGuardImport(const QString& path,QByteArray pasted={},QDialog* sourceEditor=nullptr,
+                               const QString& id = {}, const QString& expected = {});
+    void pasteWireGuard(const QString& id = {});
+    void showWireGuardProfile(const QString& id, int tab = 0);
+    void openWireGuardService();
     void syncSectionNavigation(const Route& route);
     void updateTopbar();
     // 视图进入/离开的副作用实现（由 PageLifecycle 转调）。
@@ -181,11 +186,16 @@ private:
     WebsiteTestsPage* websitePage_;
     QStatusBar* operationStatus_;
     QLabel* operationNotice_ = nullptr;   // 状态栏「最近操作」段：跨页操作结果
-    QLabel* operationAlarm_ = nullptr;    // 状态栏「当前告警」段：state.lastError / 只读保护
+    QWidget* statusAlarm_ = nullptr;
+    QLabel* statusAlarmMark_ = nullptr;
+    QLabel* operationAlarm_ = nullptr;
+    QToolButton* statusAlarmDetails_ = nullptr;
+    QToolButton* statusResolve_ = nullptr;
     // 页面级提示：操作结果按 OperationId 落到所属页面，不写全局状态栏（P4.1 反馈路由）。
     void routeOperationFeedback(bool ok, const QString& message, OperationId id);
     void setPageFeedback(int page, const QString& text);
     void refreshStatusSegments();
+    void showStatusAlarm();
     QStringList pageFeedback_;   // 按页面序号缓存，切回该页时可见
     QString connectionFeedback_;  // 连接页当前操作的结论（与采样状态并存）
     OperationId noticeOperation_ = OperationId::Unspecified;

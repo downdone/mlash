@@ -6,6 +6,9 @@
     "libwinpthread-1.dll",
     "Mlash.exe",
     "MlashTunService.exe",
+    "MlashWireGuard.exe",
+    "wintun.dll",
+    "licenses/Wintun.txt",
     "networkinformation/qnetworklistmanager.dll",
     "platforms/qwindows.dll",
     "Qt6Core.dll",
@@ -17,6 +20,14 @@
     "tls/qschannelbackend.dll"
   ],
   "assets": [
+    {
+      "source": "licenses/wireguard-go-MIT.txt",
+      "target": "licenses/wireguard-go-MIT.txt"
+    },
+    {
+      "source": "licenses/golang-BSD.txt",
+      "target": "licenses/golang-BSD.txt"
+    },
     {
       "source": "cores/mihomo.exe",
       "target": "cores/mihomo.exe"

@@ -1,4 +1,6 @@
 #include "TunNative.h"
+#include "WireGuardService.h"
+#include "wireguard_hash.h"
 #include "core/TunPolicy.h"
 #include "core/TunApiGate.h"
 #include "storage/Storage.h"
@@ -62,6 +64,13 @@ bool readLine(HANDLE pipe,QByteArray& line,DWORD timeout) {
     while (line.size()<8192&&timer.elapsed()<timeout) { if (!transfer(pipe,&c,1,false,DWORD(qMax<qint64>(1,timeout-timer.elapsed())))) return false; if (c=='\n') return true; line+=c; } return false;
 }
 bool respond(HANDLE pipe,Result result) { auto o=result.data; o["ok"]=result.ok; o["protocol"]=1; if (!result.ok) o["error"]=result.error; auto bytes=QJsonDocument(o).toJson(QJsonDocument::Compact)+'\n'; return transfer(pipe,bytes.data(),DWORD(bytes.size()),true,2000); }
+bool respondWireGuard(HANDLE pipe,Result result) {
+    auto value=result.data;
+    value["ok"]=result.ok; value["protocol"]=2;
+    if (!result.ok) value["error"]=result.error;
+    auto bytes=QJsonDocument(value).toJson(QJsonDocument::Compact)+'\n';
+    return transfer(pipe,bytes.data(),DWORD(bytes.size()),true,2000);
+}
 QString pipeSid(HANDLE pipe) {
     if (!ImpersonateNamedPipeClient(pipe)) return {};
     HANDLE token=nullptr; QString sid;
@@ -118,9 +127,49 @@ bool cleanStaleSession() {
 Result runConnection(HANDLE pipe,const QString& owner) {
     QByteArray line; if (!readLine(pipe,line,5000)||pipeSid(pipe)!=owner) return Result::fail("TUN 客户端身份不符");
     const auto request=QJsonDocument::fromJson(line).object();
+    if (request.value("protocol").toInt()==2) {
+        if (request.value("op")=="wireguard-idle"&&request.size()==2) {
+            respondWireGuard(pipe,{true,{},{{"op","wireguard-idle"},{"cleanup_confirmed",recoverWireGuard(installRoot())}}});
+            return {};
+        }
+        const auto size=request.value("size").toInt();
+        if (request.value("op")!="wireguard-start"||request.size()!=3||size<1||size>256*1024||!cleanStaleSession()) {
+            respondWireGuard(pipe,Result::fail("WireGuard 请求无效，或 Mihomo TUN 清理未完成"));
+            return {};
+        }
+        QByteArray payload(size,'\0');
+        // The byte-stream peer sends an exact length, split into bounded writes.
+        QElapsedTimer budget; budget.start();
+        int offset=0;
+        while (offset<size && budget.elapsed()<5000 && clientPresent(pipe)) {
+            DWORD available=0;
+            if (!PeekNamedPipe(pipe,nullptr,0,nullptr,&available,nullptr)) break;
+            if (!available) { Sleep(10); continue; }
+            const auto count=qMin<DWORD>(available,DWORD(size-offset));
+            if (!transfer(pipe,payload.data()+offset,count,false,500)) break;
+            offset+=int(count);
+        }
+        if (offset!=size) {
+            payload.fill('\0');
+            respondWireGuard(pipe,Result::fail("WireGuard 配置传输未完成"));
+            return {};
+        }
+        auto result=runWireGuard(installRoot(),std::move(payload),[&] { return clientPresent(pipe); },
+            [&](Result observed) { return respondWireGuard(pipe,observed); },
+            [&] {
+                QByteArray command;
+                if (!readLine(pipe,command,6000)) return QString{};
+                const auto parsed=QJsonDocument::fromJson(command).object();
+                return parsed.size()==1 ? parsed.value("op").toString() : QString{};
+            });
+        if (!result.ok)
+            result.data["cleanup_confirmed"]=!QFileInfo::exists(installRoot()+"/sessions/wireguard-recovery.json");
+        if (!result.ok||!result.data.isEmpty()) respondWireGuard(pipe,result);
+        return {};
+    }
     if (request.value("op")=="idle"&&request.value("protocol").toInt()==1&&request.size()==2) { respond(pipe,{true,{},{{"op","idle"},{"cleanup_confirmed",cleanStaleSession()}}}); return {}; }
     if (request.value("op")!="start"||request.value("protocol").toInt()!=1||request.size()!=3) return Result::fail("TUN 启动协议无效");
-    if (!cleanStaleSession()) return Result::fail("上次 TUN 会话清理尚未确认，保留恢复标记");
+    if (!cleanStaleSession()||!recoverWireGuard(installRoot())) return Result::fail("上次隧道会话清理尚未确认，保留恢复标记");
     if (hash(installRoot()+"/mihomo.exe")!=TunCoreSha256) return Result::fail("受保护内核哈希不符");
     const auto existing=observeAdapter(); if (!existing.ok||existing.data.contains("luid")) return Result::fail("已有 Mlash 接口或待恢复路由；未覆盖现有网络");
     const auto target=installRoot()+"/sessions/"+newId(); QByteArray config;
@@ -189,6 +238,7 @@ void WINAPI serviceMain(DWORD,wchar_t**) {
     // A killed Job closes Wintun's handles. Only clear stale evidence after an
     // actual read confirms there is no active route on that virtual interface.
     cleanStaleSession();
+    recoverWireGuard(root);
     PSECURITY_DESCRIPTOR sd=nullptr;
     // Native client uses specific data rights (no FILE_CREATE_PIPE_INSTANCE).
     // Connection happens on a worker; Qt's Windows connectToServer can block 5s.
@@ -217,7 +267,11 @@ int install(const QString& owner) {
     const QStringList dependencies{"MlashTunService.exe","Qt6Core.dll","Qt6Network.dll","libstdc++-6.dll","libgcc_s_seh-1.dll","libwinpthread-1.dll"};
     for (const auto& name:dependencies) { if (QFileInfo::exists(root+'/'+name)&&!QFile::remove(root+'/'+name)) { CloseServiceHandle(scm); return 15; } if (!safePath(source+'/'+name)||!QFile::copy(source+'/'+name,root+'/'+name)||!acl(root+'/'+name)) { CloseServiceHandle(scm); return 16; } }
     QFile::remove(root+"/mihomo.exe"); if (!QFile::copy(source+"/cores/mihomo.exe",root+"/mihomo.exe")||hash(root+"/mihomo.exe")!=TunCoreSha256) { CloseServiceHandle(scm); return 17; }
-    if (!acl(root+"/mihomo.exe")||!writeAtomic(root+"/owner.json",QJsonDocument(QJsonObject{{"protocol",1},{"sid",owner},{"version",MLASH_VERSION},{"advanced_options",true}}).toJson()).ok||!acl(root+"/owner.json")||!QDir().mkpath(root+"/sessions")||!privateAcl(root+"/sessions")) { CloseServiceHandle(scm); return 18; }
+    for (const auto& asset:QList<QPair<QString,QByteArray>>{{"MlashWireGuard.exe",MLASH_WIREGUARD_SHA256},{"wintun.dll",WintunSha256}}) {
+        const auto from=source+'/'+asset.first, to=root+'/'+asset.first;
+        if (!safePath(from)||hash(from)!=asset.second||!QFile::copy(from,to)||!acl(to)||hash(to)!=asset.second) { CloseServiceHandle(scm); return 28; }
+    }
+    if (!acl(root+"/mihomo.exe")||!writeAtomic(root+"/owner.json",QJsonDocument(QJsonObject{{"protocol",1},{"sid",owner},{"version",MLASH_VERSION},{"advanced_options",true},{"wireguard",true}}).toJson()).ok||!acl(root+"/owner.json")||!QDir().mkpath(root+"/sessions")||!privateAcl(root+"/sessions")) { CloseServiceHandle(scm); return 18; }
     const auto command="\""+QDir::toNativeSeparators(root+"/MlashTunService.exe")+"\" --service";
     auto service=CreateServiceW(scm,L"MlashTun",L"Mlash TUN 权限服务",SERVICE_ALL_ACCESS,SERVICE_WIN32_OWN_PROCESS,SERVICE_DEMAND_START,SERVICE_ERROR_NORMAL,w(command),nullptr,nullptr,nullptr,nullptr,nullptr);
     if (!service) { CloseServiceHandle(scm); return 19; }
@@ -234,7 +288,7 @@ int remove(const QString& owner) {
     if (!size||!QueryServiceConfigW(service,reinterpret_cast<QUERY_SERVICE_CONFIGW*>(buffer.data()),size,&size)||QString::fromWCharArray(reinterpret_cast<QUERY_SERVICE_CONFIGW*>(buffer.data())->lpBinaryPathName)!=expected) { CloseServiceHandle(service); CloseServiceHandle(scm); return 24; }
     SERVICE_STATUS status{}; ControlService(service,SERVICE_CONTROL_STOP,&status); QElapsedTimer timer; timer.start();
     while (timer.elapsed()<10000&&QueryServiceStatus(service,&status)&&status.dwCurrentState!=SERVICE_STOPPED) Sleep(50);
-    if (status.dwCurrentState==SERVICE_STOPPED&&!cleanStaleSession()) { CloseServiceHandle(service); CloseServiceHandle(scm); return 26; }
+    if (status.dwCurrentState==SERVICE_STOPPED&&(!cleanStaleSession()||!recoverWireGuard(root))) { CloseServiceHandle(service); CloseServiceHandle(scm); return 26; }
     const bool deleted=status.dwCurrentState==SERVICE_STOPPED&&DeleteService(service); CloseServiceHandle(service); CloseServiceHandle(scm);
     // Recovery marker must be resolved, never erase evidence after incomplete cleanup.
     if (deleted&&!QFileInfo::exists(root+"/session.json")&&safePath(root)) QDir(root).removeRecursively(); return deleted?0:25;

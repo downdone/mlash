@@ -205,8 +205,14 @@ QString templateStyleSheet() {
         QLabel#nodeGroupHint { color: @Secondary; }
         /* 菜单分组标题（V4）：禁用 action 默认会被画成灰色，这里统一压低对比并缩小上下留白。 */
         QMenu::item:disabled { color: @Muted; }
-        QStatusBar QLabel#operationAlarm { padding-left: 10px; color: @Error; }
-        QStatusBar QLabel#operationAlarm[state="warning"] { color: @Warning; }
+        QFrame#statusAlarm { background: @Window; border: 1px solid @Border; border-radius: 6px; }
+        QLabel#operationAlarm { color: @Ink; font-size: @CaptionPoints; font-weight: 600; }
+        QTextEdit#statusAlarmReason { background: @Window; border: 1px solid @Border; border-radius: 6px; padding: 6px; }
+        QTextEdit#statusAlarmReason[keyboardFocus="true"]:focus { border-color: @Focus; }
+        QToolButton[statusAction="true"] { min-height: 0; padding: 1px 5px; background: transparent; color: @Secondary; font-size: @CaptionPoints; }
+        QToolButton[statusAction="true"]:hover { background: @Hover; color: @Ink; }
+        QToolButton[statusAction="true"]:pressed { background: @Pressed; }
+        QToolButton[statusAction="true"][keyboardFocus="true"]:focus { border-color: @Focus; }
         QToolButton#websiteResultDetails { min-height: 0; padding: 3px; }
         QToolButton#contextHelp, QToolButton#websiteMethod { min-width: 0; min-height: 0; padding: 0; border-radius: 13px; color: @Secondary; }
         QToolButton#websiteResultDetails[keyboardFocus="true"]:focus { padding: 3px; }

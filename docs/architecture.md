@@ -43,6 +43,8 @@ Mlash.exe 的 FileDescription 和 ProductName 均为 Mlash。mihomo 仍是 QProc
 
 快速导入在配置页可见，独立 `ImportDialog` 承载高级新增及外部来源确认。两种入口共用 Controller 的校验和导入命令，导入成功后仍由用户决定何时启用。布局与控件状态见[视觉识别规范](design/u32-mlash-visual-identity.md)，任务细节见[交互契约](ui-interactions.md)。
 
+WireGuard 配置详情使用同一个任务工作区框架。候选和对照版本由 Controller 在有界 worker 读取，界面只接收脱敏摘要与变更标记。连接阶段、清理状态、最近采样和冲突原因由 Controller 投影到详情、首页、托盘和数据页。 [双内核 Qt 交付设计](design/mihomo-wireguard-ui.md#qt-交付设计)
+
 U18：整组延迟由 Controller 有界队列调度 12 个异步请求，MihomoClient 使用两条独立本地 HTTP 连接池突破单池连接数限制；代次与取消仍由 Controller 统一处理，不产生每节点一个 OS 线程。窗口标题栏是纯偏好 `window_chrome=native|integrated`，应用内栏复用页面顶栏；Win32 边缘命中测试仅在 `platform/windows`，UI 只消费 Qt 事件与平台适配结果。应用在线更新由 `AppUpdateSource` 只读检查固定 GitHub Release，Controller 在有界 worker 校验大小/SHA-256 并原子保存独立候选包；运行 EXE 与内核不被覆盖，UI 显式打开候选包。发布策略与限制见 [U18 设计](design/u18-fast-tests-window-chrome-update.md)。
 
 `mlash_domain` 是独立静态库，提供通用状态类型与不触发 I/O 的校验；`mlash_engine` 依赖它。原 `app/Types.h`、`app/ConnectionColumns.h` 转发头已移除，消费者直接包含 domain 契约。`CoreApi` 描述现有核心能力；`MihomoClient` 是唯一特化，在 `MihomoEndpoints.cpp` 集中定义 REST 方法与路径。版本、运行配置和代理组响应用 `CoreDtos` 严格解析；其他端点保留有界 `Result`/JSON。Controller 持有具体实现并负责业务回读，进程管理和只读采样依赖能力接口。UI 控件、节点模型和委托分别在所属头文件中；原 `MainWindowParts.h`、`WindowUiBasics.h`、`WindowUiIncludes.h` 聚合头已移除，主窗口实现按外壳、数据、反馈、状态、导航和各页面分文件。`PageRouter` 以 `QPointer` 观察由主窗口持有的页面生命周期对象，销毁后不再调用悬空指针。`ui/design` 提供只读语义规格与 Shadowrocket 取值，`UiTheme` 是 Qt 外观适配和兼容桥，页面分组仍由布局与交互契约定义，见 [ADR 0056](adr/0056-independent-ui-design-system.md)。此结构仍保留单个 `AppController` 状态写入者及现有轻量销毁语义，见 [ADR 0055](adr/0055-domain-contracts-and-ui-components.md)。
@@ -62,7 +64,9 @@ UI 公开头只前向声明 `AppController`，在需要调用命令的实现文�
 | core | CoreManager | 启停/校验 → 真实生命周期、就绪、崩溃 |
 | core | TunSession / TunPolicy / TunApiGate | 受限服务会话、受控配置、允许列表 API 转发；原生特权实现留在 platform/windows |
 | core | CoreApi / MihomoClient | 能力调用 → mihomo REST / 日志流 → Result、增量日志；mihomo 唯一特化 |
+| core/wireguard | Go Session / ServeControl | 设备配置、启停及脱敏 Peer 观测；独立 SDK 使用内存 TUN 与本机回环验证，平台接管见[双内核实施设计](design/mihomo-wireguard-dual-engine.md) |
 | profile | ConfigBuilder | 原始 YAML + 设置 → 受控配置、Provider 下载清单、脱敏值 |
+| profile | WireGuardConfig / WireGuardStore | 有界 CONF 解析、账户加密的独立候选存储，命令与结果由 Controller 管理 |
 | profile | SubscriptionDownloader | URL → 验证过地址/证书的有界字节流 |
 | profile | ProfileStore | 版本、设置、索引 → 加密原子持久化 |
 | platform | ProxyCoordinator | 接管/恢复 → 所有权、冲突、恢复日志 |

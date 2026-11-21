@@ -12,6 +12,7 @@
 #include <QElapsedTimer>
 #include <QTimer>
 #include <QTcpServer>
+#include <QLocalServer>
 #include <QSslSocket>
 #include <QRandomGenerator>
 #include <yaml-cpp/yaml.h>
@@ -36,6 +37,7 @@ public:
     int writes = 0; bool failWrite = false, failRead = false, failSeal = false;
     bool autoEnabled = false;
     int autoWrites = 0;
+    bool wireGuardFixture = false;
     Result readProxy() override { return failRead ? Result::fail("read failure") : Result{true, {}, current}; }
     Result writeProxy(const QJsonObject& o) override { ++writes; if (failWrite) return Result::fail("write failure"); current = o; return {}; }
     QJsonObject proxyTarget(int port) const override { return {{"flags", 3}, {"server", QString("127.0.0.1:%1").arg(port)}, {"bypass", "local"}, {"pac", ""}}; }
@@ -47,6 +49,11 @@ public:
     Result secureDirectory(const QString& root) override { return QDir().mkpath(root) ? Result{} : Result::fail("mkdir failure"); }
     Result attachChild(qint64) override { return {}; }
     Result ownsTcpPort(qint64, int) override { return {true, {}, {{"owned", true}}}; }
+    Result tunServiceInfo(bool) override {
+        return wireGuardFixture ? Result{true,{},{{"installed",true},{"running",true},{"wireguard",true}}}
+                                : Result::fail("没有测试服务");
+    }
+    Result verifyTunServer(qintptr) override { return wireGuardFixture ? Result{} : Result::fail("身份不符"); }
 };
 class EngineTests : public QObject {
     Q_OBJECT
@@ -73,6 +80,11 @@ private slots:
     void unsafeConfigurationRejected_data();
     void unsafeConfigurationRejected();
     void sourceSnapshotAndEncryptedIndex();
+    void wireGuardConfigurationValidation();
+    void wireGuardImportAndEncryptedCandidate();
+    void wireGuardPreviewBindsInput();
+    void wireGuardWindowsStorage();
+    void wireGuardClientLeaseAndCleanup();
     void providerSnapshotsAndProtocolBoundary();
     void providerRefreshIsolationAndMetadata();
     void tlsAvailable();
@@ -105,6 +117,225 @@ static int freePort() {
     return 0;
 }
 static QByteArray minimalYaml() { return "mode: rule\nproxies: []\nproxy-groups:\n  - name: Test\n    type: select\n    proxies: [DIRECT, REJECT]\nrules: [\"MATCH,Test\"]\n"; }
+static QByteArray wireGuardFixture(const QByteArray& allowed = "10.42.0.11/16, fd42::/48") {
+    return "# example fixture\r\n[Interface]\r\nPrivateKey = " + QByteArray(32, 'a').toBase64() +
+        "\r\nAddress = 10.42.0.2/32, fd42::2/128\r\nDNS = 10.42.0.53\r\n[Peer]\r\nPublicKey = " +
+        QByteArray(32, 'b').toBase64() + "\r\nEndpoint = [2001:db8::3]:51820\r\nAllowedIPs = " + allowed + "\r\n";
+}
+void EngineTests::wireGuardConfigurationValidation() {
+    const auto content = wireGuardFixture();
+    QVERIFY(hasWireGuardHeader(content));
+    QVERIFY(!hasWireGuardHeader("proxies: [{name: WG, type: wireguard}]\n"));
+    WireGuardConfig config;
+    const auto parsed = parseWireGuard(content, config);
+    QVERIFY2(parsed.ok, qUtf8Printable(parsed.error));
+    QCOMPARE(config.privateKey, QByteArray(32, 'a'));
+    QCOMPARE(config.peers.front().endpointHost, QString("2001:db8::3"));
+    QCOMPARE(config.peers.front().allowed.front().text(), QString("10.42.0.0/16"));
+    QCOMPARE(parsed.data.value("peer_count").toInt(), 1);
+    const auto preview = QJsonDocument(parsed.data).toJson(QJsonDocument::Compact);
+    QVERIFY(!preview.contains(QByteArray(32,'a').toBase64()));
+    QVERIFY(!preview.contains(QByteArray(32,'b').toBase64()));
+    QVERIFY(!preview.contains("2001:db8::3"));
+    auto full = parseWireGuard(wireGuardFixture("0.0.0.0/1, 128.0.0.0/1, ::/0"), config);
+    QVERIFY2(full.ok, qUtf8Printable(full.error));
+    QVERIFY(full.data.value("full_v4").toBool());
+    QVERIFY(full.data.value("full_v6").toBool());
+    const auto bad = parseWireGuard(content + "[Peer]\nPostUp = private fixture\n", config);
+    QVERIFY(!bad.ok);
+    QVERIFY(!bad.error.contains("private fixture"));
+    const auto overlap = parseWireGuard(content + "[Peer]\nPublicKey = " + QByteArray(32,'c').toBase64() +
+        "\nEndpoint = node.example:51820\nAllowedIPs = 10.42.0.2/32\n", config);
+    QVERIFY(!overlap.ok);
+    QVERIFY(overlap.error.contains("重叠"));
+}
+void EngineTests::wireGuardImportAndEncryptedCandidate() {
+    QTemporaryDir data;
+    QVERIFY(data.isValid());
+    auto platform = std::make_shared<MemoryPlatform>();
+    ProfileStore legacy(data.path(), platform);
+    QVERIFY(legacy.load().result.ok);
+    Settings settings;
+    settings.startCore = false;
+    QVERIFY(legacy.save(settings, {}).ok);
+    QByteArray legacyBefore;
+    const auto legacyPath = data.filePath("state.dat");
+    QVERIFY(readFile(legacyPath, legacyBefore).ok);
+    const auto source = wireGuardFixture();
+    const auto mislabeled = data.filePath("Office.yaml");
+    QVERIFY(writeAtomic(mislabeled, source).ok);
+
+    AppController controller(data.path(), true, nullptr, platform);
+    QSignalSpy ready(&controller, &AppController::initialized);
+    QSignalSpy finished(&controller, &AppController::operationFinished);
+    controller.initialize();
+    QTRY_COMPARE(ready.size(), 1);
+    bool previewed = false;
+    controller.previewWireGuardText(source, [&](Result result) {
+        previewed = result.ok && result.data.value("kind").toString() == "wireguard";
+    });
+    QTRY_VERIFY(previewed);
+    QVERIFY(controller.wireGuardProfiles().isEmpty());
+    QVERIFY(!QFileInfo::exists(data.filePath("wireguard/catalog.dat")));
+
+    controller.importFile("Office", mislabeled);
+    QTRY_COMPARE(finished.size(),1);
+    QVERIFY(finished.last()[0].toBool());
+    QCOMPARE(controller.wireGuardProfiles().size(),1);
+    QVERIFY(controller.profiles().isEmpty());
+    QCOMPARE(controller.state().core,CoreState::Stopped);
+    QCOMPARE(platform->writes,0);
+    const auto original = controller.wireGuardProfiles().front();
+    WireGuardStore store(data.path(), platform);
+    WireGuardConfig loaded;
+    QVERIFY(store.readVersion(original.id, original.candidate, loaded).ok);
+    const auto snapshotPath = data.filePath("wireguard/versions/" + original.id + "_" + original.candidate + ".dat");
+    QByteArray encrypted;
+    QVERIFY(readFile(snapshotPath, encrypted).ok);
+    QVERIFY(encrypted.startsWith("sealed:"));
+    QVERIFY(!encrypted.contains(source));
+
+    platform->failSeal = true;
+    controller.importFile("Office", mislabeled, original.id);
+    QTRY_COMPARE(finished.size(),2);
+    QVERIFY(!finished.last()[0].toBool());
+    QCOMPARE(store.load().profiles.front().candidate, original.candidate);
+    QCOMPARE(controller.wireGuardProfiles().front().candidate, original.candidate);
+    platform->failSeal = false;
+    controller.importFile("Office", mislabeled, original.id);
+    QTRY_COMPARE(finished.size(),3);
+    QVERIFY(finished.last()[0].toBool());
+    const auto next = store.load().profiles.front();
+    QCOMPARE(next.id, original.id);
+    QVERIFY(next.candidate != original.candidate);
+    QVERIFY(next.active.isEmpty());
+
+    const auto catalogPath = data.filePath("wireguard/catalog.dat");
+    QVERIFY(writeAtomic(catalogPath, "broken fixture").ok);
+    controller.importFile("Uncommitted", mislabeled);
+    QTRY_COMPARE(finished.size(),4);
+    QVERIFY(!finished.last()[0].toBool());
+    QByteArray retained, legacyAfter;
+    QVERIFY(readFile(catalogPath, retained).ok);
+    QCOMPARE(retained,QByteArray("broken fixture"));
+    QVERIFY(readFile(legacyPath, legacyAfter).ok);
+    QCOMPARE(legacyAfter,legacyBefore);
+    QCOMPARE(platform->writes,0);
+}
+void EngineTests::wireGuardPreviewBindsInput() {
+    QTemporaryDir data;
+    QVERIFY(data.isValid());
+    const auto file = data.filePath("Office.conf");
+    QVERIFY(writeAtomic(file, wireGuardFixture()).ok);
+    auto platform = std::make_shared<MemoryPlatform>();
+    AppController controller(data.path(), true, nullptr, platform);
+    QSignalSpy ready(&controller, &AppController::initialized);
+    QSignalSpy finished(&controller, &AppController::operationFinished);
+    controller.initialize();
+    QTRY_COMPARE(ready.size(), 1);
+    QString token;
+    controller.previewWireGuardFile(file, [&](Result result) { token = result.data.value("preview_token").toString(); });
+    QTRY_VERIFY(!token.isEmpty());
+    QVERIFY(!QFileInfo::exists(data.filePath("wireguard/catalog.dat")));
+    QVERIFY(writeAtomic(file, wireGuardFixture("10.43.0.0/16")).ok);
+    controller.saveWireGuardPreview("Office", token);
+    QTRY_COMPARE(finished.size(), 1);
+    QVERIFY(finished.last()[0].toBool());
+    const auto& profiles = controller.wireGuardProfiles();
+    QCOMPARE(profiles.size(), 1);
+    QCOMPARE(profiles.front().summary.value("routes").toArray().first().toString(), QString("10.42.0.0/16"));
+    controller.saveWireGuardPreview("Duplicate", token);
+    QTRY_COMPARE(finished.size(), 2);
+    QVERIFY(!finished.last()[0].toBool());
+    token.clear();
+    controller.previewWireGuardFile(file, [&](Result result) { token = result.data.value("preview_token").toString(); });
+    QTRY_VERIFY(!token.isEmpty());
+    controller.cancelWireGuardPreview();
+    controller.saveWireGuardPreview("Cancelled", token);
+    QTRY_COMPARE(finished.size(), 3);
+    QVERIFY(!finished.last()[0].toBool());
+    QCOMPARE(profiles.size(), 1);
+    QCOMPARE(platform->writes, 0);
+}
+void EngineTests::wireGuardWindowsStorage() {
+#ifdef Q_OS_WIN
+    QTemporaryDir data;
+    QVERIFY(data.isValid());
+    WireGuardStore store(data.path(), createPlatformServices());
+    const auto source = wireGuardFixture();
+    const auto catalog = store.saveCandidate("Office", source);
+    QVERIFY2(catalog.result.ok, qUtf8Printable(catalog.result.error));
+    const auto profile = catalog.profiles.front();
+    QByteArray version;
+    const auto path = data.filePath("wireguard/versions/" + profile.id + "_" + profile.candidate + ".dat");
+    QVERIFY(readFile(path, version).ok);
+    QVERIFY(!version.contains("PrivateKey"));
+    QVERIFY(!version.contains(QByteArray(32,'a').toBase64()));
+    QVERIFY(!version.contains(source.toBase64()));
+    WireGuardConfig restored;
+    QVERIFY(store.readVersion(profile.id, profile.candidate, restored).ok);
+    QCOMPARE(restored.privateKey, QByteArray(32,'a'));
+#else
+    QSKIP("Windows account-encrypted storage is platform-specific");
+#endif
+}
+void EngineTests::wireGuardClientLeaseAndCleanup() {
+    auto platform=std::make_shared<MemoryPlatform>();
+    platform->wireGuardFixture=true;
+    const auto pipe="Mlash.Wg.Test."+newId();
+    QLocalServer service;
+    QVERIFY(service.listen(pipe));
+    WireGuardSession session(platform,nullptr,pipe);
+    const auto start=[&](Result& result,bool& done) {
+        session.start(wireGuardFixture(),{"2001:db8::3"},[&result,&done](Result value) { result=value; done=true; });
+    };
+    const QByteArray response="{\"protocol\":2,\"ok\":true,\"op\":\"wireguard-started\",\"routes\":[\"10.42.0.0/16\"],"
+        "\"observation\":{\"adapter_luid\":\"789\",\"peers\":[{\"peer_id\":1,\"rx_bytes\":\"9007199254740993\"}]}}\n";
+    Result result;
+    bool done=false;
+    start(result,done);
+    QTRY_VERIFY(service.hasPendingConnections());
+    auto* client=service.nextPendingConnection();
+    QTRY_VERIFY(client->canReadLine());
+    const auto request=QJsonDocument::fromJson(client->readLine()).object();
+    QCOMPARE(request.value("op").toString(),QString("wireguard-start"));
+    const auto size=request.value("size").toInt();
+    QVERIFY(size>0);
+    QTRY_VERIFY(client->bytesAvailable()>=size);
+    const auto payload=QJsonDocument::fromJson(client->read(size)).object();
+    QCOMPARE(payload.value("endpoints").toArray().first().toString(),QString("2001:db8::3"));
+    client->write(response);
+    QTRY_VERIFY(done);
+    QVERIFY(result.ok);
+    QVERIFY(session.active());
+    QCOMPARE(session.observation().value("observation").toObject().value("peers").toArray().first().toObject()
+        .value("rx_bytes").toString(),QString("9007199254740993"));
+    QSignalSpy lost(&session,&WireGuardSession::lost);
+    client->abort();
+    QTRY_COMPARE(lost.size(),1);
+    QVERIFY(!session.active());
+    QVERIFY(session.leasePending());
+    done=false;
+    session.stop([&](Result value) { result=value; done=true; });
+    QTRY_VERIFY(service.hasPendingConnections());
+    client=service.nextPendingConnection();
+    QTRY_VERIFY(client->canReadLine());
+    QCOMPARE(QJsonDocument::fromJson(client->readLine()).object().value("op").toString(),QString("wireguard-idle"));
+    client->write("{\"protocol\":2,\"ok\":true,\"op\":\"wireguard-idle\",\"cleanup_confirmed\":true}\n");
+    QTRY_VERIFY(done);
+    QVERIFY(result.ok);
+    QVERIFY(!session.leasePending());
+    done=false;
+    session.stop([&](Result value) { result=value; done=true; },true);
+    QTRY_VERIFY(service.hasPendingConnections());
+    client=service.nextPendingConnection();
+    QTRY_VERIFY(client->canReadLine());
+    QCOMPARE(QJsonDocument::fromJson(client->readLine()).object().value("op").toString(),QString("wireguard-idle"));
+    client->write("{\"protocol\":2,\"ok\":true,\"op\":\"wireguard-idle\",\"cleanup_confirmed\":false}\n");
+    QTRY_VERIFY(done);
+    QVERIFY(!result.ok);
+    QVERIFY(session.leasePending());
+}
 static QByteArray runnableYaml(int mixed, int api, bool crash = false) {
     return "mixed-port: " + QByteArray::number(mixed) + "\nexternal-controller: 127.0.0.1:" + QByteArray::number(api) + "\nsecret: " + QByteArray(64, 'a') + "\n" + minimalYaml() + (crash ? "fake-crash: true\n" : "");
 }

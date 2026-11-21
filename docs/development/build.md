@@ -64,6 +64,17 @@ python -m unittest discover -s tests -p test_release_tools.py
 
 文档检查覆盖相对链接与导航收录；隐私检查只输出文件与规则，不回显命中值。不能替代人工检查真实订阅、身份和使用记录。
 
+## WireGuard SDK 验证
+
+Windows 构建需要 Go 1.23.1 或更新版本。Go 模块依赖版本和校验和位于 `src/core/wireguard/go.mod` 与 `go.sum`。CMake 构建 x64 helper 并将其哈希编入服务。便携打包以固定摘要和签名复核官方 Wintun 0.14.1，再连同 helper 和许可文件一起装入。Windows x64 验证结果见[验证报告](../verification-report.md#双内核架构与首轮-sdk-验证)。
+
+```powershell
+./scripts/test.ps1 -WireGuardSdk
+./scripts/test.ps1 -WireGuardSdk -WithMihomo
+```
+
+第一条检查内存 TUN 上的 WireGuard 双 Peer 和私有设备控制帧。第二条同时启动 `cores/mihomo.exe`，先核对 `cores/manifest.json` 中的 SHA-256，再验证并存的本地代理和 Mihomo 内的 WireGuard 出站。测试需要本机回环 UDP／TCP，配置与数据使用临时目录。宿主系统路由、DNS、代理和服务不参与验证。Go SDK 测试为独立入口，Qt 构建及便携包仍使用既有流程。
+
 ## 便携包与源码
 
 ```powershell

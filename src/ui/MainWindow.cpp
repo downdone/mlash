@@ -73,6 +73,9 @@
 namespace mlash {
 using namespace WindowParts;
 namespace {
+constexpr int sidebarControlOffset=(design::ShadowrocketStyle::collapsedSidebarWidth-UiTheme::SidebarItemHeight)/2
+    - design::ShadowrocketStyle::geometry.sidebarInset;
+
 class SidebarNavigationDelegate final : public QStyledItemDelegate {
 public:
     using QStyledItemDelegate::QStyledItemDelegate;
@@ -80,6 +83,7 @@ public:
         const auto kind=navKindOfView(index.data(Qt::UserRole).toInt());
         const QColor tint(kind==NavKind::Config?UiTheme::Success:kind==NavKind::Data?UiTheme::Warning:UiTheme::Brand);
         const bool active=index.data(ActiveNavigationRole).toBool();
+        const bool collapsed=option.widget&&option.widget->property("collapsedSidebar").toBool();
         const bool focus=option.state.testFlag(QStyle::State_HasFocus) && option.widget &&
             option.widget->property("keyboardFocus").toBool();
         painter->save();
@@ -88,16 +92,19 @@ public:
         painter->setBrush(QColor(active?UiTheme::Selection:option.state.testFlag(QStyle::State_MouseOver)?UiTheme::Hover:UiTheme::Surface));
         const auto bounds=option.rect;
         painter->drawRoundedRect(QRectF(bounds).adjusted(.5,.5,-.5,-.5),8,8);
-        const QRect badge(bounds.left()+8,bounds.top()+(bounds.height()-20)/2,20,20);
+        const int badgeX=bounds.left()+(collapsed?(bounds.width()-20)/2:8);
+        const QRect badge(badgeX,bounds.top()+(bounds.height()-20)/2,20,20);
         painter->setPen(Qt::NoPen);
         painter->setBrush(tint);
         painter->drawEllipse(badge);
         UiIcons::icon(navigationGlyph(kind),UiTheme::OnPrimary).paint(painter,badge.adjusted(3,3,-3,-3));
-        auto font=UiTheme::rowCaptionFont(UiTheme::bodyFont());
-        font.setWeight(active?QFont::DemiBold:QFont::Normal);
-        painter->setFont(font);
-        painter->setPen(active?tint:QColor(UiTheme::Ink));
-        painter->drawText(bounds.adjusted(36,0,-8,0),Qt::AlignLeft | Qt::AlignVCenter,index.data().toString());
+        if (!collapsed) {
+            auto font=UiTheme::rowCaptionFont(UiTheme::bodyFont());
+            font.setWeight(active?QFont::DemiBold:QFont::Normal);
+            painter->setFont(font);
+            painter->setPen(active?tint:QColor(UiTheme::Ink));
+            painter->drawText(bounds.adjusted(36,0,-8,0),Qt::AlignLeft | Qt::AlignVCenter,index.data().toString());
+        }
         painter->restore();
     }
 };
@@ -111,38 +118,62 @@ void MainWindow::updateSidebar() {
     auto* sidebar=findChild<QWidget*>("sidebar");
     if (!sidebar || !settingsNav_) return;
     namespace style=design::ShadowrocketStyle;
-    const bool narrow=width()<style::narrowSidebarBreakpoint;
-    const int desired=sidebarCollapsed_?style::collapsedSidebarWidth:narrow?style::narrowSidebarWidth:UiTheme::SidebarWidth;
-    const int inset=sidebarCollapsed_?6:style::geometry.sidebarInset;
-    sidebar->layout()->setContentsMargins(inset,10,inset,10);
-    sidebar->setFixedWidth(desired);
-    auto* brand=sidebar->findChild<QLabel*>("sidebarBrand")->parentWidget();
-    brand->setVisible(!sidebarCollapsed_);
-    brand->findChild<QLabel*>("brandMark")->setVisible(!narrow);
-    navigation_->setVisible(!sidebarCollapsed_);
+    constexpr int resizeSpan=style::fullSidebarWindowWidth-style::minimumSidebarWindowWidth;
+    const int resizeProgress=qBound(0,width()-style::minimumSidebarWindowWidth,resizeSpan);
+    const int expandedWidth=style::narrowSidebarWidth
+        + (UiTheme::SidebarWidth-style::narrowSidebarWidth)*resizeProgress/resizeSpan;
+    const int desired=sidebarCollapsed_?style::collapsedSidebarWidth:expandedWidth;
+    const bool widthChanged=sidebar->minimumWidth()!=desired;
+    if (widthChanged) sidebar->setFixedWidth(desired);
+
+    auto* wordmark=sidebar->findChild<QLabel*>("sidebarBrand");
+    auto* brand=wordmark->parentWidget();
+    auto* mark=brand->findChild<QLabel*>("brandMark");
     auto* toggle=sidebar->findChild<QToolButton*>("toggleSidebar");
+    auto* header=toggle->parentWidget();
+    const int brandWidth=expandedWidth-2*style::geometry.sidebarInset-sidebarControlOffset-toggle->width()-header->layout()->spacing();
+    const auto wordmarkSize=wordmark->sizeHint();
+    const bool showWordmark=wordmarkSize.width()<=brandWidth;
+    wordmark->setVisible(showWordmark);
+    mark->setVisible(!showWordmark || wordmarkSize.width()+mark->width()+brand->layout()->spacing()<=brandWidth);
+    brand->setVisible(!sidebarCollapsed_);
+    header->setFixedHeight(qMax(toggle->height(),wordmarkSize.height()));
+
+    if (navigation_->property("collapsedSidebar").toBool()!=sidebarCollapsed_) {
+        navigation_->setProperty("collapsedSidebar",sidebarCollapsed_);
+        for (int i=0;i<navigation_->count();++i) {
+            auto* item=navigation_->item(i);
+            item->setToolTip(sidebarCollapsed_?item->text():QString());
+        }
+        navigation_->viewport()->update();
+    }
     const QString label=sidebarCollapsed_?QStringLiteral("展开导航"):QStringLiteral("收起导航");
     toggle->setAccessibleName(label);
     toggle->setToolTip(label);
+    if (widthChanged && centralWidget()) centralWidget()->layout()->activate();
 }
 MainWindow::MainWindow(AppController* controller, QWidget* parent) : QMainWindow(parent), controller_(controller), model_(this), filter_(this) {
     setAcceptDrops(true);
     // Use the same bundled Widgets style for the window and its dialogs on Windows.
     WidgetStyle::install();
     UiTheme::setPreferences(controller_->settings().appearance,controller_->settings().textScale);
-    setWindowTitle("Mlash"); setWindowIcon(TrayController::icon()); resize(1040, 720); setMinimumSize(840, 560);
+    setWindowTitle("Mlash"); setWindowIcon(TrayController::icon());
+    resize(design::ShadowrocketStyle::fullSidebarWindowWidth,720);
+    setMinimumSize(design::ShadowrocketStyle::minimumSidebarWindowWidth,560);
 
     auto* central = new QWidget(this); auto* layout = new QHBoxLayout(central);
     central->setObjectName("mainSurface"); central->setAttribute(Qt::WA_StyledBackground, true);
     layout->setContentsMargins(0,0,0,0); layout->setSpacing(0);
     auto* sidebar = new QWidget; sidebar->setObjectName("sidebar"); sidebar->setFixedWidth(UiTheme::SidebarWidth); sidebar->setAttribute(Qt::WA_StyledBackground); auto* sideLayout = new QVBoxLayout(sidebar); sideLayout->setContentsMargins(design::ShadowrocketStyle::geometry.sidebarInset,design::ShadowrocketStyle::geometry.sidebarInset,design::ShadowrocketStyle::geometry.sidebarInset,design::ShadowrocketStyle::geometry.sidebarInset); sideLayout->setSpacing(design::ShadowrocketStyle::geometry.sidebarGap);
     auto* brandHeader=new QWidget(sidebar); brandHeader->setObjectName("sidebarBrandHeader");
-    auto* brandLayout=new QHBoxLayout(brandHeader); brandLayout->setContentsMargins(0,0,0,0); brandLayout->setSpacing(6);
-    brandLayout->addWidget(makeBrandSignature(brandHeader,28,"sidebarBrand"),1);
+    auto* brandLayout=new QHBoxLayout(brandHeader); brandLayout->setContentsMargins(sidebarControlOffset,0,0,0); brandLayout->setSpacing(6);
     auto* toggleSidebar=new QToolButton(brandHeader);
     toggleSidebar->setObjectName("toggleSidebar"); toggleSidebar->setProperty("quiet",true);
     toggleSidebar->setFixedSize(32,32); toggleSidebar->setIconSize(QSize(17,17));
-    brandLayout->addWidget(toggleSidebar);
+    toggleSidebar->setFocusPolicy(Qt::StrongFocus);
+    brandLayout->addWidget(toggleSidebar,0,Qt::AlignLeft | Qt::AlignVCenter);
+    brandLayout->addWidget(makeBrandSignature(brandHeader,28,"sidebarBrand"),1);
+    brandLayout->addStretch(0);
     sideLayout->addWidget(brandHeader); sideLayout->addSpacing(6);
     navigation_ = new QListWidget(sidebar); navigation_->setObjectName("navigation"); navigation_->addItems({"首页", "配置", "数据"});
     navigation_->setItemDelegate(new SidebarNavigationDelegate(navigation_));
@@ -175,13 +206,16 @@ MainWindow::MainWindow(AppController* controller, QWidget* parent) : QMainWindow
     settingsNav_=new QToolButton(sidebar); settingsNav_->setObjectName("sidebarSettings"); settingsNav_->setText("设置");
     settingsNav_->setIconSize(QSize(18,18)); settingsNav_->setToolButtonStyle(Qt::ToolButtonIconOnly); settingsNav_->setCheckable(true);
     settingsNav_->setFixedSize(UiTheme::SidebarItemHeight,UiTheme::SidebarItemHeight);
+    settingsNav_->setFocusPolicy(Qt::StrongFocus);
     settingsNav_->setAccessibleName("设置"); settingsNav_->setCursor(Qt::PointingHandCursor);
     settingsNav_->setToolTip("设置");
-    sideLayout->addWidget(settingsNav_,0,Qt::AlignLeft);
+    auto* settingsLayout=new QHBoxLayout;
+    settingsLayout->setContentsMargins(sidebarControlOffset,0,0,0);
+    settingsLayout->addWidget(settingsNav_,0,Qt::AlignLeft);
+    sideLayout->addLayout(settingsLayout);
     connect(toggleSidebar,&QToolButton::clicked,this,[this] {
         sidebarCollapsed_=!sidebarCollapsed_;
         updateSidebar();
-        if (!sidebarCollapsed_ && navigation_->currentRow()>=0) navigation_->setFocus();
     });
     connect(settingsNav_,&QToolButton::clicked,this,[this] { navigate(Route{ViewIds::Settings}); });
     // K1/K6：页面栈只有五个视图，顺序与 ViewIds 一致；数据页内部再分四个页签。
@@ -244,10 +278,9 @@ MainWindow::MainWindow(AppController* controller, QWidget* parent) : QMainWindow
     contentStack_=new QStackedWidget(content); contentStack_->setObjectName("contentHost"); contentStack_->addWidget(pages_); contentLayout->addWidget(contentStack_,1);
     layout->addWidget(content, 1); setCentralWidget(central);
     TopbarInfo topbarInfo; topbarInfo.title=topbarTitle_; topbarInfo.subtitle=topbarSubtitle_; topbarInfo.statusText=topbarStatusText_; topbarInfo.dot=topbarDot_; registerTopbar(this,topbarInfo);
-    operationStatus_=new QStatusBar(this); operationStatus_->setObjectName("operationStatusBar"); operationStatus_->setSizeGripEnabled(false); contentLayout->addWidget(operationStatus_);
+    operationStatus_=new QStatusBar(this); operationStatus_->setObjectName("operationStatusBar"); operationStatus_->setSizeGripEnabled(false); operationStatus_->setContentsMargins(0,0,12,0); contentLayout->addWidget(operationStatus_);
     // 两段并存（P4.1）：最近操作 = 跨页结果，当前告警 = 仍然成立的系统问题。两者互不覆盖。
     message_=new ElidedLabel("正在初始化"); message_->setObjectName("operationMessage"); message_->setAccessibleName("操作状态"); message_->setSizePolicy(QSizePolicy::Ignored,QSizePolicy::Expanding); operationStatus_->addWidget(message_,1);
-    operationAlarm_=new ElidedLabel; operationAlarm_->setObjectName("operationAlarm"); operationAlarm_->setAccessibleName("当前告警"); operationAlarm_->setSizePolicy(QSizePolicy::Ignored,QSizePolicy::Preferred); operationAlarm_->setProperty("state","error"); operationAlarm_->hide(); operationStatus_->addPermanentWidget(operationAlarm_,1);
     auto* details=new QToolButton; details->setObjectName("statusDetails"); details->setText("详情"); details->setToolTip("查看及复制完整状态信息"); operationStatus_->addPermanentWidget(details);
     connect(details,&QToolButton::clicked,this,[this] {
         const auto text=message_->toolTip().isEmpty()?message_->text():message_->toolTip();
@@ -257,7 +290,46 @@ MainWindow::MainWindow(AppController* controller, QWidget* parent) : QMainWindow
         auto* box=new QVBoxLayout(task); auto* content=new QPlainTextEdit(text); content->setReadOnly(true); box->addWidget(content,1);
         auto* copy=new QPushButton("复制消息"); box->addWidget(copy,0,Qt::AlignRight); connect(copy,&QPushButton::clicked,task,[text] { QApplication::clipboard()->setText(text); }); presentTask(task,"operation-details");
     });
-    auto* resolve=new QToolButton; resolve->setObjectName("statusResolve"); resolve->setText("处理告警"); resolve->setToolTip("处理窗口底部的应用告警"); resolve->setPopupMode(QToolButton::InstantPopup); auto* resolveMenu=new QMenu(resolve); resolve->setMenu(resolveMenu); resolveMenu->addAction("查看日志",this,[this] { navigate(Route{ViewIds::Data, kNoCategory, HomeAnchor::Control, int(ViewIds::DataTab::Logs)}); }); resolveMenu->addAction("订阅管理",this,[this] { navigate(Route{ViewIds::Profiles}); }); resolveMenu->addAction("TUN 与服务…",this,[this] { showTool("tun",{},[this] { return new TunDialog(controller_,this); }); }); resolveMenu->addAction("刷新运行状态",controller_,&AppController::refresh); operationStatus_->addPermanentWidget(resolve); resolve->hide();
+    statusAlarm_=new QFrame(operationStatus_);
+    statusAlarm_->setObjectName("statusAlarm");
+    auto* alarmLayout=new QHBoxLayout(statusAlarm_);
+    alarmLayout->setContentsMargins(8,0,2,0);
+    alarmLayout->setSpacing(5);
+    statusAlarmMark_=new QLabel(statusAlarm_);
+    statusAlarmMark_->setFixedSize(12,12);
+    alarmLayout->addWidget(statusAlarmMark_,0,Qt::AlignVCenter);
+    operationAlarm_=new QLabel(statusAlarm_);
+    operationAlarm_->setObjectName("operationAlarm");
+    alarmLayout->addWidget(operationAlarm_);
+
+    statusAlarmDetails_=new QToolButton(statusAlarm_);
+    statusAlarmDetails_->setObjectName("statusAlarmDetails");
+    statusAlarmDetails_->setText("详情");
+    statusAlarmDetails_->setAccessibleName("查看只读保护详情");
+    statusAlarmDetails_->setToolTip("查看原因与数据目录");
+    statusResolve_=new QToolButton(statusAlarm_);
+    statusResolve_->setObjectName("statusResolve");
+    statusResolve_->setText("处理");
+    statusResolve_->setAccessibleName("处理告警");
+    statusResolve_->setPopupMode(QToolButton::InstantPopup);
+    for (auto* button : {statusAlarmDetails_,statusResolve_}) {
+        button->setProperty("statusAction",true);
+        button->setToolButtonStyle(Qt::ToolButtonTextBesideIcon);
+        button->setLayoutDirection(Qt::RightToLeft);
+        button->setIconSize(QSize(12,12));
+        button->setFocusPolicy(Qt::StrongFocus);
+        alarmLayout->addWidget(button,0,Qt::AlignVCenter);
+    }
+    connect(statusAlarmDetails_,&QToolButton::clicked,this,&MainWindow::showStatusAlarm);
+    auto* resolveMenu=new QMenu(statusResolve_);
+    statusResolve_->setMenu(resolveMenu);
+    resolveMenu->addAction("查看告警详情…",this,&MainWindow::showStatusAlarm);
+    resolveMenu->addAction("查看日志",this,[this] { navigate(Route{ViewIds::Data,kNoCategory,HomeAnchor::Control,int(ViewIds::DataTab::Logs)}); });
+    resolveMenu->addAction("订阅管理",this,[this] { navigate(Route{ViewIds::Profiles}); });
+    resolveMenu->addAction("TUN 与服务…",this,[this] { showTool("tun",{},[this] { return new TunDialog(controller_,this); }); });
+    resolveMenu->addAction("刷新运行状态",controller_,&AppController::refresh);
+    operationStatus_->addPermanentWidget(statusAlarm_);
+    statusAlarm_->hide();
     connect(&refreshTimer_, &QTimer::timeout, this, [this] { if (!controller_->state().busy) controller_->refresh(); });
     // 样式重绘可能重置 QListWidget 的 currentRow。路由只接受明确的点击或键盘激活。
     auto activateNavigation=[this](QListWidgetItem* item) {
@@ -268,6 +340,7 @@ MainWindow::MainWindow(AppController* controller, QWidget* parent) : QMainWindow
     syncSectionNavigation(route_);
     updateSidebar();
     connect(controller_, &AppController::stateChanged, this, &MainWindow::updateState);
+    connect(controller_, &AppController::wireGuardChanged, this, &MainWindow::updateState);
     connect(controller_, &AppController::stateChanged, this, &MainWindow::applyWindowChrome);
     connect(controller_,&AppController::stateChanged,this,[this] { UiTheme::setPreferences(controller_->settings().appearance,controller_->settings().textScale); });
     connect(controller_, &AppController::profilesChanged, this, &MainWindow::updateProfiles);
@@ -293,13 +366,15 @@ MainWindow::MainWindow(AppController* controller, QWidget* parent) : QMainWindow
     connect(controller_, &AppController::operationStarted, this, [this](const QString& text, OperationId id) {
         if (id != OperationId::Unspecified) { updateState(); return; }
         recentFeedback_=false; feedbackError_.clear(); noticeOperation_=OperationId::Unspecified; feedbackTimer_.stop();
-        message_->setText(text); message_->setToolTip(text); findChild<QToolButton*>("statusResolve")->hide(); findChild<QToolButton*>("statusDetails")->show();
+        message_->setText(text); message_->setToolTip(text);
+        refreshStatusSegments();
+        findChild<QToolButton*>("statusDetails")->show();
     });
     connect(controller_, &AppController::operationFinished, this, [this](bool ok, const QString& text, OperationId id) {
         if (id != OperationId::Unspecified) { routeOperationFeedback(ok, text, id); return; }
         message_->setText(statusNoticeText(ok, text)); message_->setToolTip(text);
-        findChild<QToolButton*>("statusResolve")->setVisible(!ok);
         feedbackTimer_.stop(); recentFeedback_=ok; feedbackError_=ok?QString():text; noticeOperation_=id; if (ok) feedbackTimer_.start();
+        refreshStatusSegments();
         updateActions();
     });
     // 测速进度只落在状态栏：节点区不再有底部按钮条（H3），单独一行进度会随列表变化跳位。
@@ -329,7 +404,11 @@ MainWindow::MainWindow(AppController* controller, QWidget* parent) : QMainWindow
 }
 void MainWindow::applyAppearance() {
     const int statusHeight=qMax(30,QFontMetrics(qApp->font()).height()+10); operationStatus_->setFixedHeight(statusHeight); if (auto* details=findChild<QToolButton*>("statusDetails")) details->setFixedHeight(statusHeight-8);
+    statusAlarm_->setFixedHeight(statusHeight-6);
+    statusAlarmDetails_->setIcon(UiIcons::icon(UiIcons::Glyph::ChevronRight,UiTheme::Secondary));
+    statusResolve_->setIcon(UiIcons::icon(UiIcons::Glyph::ChevronDown,UiTheme::Secondary));
     if (auto* toggle=findChild<QToolButton*>("toggleSidebar")) toggle->setIcon(UiIcons::icon(UiIcons::Glyph::Sidebar));
+    updateSidebar();
     navigation_->viewport()->update();
     settingsNav_->setIcon(UiIcons::icon(UiIcons::Glyph::Settings,settingsNav_->isChecked()?UiTheme::Brand:UiTheme::Secondary));
     using G=UiIcons::Glyph;

@@ -302,7 +302,7 @@ void MainWindow::returnFromWorkspace() {
         const QPointer<QListView> list = profiles_;
         const int position = profileListReturnScroll_;
         QTimer::singleShot(0, this, [list, position] {
-            if (!list) return;
+            if (!list||!list->isVisible()) return;
             list->verticalScrollBar()->setValue(position);
             list->setFocus(Qt::OtherFocusReason);
         });

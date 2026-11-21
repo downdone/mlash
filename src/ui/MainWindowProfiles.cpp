@@ -50,9 +50,9 @@ protected:
     }
 private:
     void updatePrompt() {
-        const auto full=QStringLiteral("粘贴订阅 URL，或拖拽 / 选择 YAML 文件");
+        const auto full=QStringLiteral("粘贴订阅 URL，或拖拽 / 选择 YAML、CONF");
         setPlaceholderText(width()>=fontMetrics().horizontalAdvance(full)+36
-            ? full : QStringLiteral("订阅 URL 或 YAML 文件"));
+            ? full : QStringLiteral("订阅 URL 或配置文件"));
     }
 };
 
@@ -113,7 +113,7 @@ QWidget* MainWindow::profilesPage() {
     fieldRow->addWidget(quickImport_,1);
     auto* browse = new QToolButton(field);
     browse->setObjectName("profileBrowseImport");
-    browse->setToolTip("选择 YAML 文件");
+    browse->setToolTip("选择 YAML 或 WireGuard CONF 文件");
     browse->setAccessibleName(browse->toolTip());
     browse->setIconSize(QSize(16,16));
     browse->setFocusPolicy(Qt::StrongFocus);
@@ -155,7 +155,7 @@ QWidget* MainWindow::profilesPage() {
     layout->addSpacing(8);
 
     connect(browse,&QToolButton::clicked,this,[this] {
-        const auto path=QFileDialog::getOpenFileName(this,"选择配置文件",{},"YAML (*.yaml *.yml)");
+        const auto path=QFileDialog::getOpenFileName(this,"选择配置文件",{},"配置文件 (*.yaml *.yml *.conf);;所有文件 (*)");
         if (!path.isEmpty()) quickImport_->setText(QDir::toNativeSeparators(path));
     });
     connect(submit,&QPushButton::clicked,this,&MainWindow::submitQuickImport);
@@ -180,12 +180,14 @@ QWidget* MainWindow::profilesPage() {
             quickImport_->setEchoMode(sensitive?QLineEdit::Password:QLineEdit::Normal);
         syncImport();
     });
-    connect(controller_,&AppController::operationFinished,quick,[this,syncImport](bool ok,const QString&,OperationId operation) {
+    connect(controller_,&AppController::operationFinished,quick,[this,syncImport](bool ok,const QString& notice,OperationId operation) {
         if (!quickImportPending_ || operation!=OperationId::ProfileImport) return;
         quickImportPending_=false;
         if (ok) {
             quickImport_->clear();
-            if (!controller_->profiles().isEmpty()) selectProfile(controller_->profiles().back().id);
+            if (notice.startsWith("WireGuard")&&!controller_->wireGuardProfiles().isEmpty())
+                selectProfile(controller_->wireGuardProfiles().back().id);
+            else if (!controller_->profiles().isEmpty()) selectProfile(controller_->profiles().back().id);
         }
         syncImport();
     });
@@ -257,6 +259,9 @@ QWidget* MainWindow::profilesPage() {
     layout->addWidget(profiles_, 1);
     emptyState(profiles_, profileSetupCopy(false).title, true);
     wireProfileList(profiles_);
+    connect(controller_,&AppController::wireGuardChanged,profiles_,[this] {
+        profileRowsModel_->setWireGuardState(controller_->runningWireGuardProfile());
+    });
     connect(UiTheme::notifier(),&UiTheme::AppearanceNotifier::changed,this,&MainWindow::updateProfileGrid);
     updateProfileGrid();
     return page;
@@ -353,6 +358,41 @@ void MainWindow::openProfileSetup() {
 }
 void MainWindow::showProfileMenu(const QString& id, const QPoint& globalPoint) {
     if (id.isEmpty()) return;
+    const auto& tunnels=controller_->wireGuardProfiles();
+    const auto configuration=std::find_if(tunnels.begin(),tunnels.end(),[&](const auto& item) { return item.id==id; });
+    if (configuration!=tunnels.end()) {
+        auto* menu=new QMenu(this);
+        auto* detail=menu->addAction("查看隧道");
+        auto* replace=menu->addAction("替换配置文件…");
+        auto* rename=menu->addAction("重命名…");
+        auto* remove=menu->addAction("删除配置…");
+        const auto& state=controller_->state();
+        const bool writable=!state.busy&&!state.readOnly;
+        replace->setEnabled(writable); rename->setEnabled(writable);
+        remove->setEnabled(writable&&!controller_->wireGuardObservation().value("active").toBool()&&
+            !controller_->wireGuardObservation().value("cleanup_pending").toBool());
+        connect(detail,&QAction::triggered,this,[this,id] { showWireGuardProfile(id); });
+        connect(rename,&QAction::triggered,this,[this,id,name=configuration->name] {
+            bool ok=false;
+            const auto next=QInputDialog::getText(this,"重命名 WireGuard","配置名称",QLineEdit::Normal,name,&ok);
+            if (ok&&!next.trimmed().isEmpty()) controller_->renameProfile(id,next);
+        });
+        connect(remove,&QAction::triggered,this,[this,id,name=configuration->name] {
+            if (QMessageBox::question(this,"删除 WireGuard 配置","删除配置「"+name+"」以及本地版本？",
+                QMessageBox::Yes|QMessageBox::No,QMessageBox::No)==QMessageBox::Yes) controller_->deleteProfile(id);
+        });
+        connect(replace,&QAction::triggered,this,[this,id] {
+            const auto& catalog=controller_->wireGuardProfiles();
+            const auto profile=std::find_if(catalog.begin(),catalog.end(),[&](const auto& p) { return p.id==id; });
+            if (profile==catalog.end()) return;
+            const auto expected=profile->candidate;
+            const auto path=QFileDialog::getOpenFileName(this,"选择 WireGuard 配置",{},"WireGuard (*.conf);;所有文件 (*)");
+            if (!path.isEmpty()) reviewWireGuardImport(path,{},nullptr,id,expected);
+        });
+        connect(menu,&QMenu::aboutToHide,menu,&QObject::deleteLater);
+        WidgetStyle::popupMenu(menu,globalPoint);
+        return;
+    }
     bool remote = false;
     bool pending = false;
     for (const auto& profile : controller_->profiles()) if (profile.id == id) {
@@ -505,6 +545,11 @@ void MainWindow::wireProfileList(QListView* list) {
     }
 }
 void MainWindow::openProfileTask(const QString& id, const QString& task) {
+    const auto& tunnels=controller_->wireGuardProfiles();
+    if (std::any_of(tunnels.begin(),tunnels.end(),[&](const auto& item) { return item.id==id; })) {
+        showWireGuardProfile(id,task=="candidate"?2:0);
+        return;
+    }
     Profile profile;
     bool found = false;
     for (const auto& item : controller_->profiles()) if (item.id == id) { profile = item; found = true; break; }
@@ -593,12 +638,13 @@ void MainWindow::updateProfiles() {
     profilesCombo_->setCurrentIndex(restore >= 0 ? restore : (profilesCombo_->count() ? 0 : -1));
     const int scrollPosition = profiles_ ? profiles_->verticalScrollBar()->value() : 0;
     if (profileRowsModel_) {
-        profileRowsModel_->setProfiles(controller_->profiles());
+        profileRowsModel_->setProfiles(controller_->profiles(),controller_->wireGuardProfiles());
         profileRowsModel_->setState(controller_->state().activeProfile, controller_->state().ready);
+        profileRowsModel_->setWireGuardState(controller_->runningWireGuardProfile());
         updateProfileGrid();
     }
     if (auto* count=findChild<QLabel*>("profileCollectionCount"))
-        count->setText(QString("%1 个").arg(controller_->profiles().size()));
+        count->setText(QString("%1 个").arg(controller_->profiles().size()+controller_->wireGuardProfiles().size()));
     if (!selected.isEmpty()) selectProfile(selected);
     updateProfileBatchAction();
     if (profiles_) {
@@ -611,8 +657,10 @@ void MainWindow::updateProfiles() {
         });
     }
     if (!profileDetailId_.isEmpty()) {
-        bool found = false;
-        for (const auto& profile : controller_->profiles()) if (profile.id == profileDetailId_) found = true;
+        const auto matches=[this](const auto& profile) { return profile.id==profileDetailId_; };
+        const auto& mihomo=controller_->profiles();
+        const auto& wireGuard=controller_->wireGuardProfiles();
+        const bool found=std::any_of(mihomo.cbegin(),mihomo.cend(),matches)||std::any_of(wireGuard.cbegin(),wireGuard.cend(),matches);
         if (!found) { profileDetailId_.clear(); returnFromWorkspace(); }
     }    // 行内「当前值」（V3）：只更新已有 settingValue 的行；控件本身就显示值的行不建这个标签。
     {
@@ -653,7 +701,7 @@ ImportSource classifyImport(const QString& input) {
     const QUrl url(text);
     if (ImportDialog::acceptsUrl(url)) return {text,true};
     const auto path=url.isLocalFile()?url.toLocalFile():text;
-    if (QFileInfo(path).isAbsolute() && QStringList{"yaml","yml"}.contains(QFileInfo(path).suffix().toLower()))
+    if (QFileInfo(path).isAbsolute() && QStringList{"yaml","yml","conf"}.contains(QFileInfo(path).suffix().toLower()))
         return {path,false};
     return {};
 }
@@ -673,13 +721,16 @@ void MainWindow::submitQuickImport() {
     const auto source=classifyImport(quickImport_->text());
     if (source.value.isEmpty()) {
         setPageFeedback(ViewIds::Profiles,isNodeImport(quickImport_->text().trimmed())?
-            "节点链接请从「高级新增」检查后导入":"请输入 HTTP/HTTPS 订阅地址或本地 YAML 文件的完整路径");
+            "节点链接请从「高级新增」检查后导入":"请输入订阅地址或本地配置文件的完整路径");
+        return;
+    }
+    if (!source.remote) {
+        reviewWireGuardImport(source.value);
         return;
     }
     quickImportPending_=true;
     setPageFeedback(ViewIds::Profiles,{});
-    if (source.remote) controller_->importUrl({},QUrl(source.value));
-    else controller_->importFile({},source.value);
+    controller_->importUrl({},QUrl(source.value));
 }
 
 void MainWindow::importPayload(const QString& input) {
@@ -696,7 +747,7 @@ void MainWindow::importPayload(const QString& input) {
     if (!quickImport_->isVisible()) return;
     const auto source=classifyImport(text);
     if (source.value.isEmpty()) {
-        setPageFeedback(ViewIds::Profiles,"仅支持一个 HTTP/HTTPS 订阅或本地 YAML 文件");
+        setPageFeedback(ViewIds::Profiles,"仅支持一个 HTTP/HTTPS 订阅或本地 YAML／CONF 文件");
         return;
     }
     quickImport_->setText(source.remote?source.value:QDir::toNativeSeparators(source.value));
@@ -816,9 +867,15 @@ void MainWindow::showProfileBatch() {
 
 void MainWindow::presentImport(ImportDialog* dialog) {
     QSet<QString> before; for (const auto& profile:controller_->profiles()) before.insert(profile.id);
+    for (const auto& profile:controller_->wireGuardProfiles()) before.insert(profile.id);
     dialog->setAttribute(Qt::WA_DeleteOnClose); dialog->bindController(controller_);
     // 导入成功后在统一卡片网格中定位新对象，不以来源类型改变落点。
-    connect(dialog,&QDialog::accepted,this,[this,before] { navigate(Route{ViewIds::Profiles}); if (route_.view!=ViewIds::Profiles) return; for (const auto& profile:controller_->profiles()) if (!before.contains(profile.id)) { selectProfile(profile.id); break; } });
+    connect(dialog,&QDialog::accepted,this,[this,before] {
+        navigate(Route{ViewIds::Profiles});
+        if (route_.view!=ViewIds::Profiles) return;
+        for (const auto& profile:controller_->profiles()) if (!before.contains(profile.id)) { selectProfile(profile.id); return; }
+        for (const auto& profile:controller_->wireGuardProfiles()) if (!before.contains(profile.id)) { selectProfile(profile.id); return; }
+    });
     navigate(Route{ViewIds::Profiles});
     if (route_.view!=ViewIds::Profiles) { dialog->deleteLater(); return; }
     profileImport_=dialog;
@@ -833,6 +890,10 @@ void MainWindow::openAdvancedImport() {
     if (profileImport_) { profileImport_->raise(); profileImport_->activateWindow(); return; }
     auto* dialog=new ImportDialog(this);
     dialog->setWindowTitle("高级新增配置 · Mlash");
+    auto* wireGuard=new QPushButton("粘贴 WireGuard 配置…",dialog);
+    wireGuard->setObjectName("pasteWireGuardConfig");
+    dialog->layout()->addWidget(wireGuard);
+    connect(wireGuard,&QPushButton::clicked,this,[this,dialog] { dialog->close(); pasteWireGuard(); });
     const auto text=quickImport_->text().trimmed();
     const auto source=classifyImport(text);
     if (!source.value.isEmpty()) dialog->setPrefill(source.value,source.remote);

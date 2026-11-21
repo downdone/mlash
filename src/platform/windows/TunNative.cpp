@@ -48,6 +48,7 @@ Result info(bool start) {
     }
     if (result.ok&&!QueryServiceStatusEx(service,SC_STATUS_PROCESS_INFO,reinterpret_cast<BYTE*>(&status),sizeof(status),&bytes)) result=error("读取 TUN 服务状态失败");
     if (result.ok) { result.data={{"installed",true},{"running",status.dwCurrentState==SERVICE_RUNNING},{"pid",double(status.dwProcessId)},{"protocol",1},{"recovery_marker",QFileInfo::exists(installRoot()+"/session.json")}}; QByteArray record; if (readFile(installRoot()+"/owner.json",record,4096).ok) { const auto owner=QJsonDocument::fromJson(record).object(); result.data["version"]=owner.value("version").toString("未知（旧版安装）"); result.data["advanced_options"]=owner.value("advanced_options").toBool(); } result.data["core_matches"]=false; QFile file(installRoot()+"/mihomo.exe"); if (file.open(QIODevice::ReadOnly)&&file.size()<=128*1024*1024) { QCryptographicHash hash(QCryptographicHash::Sha256); if (hash.addData(&file)) result.data["core_matches"]=hash.result().toHex()==TunCoreSha256; } }
+    if (result.ok) { QByteArray bytes; if (readFile(installRoot()+"/owner.json",bytes,4096).ok) result.data["wireguard"]=QJsonDocument::fromJson(bytes).object().value("wireguard").toBool(); }
     CloseServiceHandle(service); CloseServiceHandle(manager); return result;
 }
 Result verifyServer(qintptr handle) {

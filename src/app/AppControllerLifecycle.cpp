@@ -84,6 +84,14 @@ void AppController::requestExit() {
         if (delayInFlight_ > 0) cancelTests();
         return;
     }
+    if (wireGuard_.leasePending()) {
+        if (!begin("正在确认 WireGuard 路由清理",false,true)) return;
+        wireGuard_.stop([this](Result clean) {
+            finish(clean);
+            if (clean.ok) QTimer::singleShot(0,this,&AppController::requestExit);
+        });
+        return;
+    }
     cancelTrayTests(); websiteTests_.clear(); state_.exiting = true; state_.busy = true; ++state_.generation; health_.stop(); api_.cancelAll(); downloader_->cancel();
     maintenance_.setEnabled(false); providerTimer_.stop();
     publish(); emit operationStarted("正在恢复代理并退出");

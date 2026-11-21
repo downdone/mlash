@@ -122,6 +122,7 @@ TrayController::TrayController(AppController* controller, QObject* parent)
     });
     connect(&menu_, &QMenu::aboutToShow, this, &TrayController::rebuildMenu);
     connect(controller_, &AppController::stateChanged, this, &TrayController::updateState);
+    connect(controller_, &AppController::wireGuardChanged, this, &TrayController::updateState);
     connect(controller_, &AppController::operationFinished, this, [this](bool ok, const QString& text, OperationId id) {
         // 只用气泡承载「没有页面可以显示」的失败（P4.1）：页面级结果已经落在所属页面，
         // 窗口可见时再弹一次就是同一句话出现两遍。
@@ -148,7 +149,11 @@ QString TrayController::activeProfileName() const {
 void TrayController::updateState() {
     const auto& state = controller_->state(); const auto key = appearance(state);
     if (key != visualKey_) { visualKey_ = key; tray_.setIcon(statusIcon(state)); }
-    const auto tooltip = statusTooltip(state, controller_->settings(), activeProfileName()); if (tray_.toolTip() != tooltip) tray_.setToolTip(tooltip);
+    auto tooltip = statusTooltip(state, controller_->settings(), activeProfileName());
+    const auto tunnel=controller_->wireGuardObservation();
+    if (tunnel.value("cleanup_pending").toBool()) tooltip+="\nWireGuard · 待清理";
+    else if (tunnel.value("active").toBool()) tooltip+="\nWireGuard · 路由已生效";
+    if (tray_.toolTip() != tooltip) tray_.setToolTip(tooltip);
     if (!state.ready || state.busy || state.exiting) { groupDwell_.stop(); controller_->cancelTrayTests(); }
     updateGroupMenu();
 }
@@ -187,9 +192,13 @@ void TrayController::rebuildMenu() {
     connect(menu_.addAction("显示主窗口"), &QAction::triggered, this, &TrayController::showWindow);
     menu_.addSeparator();
 
+    const auto tunnel=controller_->wireGuardObservation();
+    const auto phase=tunnel.value("phase").toString();
+    const bool wireGuardBusy=!phase.isEmpty();
+    const bool ownsRoutes=tunnel.value("active").toBool()||tunnel.value("cleanup_pending").toBool()||wireGuardBusy;
     const bool takingOver = state.proxy == ProxyState::Owned || state.tunObserved;
     auto* master = menu_.addAction(takingOver ? "关闭代理" : "开启代理"); master->setObjectName("trayProxyMaster");
-    master->setEnabled(enabled && !state.activeProfile.isEmpty());
+    master->setEnabled(enabled && !ownsRoutes && !state.activeProfile.isEmpty());
     connect(master, &QAction::triggered, this, [this] {
         const auto& s = controller_->state(); const bool on = s.proxy == ProxyState::Owned || s.tunObserved;
         if (!on && s.proxy == ProxyState::External) {
@@ -198,7 +207,7 @@ void TrayController::rebuildMenu() {
         }
         controller_->setProxyEnabled(!on);
     });
-    auto* proxy = menu_.addAction("系统代理"); proxy->setCheckable(true); proxy->setChecked(state.proxy == ProxyState::Owned); proxy->setEnabled(enabled && (state.ready || state.proxy == ProxyState::Owned));
+    auto* proxy = menu_.addAction("系统代理"); proxy->setCheckable(true); proxy->setChecked(state.proxy == ProxyState::Owned); proxy->setEnabled(enabled && !ownsRoutes && (state.ready || state.proxy == ProxyState::Owned));
     connect(proxy, &QAction::triggered, this, [this](bool checked) {
         bool allow = false;
         if (checked && controller_->state().proxy == ProxyState::External) {
@@ -207,8 +216,26 @@ void TrayController::rebuildMenu() {
         }
         controller_->setSystemProxy(checked, allow);
     });
-    auto* tun=menu_.addAction("TUN 虚拟网卡"); tun->setObjectName("trayTunSwitch"); tun->setCheckable(true); tun->setChecked(state.tunObserved); tun->setEnabled(enabled&&!state.readOnly&&!state.activeProfile.isEmpty());
+    auto* tun=menu_.addAction("TUN 虚拟网卡"); tun->setObjectName("trayTunSwitch"); tun->setCheckable(true); tun->setChecked(state.tunObserved); tun->setEnabled(enabled&&!ownsRoutes&&!state.readOnly&&!state.activeProfile.isEmpty());
     connect(tun,&QAction::triggered,this,[this](bool checked) { controller_->setTunEnabled(checked); });
+    if (wireGuardBusy) {
+        menu_.addAction(phase=="connecting"?"WireGuard 正在连接":"WireGuard 正在清理")->setEnabled(false);
+    } else if (ownsRoutes) {
+        auto* disconnect=menu_.addAction(tunnel.value("active").toBool()?"断开 WireGuard":"重试 WireGuard 清理");
+        disconnect->setObjectName("trayWireGuardAction");
+        disconnect->setEnabled(enabled);
+        connect(disconnect,&QAction::triggered,this,[this] { controller_->disconnectWireGuard(); });
+    } else if (!controller_->wireGuardProfiles().isEmpty()) {
+        const auto block=tunnel.value("connect_block").toString();
+        auto* available=menu_.addMenu(block.isEmpty()?"连接 WireGuard":"WireGuard · "+block);
+        available->setObjectName("trayWireGuardProfiles");
+        available->setEnabled(enabled&&!state.readOnly&&block.isEmpty());
+        for (const auto& item:controller_->wireGuardProfiles()) {
+            auto* entry=available->addAction(item.name);
+            entry->setEnabled(!item.summary.value("full_v4").toBool()&&!item.summary.value("full_v6").toBool());
+            connect(entry,&QAction::triggered,this,[this,id=item.id,version=item.candidate] { controller_->connectWireGuard(id,version); });
+        }
+    }
     menu_.addSeparator();
 
     const auto routeLabel = state.mode == "global" ? QString("全局") : state.mode == "direct" ? QString("直连") : QString("规则");

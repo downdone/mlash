@@ -30,9 +30,24 @@
 namespace mlash {
 AppController::AppController(QString root, bool smoke, QObject* parent, std::shared_ptr<PlatformServices> platform, QList<WebsiteTarget> websiteTargets, std::unique_ptr<GlobalHotkeys> hotkeys,std::unique_ptr<WebDavClient> remoteClient,std::unique_ptr<TunSession> tun,std::unique_ptr<SubscriptionDownloader> sourceDownloader,std::unique_ptr<SubscriptionDownloader> officialDownloader)
     : QObject(parent), root_(std::move(root)), smoke_(smoke), platform_(platform ? std::move(platform) : createPlatformServices()), hotkeys_(hotkeys?std::move(hotkeys):createGlobalHotkeys()),remoteClient_(remoteClient?std::move(remoteClient):std::make_unique<WebDavClient>()),
-      store_(std::make_shared<ProfileStore>(root_, platform_)), proxy_(std::make_shared<ProxyCoordinator>(root_, platform_)),
+      store_(std::make_shared<ProfileStore>(root_, platform_)),
+      wireGuardStore_(std::make_shared<WireGuardStore>(root_, platform_)),
+      wireGuard_(platform_, this),
+      proxy_(std::make_shared<ProxyCoordinator>(root_, platform_)),
       diagnostics_(root_, this), api_(this), websiteTests_(&api_,this,std::move(websiteTargets)), core_(&api_, platform_, this,std::move(tun)), officialCore_(this,std::move(officialDownloader)), downloader_(sourceDownloader?std::move(sourceDownloader):std::make_unique<SubscriptionDownloader>(this)) {
     downloader_->setParent(this);
+    connect(&wireGuard_,&WireGuardSession::changed,this,[this] {
+        if (!wireGuard_.active()) runningWireGuardProfile_.clear();
+        wireGuardSample_=wireGuard_.active()?QDateTime::currentDateTimeUtc().toString(Qt::ISODate):QString{};
+        emit wireGuardChanged();
+    });
+    connect(&wireGuard_,&WireGuardSession::lost,this,[this](const QString& reason) {
+        diagnostics_.append("wireguard",reason);
+        wireGuardError_=reason;
+        emit wireGuardChanged();
+        state_.lastError=reason;
+        publish();
+    });
     trayClock_.start();
     localBackupTimer_.setParent(this); localBackupTimer_.setObjectName("localBackupTimer"); localBackupTimer_.setInterval(60000); connect(&localBackupTimer_,&QTimer::timeout,this,&AppController::runLocalMaintenance);
     remoteTimer_.setInterval(60000); connect(&remoteTimer_,&QTimer::timeout,this,&AppController::runRemoteMaintenance);
@@ -98,8 +113,9 @@ void AppController::applyProxyObservation(const Result& r) {
 }
 void AppController::initialize() {
     const auto store = store_; const auto proxy = proxy_; const auto platform = platform_;
+    const auto wireGuardStore = wireGuardStore_;
     const auto executable = QCoreApplication::applicationFilePath();
-    runTask(this, [store, proxy, platform, executable] {
+    runTask(this, [store, proxy, platform, wireGuardStore, executable] {
         auto snapshot = store->load();
         auto recovery = proxy->hasJournal() ? proxy->release() : proxy->inspect();
         snapshot.result.data["proxy_result"] = recovery.data;
@@ -109,8 +125,11 @@ void AppController::initialize() {
         snapshot.result.data["auto_start_enabled"] = startup.data.value("enabled").toBool();
         snapshot.result.data["auto_start_conflict"] = startup.data.value("conflict").toBool();
         snapshot.settings.autoStart = startup.ok && startup.data.value("enabled").toBool();
-        return snapshot;
-    }, [this](StoreSnapshot snapshot) {
+        return std::pair{std::move(snapshot), wireGuardStore->load()};
+    }, [this](std::pair<StoreSnapshot, WireGuardCatalog> loaded) {
+        const auto& snapshot = loaded.first;
+        wireGuardProfiles_ = std::move(loaded.second.profiles);
+        wireGuardStoreError_ = loaded.second.result.error;
         readOnly_ = !snapshot.result.ok; state_.readOnly = readOnly_;
         readOnlyError_ = readOnly_ ? diagnostics_.sanitize(snapshot.result.error) : QString();
         settings_ = snapshot.settings; profiles_ = snapshot.profiles;

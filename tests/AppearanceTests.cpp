@@ -100,9 +100,14 @@ private slots:
         auto* toggle=window.findChild<QToolButton*>("toggleSidebar");
         auto* sidebar=window.findChild<QWidget*>("sidebar");
         auto* brand=window.findChild<QLabel*>("sidebarBrand");
-        QVERIFY(navigation && settings && brand && toggle && sidebar);
+        auto* content=window.findChild<QWidget*>("contentSurface");
+        QVERIFY(navigation && settings && brand && toggle && sidebar && content);
+        auto& preferences=const_cast<Settings&>(controller.settings());
+        preferences.textScale=120;
         for (const auto& theme : {"light","dark"}) {
+            preferences.appearance=theme;
             UiTheme::setPreferences(theme,120);
+            QCoreApplication::processEvents();
             QCOMPARE(brand->font().weight(),QFont::Bold);
             QCOMPARE(brand->font().variableAxisValue("wght"),700.0f);
             QCOMPARE(brand->font().pointSizeF(),19.2);
@@ -131,19 +136,90 @@ private slots:
             QTRY_VERIFY(navigation->property("keyboardFocus").toBool());
             QTRY_VERIFY(includesFocus(navigation->viewport()->grab(bounds).toImage()));
             save(&window,QString("vi-%1-keyboard-focus").arg(theme));
+
+            const auto togglePosition=toggle->mapTo(sidebar,QPoint());
+            const auto settingsPosition=settings->mapTo(sidebar,QPoint());
+            const int navigationTop=navigation->y();
+            const auto initialHome=navigation->visualItemRect(navigation->item(0));
+            const int rowY=navigation->viewport()->mapTo(sidebar,initialHome.topLeft()).y();
+            toggle->setFocus();
+            QTest::keyClick(toggle,Qt::Key_Space);
+            QTRY_COMPARE(sidebar->width(),60);
+            QTRY_COMPARE(content->x(),sidebar->width());
+            QVERIFY(toggle->hasFocus());
+            QVERIFY(toggle->isVisible() && settings->isVisible() && navigation->isVisible());
+            QVERIFY(!brand->isVisible());
+            QCOMPARE(toggle->mapTo(sidebar,QPoint()),togglePosition);
+            QCOMPARE(settings->mapTo(sidebar,QPoint()),settingsPosition);
+            QCOMPARE(navigation->y(),navigationTop);
+            for (int row=0;row<navigation->count();++row) {
+                const auto* item=navigation->item(row);
+                const auto rect=navigation->visualItemRect(item);
+                QVERIFY(navigation->viewport()->rect().contains(rect));
+                QCOMPARE(rect.height(),bounds.height());
+                QCOMPARE(item->toolTip(),item->text());
+                const auto center=navigation->viewport()->mapTo(sidebar,rect.center());
+                QVERIFY(qAbs(center.x()-toggle->mapTo(sidebar,toggle->rect().center()).x())<=1);
+            }
+            const auto home=navigation->visualItemRect(navigation->item(0));
+            QCOMPARE(navigation->viewport()->mapTo(sidebar,home.topLeft()).y(),rowY);
+            QCOMPARE(window.currentRoute().view,int(ViewIds::Home));
+            const int contentLeft=content->x();
+            const auto profiles=navigation->visualItemRect(navigation->item(1));
+            QTest::mouseClick(navigation->viewport(),Qt::LeftButton,{},profiles.center());
+            QTRY_COMPARE(window.currentRoute().view,int(ViewIds::Profiles));
+            QCOMPARE(content->x(),contentLeft);
+            save(&window,QString("vi-%1-collapsed").arg(theme));
+
+            navigation->setFocus();
+            QTest::keyClick(navigation,Qt::Key_Down);
+            QCOMPARE(window.currentRoute().view,int(ViewIds::Profiles));
+            QTest::keyClick(navigation,Qt::Key_Return);
+            QTRY_COMPARE(window.currentRoute().view,int(ViewIds::Data));
+            window.setPage(7);
+            QCOMPARE(content->x(),contentLeft);
+            settings->click();
+            QVERIFY(settings->isChecked());
+            QTRY_COMPARE(window.currentRoute().view,int(ViewIds::Settings));
+            QCOMPARE(content->x(),contentLeft);
+            window.hide();
+            window.show();
+            QVERIFY(navigation->isVisible() && settings->isChecked());
+            QCOMPARE(sidebar->width(),60);
+            QCOMPARE(content->x(),contentLeft);
+            window.activateWindow();
+            QApplication::setActiveWindow(&window);
+
+            toggle->click();
+            QTRY_COMPARE(sidebar->width(),144);
+            QTRY_COMPARE(content->x(),sidebar->width());
+            QVERIFY(navigation->isVisible());
+            QCOMPARE(window.currentRoute().view,int(ViewIds::Settings));
+            QCOMPARE(toggle->mapTo(sidebar,QPoint()),togglePosition);
+            QCOMPARE(settings->mapTo(sidebar,QPoint()),settingsPosition);
+            window.navigate(Route{ViewIds::Home});
         }
         const auto route=window.currentRoute().view;
-        const auto toggleY=toggle->mapTo(sidebar,QPoint()).y();
-        const auto settingsY=settings->y();
-        toggle->click();
-        QCOMPARE(sidebar->width(),44);
-        QVERIFY(toggle->isVisible() && settings->isVisible() && navigation->isHidden());
-        QTRY_COMPARE(toggle->mapTo(sidebar,QPoint()).y(),toggleY);
-        QTRY_COMPARE(settings->y(),settingsY);
-        QCOMPARE(window.currentRoute().view,route);
-        toggle->click();
-        QCOMPARE(sidebar->width(),144);
-        QTRY_VERIFY(navigation->isVisible());
+        int previousWidth=0;
+        for (int width=956;width<=964;++width) {
+            window.resize(width,560);
+            QCoreApplication::processEvents();
+            if (previousWidth) QVERIFY(sidebar->width()-previousWidth>=0 && sidebar->width()-previousWidth<=1);
+            previousWidth=sidebar->width();
+            QCOMPARE(content->x(),previousWidth);
+            for (const int page : {0,1,4,6,0}) {
+                window.setPage(page);
+                QCoreApplication::processEvents();
+                QCOMPARE(window.width(),width);
+                QCOMPARE(sidebar->width(),previousWidth);
+                QCOMPARE(content->x(),previousWidth);
+            }
+        }
+        window.resize(1040,720);
+        QTRY_COMPARE(sidebar->width(),200);
+        QTRY_COMPARE(content->x(),sidebar->width());
+        QVERIFY(navigation->viewport()->rect().contains(navigation->visualItemRect(navigation->item(0))));
+        save(&window,"vi-sidebar-wide");
         QCOMPARE(window.currentRoute().view,route);
         navigation->setFocus();
         QTest::keyClick(navigation,Qt::Key_Down);

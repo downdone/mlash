@@ -14,6 +14,7 @@ namespace mlash {
 //  - 失败 = 回到点击前快照：desiredProxy / tunEnabled 复原，系统代理由协调器
 //    在「当前完整快照 == 我们最后写入的快照」时恢复（AGENTS.md 的恢复前提）。
 void AppController::setProxyEnabled(bool enabled, bool allowExternal) {
+    if (enabled&&wireGuard_.leasePending()) { emit operationFinished(false,"WireGuard 并行期间请使用 Mihomo 本地代理"); return; }
     const OperationScope operation(this, OperationId::ProxyToggle);
     if (state_.exiting) { refuseOperation("正在退出"); return; }
     const int index = profileIndex(settings_.activeProfile);

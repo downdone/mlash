@@ -61,16 +61,160 @@ void AppController::importUrl(const QString& name, const QUrl& url, const Downlo
 
 void AppController::importFile(const QString& name, const QString& path, const QString& replaceId) {
     const OperationScope operation(this, OperationId::ProfileImport);
-    if (!begin("正在导入本地 YAML")) return;
-    if (!QStringList{"yaml","yml"}.contains(QFileInfo(path).suffix().toLower())) { finish(Result::fail("请选择 .yaml/.yml 文件")); return; }
-    Profile profile; const int i = profileIndex(replaceId);
-    if (!replaceId.isEmpty() && i < 0) { finish(Result::fail("订阅不存在")); return; }
-    if (i >= 0) profile = profiles_[i]; else { profile.id = newId(); profile.name = name.trimmed().isEmpty() ? QFileInfo(path).completeBaseName() : name.trimmed().left(120); }
-    profile.sourceType = "file"; profile.source = path;
-    profile.subscriptionInfo = {}; sourceUpdateId_ = replaceId;
-    struct Input { Result result; QByteArray bytes; };
-    runTask(this, [path] { Input input; input.result = readFile(path, input.bytes); return input; },
-        [this, profile](Input input) { if (!input.result.ok) finish(input.result); else stageSource(profile, input.bytes); });
+    if (!begin("正在导入本地配置")) return;
+    struct Input { Result result; QByteArray bytes; bool wireGuard = false, yaml = false; };
+    runTask(this, [path] {
+        Input input;
+        input.result = readFile(path, input.bytes);
+        if (!input.result.ok) return input;
+        const auto suffix = QFileInfo(path).suffix().toLower();
+        input.wireGuard = hasWireGuardHeader(input.bytes);
+        input.yaml = !input.wireGuard && (suffix == "yaml" || suffix == "yml");
+        if (!input.wireGuard && suffix == "conf") {
+            if (input.bytes.size() <= WireGuardConfig::sourceLimit) {
+                try { input.yaml = YAML::Load(input.bytes.toStdString()).IsMap(); }
+                catch (const YAML::Exception&) { }
+            }
+            input.wireGuard = !input.yaml;
+        }
+        return input;
+    }, [this, name, path, replaceId](Input input) {
+        const QFileInfo file(path);
+        if (!input.result.ok) {
+            if (QStringList{"yaml","yml"}.contains(file.suffix().toLower()) && profileIndex(replaceId) >= 0)
+                sourceUpdateId_ = replaceId;
+            finish(input.result);
+            return;
+        }
+        const auto displayName = (name.trimmed().isEmpty() ? file.completeBaseName() : name.trimmed()).left(120);
+        if (input.wireGuard) {
+            const auto existing = std::find_if(wireGuardProfiles_.cbegin(), wireGuardProfiles_.cend(),
+                [&](const auto& profile) { return profile.id == replaceId; });
+            if (!replaceId.isEmpty() && existing == wireGuardProfiles_.cend()) {
+                finish(Result::fail("请选择与原配置类型一致的文件"));
+                return;
+            }
+            storeWireGuardCandidate(existing == wireGuardProfiles_.cend() ? displayName : existing->name,
+                std::move(input.bytes), replaceId, existing == wireGuardProfiles_.cend() ? QString{} : existing->candidate);
+            return;
+        }
+        if (!input.yaml) {
+            finish(Result::fail("请选择 Mihomo YAML 或 WireGuard CONF 文件")); return;
+        }
+        const int i = profileIndex(replaceId);
+        if (!replaceId.isEmpty() && i < 0) { finish(Result::fail("请选择与原配置类型一致的文件")); return; }
+        Profile profile;
+        if (i >= 0) profile = profiles_[i]; else { profile.id = newId(); profile.name = displayName; }
+        profile.sourceType = "file"; profile.source = path;
+        profile.subscriptionInfo = {}; sourceUpdateId_ = replaceId;
+        stageSource(profile, std::move(input.bytes));
+    });
+}
+
+void AppController::previewWireGuardText(const QByteArray& source, Completion done) {
+    if (source.isEmpty() || source.size() > WireGuardConfig::sourceLimit) {
+        cancelWireGuardPreview();
+        done(Result::fail("WireGuard 配置必须为非空且不超过 128 KiB"));
+        return;
+    }
+    previewWireGuardSource({}, source, std::move(done));
+}
+
+void AppController::previewWireGuardFile(const QString& path, Completion done) {
+    if (path.isEmpty()) { cancelWireGuardPreview(); done(Result::fail("请选择 WireGuard 配置文件")); return; }
+    previewWireGuardSource(path, {}, std::move(done));
+}
+
+void AppController::previewWireGuardSource(QString path, QByteArray source, Completion done) {
+    if (state_.exiting || wireGuardPreviewPending_) { done(Result::fail("当前无法预览 WireGuard 配置")); return; }
+    cancelWireGuardPreview();
+    const auto epoch = wireGuardPreviewEpoch_;
+    wireGuardPreviewPending_ = true;
+    struct Preview { Result result; QByteArray bytes; };
+    runTask(this, [path = std::move(path), source = std::move(source)]() mutable {
+        if (!path.isEmpty()) {
+            const Result unreadable{false,"配置文件无法读取",{{"file_read_failed",true}}};
+            QFile file(path);
+            if (!file.open(QIODevice::ReadOnly)) return Preview{unreadable,{}};
+            source=file.read(WireGuardConfig::sourceLimit+1);
+            if (file.error()!=QFileDevice::NoError) {
+                source.fill('\0');
+                return Preview{unreadable,{}};
+            }
+            const bool native=hasWireGuardHeader(QByteArrayView(source).first(qMin(source.size(),WireGuardConfig::sourceLimit)));
+            if (!native) {
+                const auto suffix=QFileInfo(path).suffix().toLower();
+                bool mihomo=suffix=="yaml"||suffix=="yml";
+                if (!mihomo&&suffix=="conf"&&source.size()<=WireGuardConfig::sourceLimit) {
+                    try { mihomo=YAML::Load(source.toStdString()).IsMap(); }
+                    catch (const YAML::Exception&) { }
+                }
+                if (mihomo) { source.fill('\0'); return Preview{{true,{},{{"kind","mihomo"}}},{}}; }
+            }
+        }
+        WireGuardConfig config;
+        auto result = parseWireGuard(source, config);
+        if (!result.ok) { source.fill('\0'); return Preview{std::move(result), {}}; }
+        return Preview{std::move(result), std::move(source)};
+    }, [this, epoch, done = std::move(done)](Preview preview) {
+        wireGuardPreviewPending_ = false;
+        if (state_.exiting || epoch != wireGuardPreviewEpoch_) {
+            preview.bytes.fill('\0');
+            done(Result::fail("WireGuard 预览已取消"));
+            return;
+        }
+        if (preview.result.ok && !preview.bytes.isEmpty()) {
+            constexpr int lifetimeMs = 120000;
+            wireGuardPreviewBytes_ = std::move(preview.bytes);
+            wireGuardPreviewToken_ = newId();
+            wireGuardPreviewDeadline_ = QDeadlineTimer(lifetimeMs);
+            preview.result.data["preview_token"] = wireGuardPreviewToken_;
+            QTimer::singleShot(lifetimeMs, this, [this, epoch] {
+                if (epoch == wireGuardPreviewEpoch_) cancelWireGuardPreview();
+            });
+        }
+        if (preview.result.data.value("file_read_failed").toBool())
+            emit operationFinished(false,preview.result.error,OperationId::ProfileImport);
+        done(std::move(preview.result));
+    });
+}
+
+void AppController::saveWireGuardPreview(const QString& name, const QString& token,
+                                        const QString& id, const QString& expectedCandidate) {
+    const OperationScope operation(this, OperationId::ProfileImport);
+    if (!begin("正在保存 WireGuard 配置")) return;
+    if (token.isEmpty() || token != wireGuardPreviewToken_ || wireGuardPreviewDeadline_.hasExpired()) {
+        if (wireGuardPreviewDeadline_.hasExpired()) cancelWireGuardPreview();
+        finish(Result::fail("WireGuard 配置预览已过期，请重新预览"));
+        return;
+    }
+    auto bytes = std::move(wireGuardPreviewBytes_);
+    cancelWireGuardPreview();
+    storeWireGuardCandidate(name.trimmed().isEmpty() ? QString("WireGuard 隧道") : name, std::move(bytes), id, expectedCandidate);
+}
+
+void AppController::cancelWireGuardPreview() {
+    ++wireGuardPreviewEpoch_;
+    wireGuardPreviewToken_.clear();
+    wireGuardPreviewBytes_.fill('\0');
+    wireGuardPreviewBytes_.clear();
+}
+
+void AppController::storeWireGuardCandidate(const QString& name, QByteArray source, const QString& id,
+                                            const QString& expectedCandidate) {
+    if (!wireGuardStoreError_.isEmpty()) { finish(Result::fail(wireGuardStoreError_)); return; }
+    if (source.size() > WireGuardConfig::sourceLimit) { finish(Result::fail("WireGuard 配置超过 128 KiB")); return; }
+    const auto store = wireGuardStore_;
+    runTask(this, [store, name, source = std::move(source), id, expectedCandidate]() mutable {
+        auto saved = store->saveCandidate(name, source, id, expectedCandidate);
+        source.fill('\0');
+        return saved;
+    }, [this](WireGuardCatalog saved) {
+        if (!saved.result.ok) { finish(saved.result); return; }
+        wireGuardProfiles_ = std::move(saved.profiles);
+        emit profilesChanged();
+        finish({true, {}, {{"notice","WireGuard 配置已保存"}}});
+    });
 }
 
 void AppController::previewNodeLinks(const QString& text,const QStringList& reserved,Completion done) {
@@ -300,12 +444,31 @@ void AppController::rememberPrivateSource(const Profile& profile) {
 }
 
 void AppController::renameProfile(const QString& id, const QString& name) {
+    if (std::any_of(wireGuardProfiles_.begin(),wireGuardProfiles_.end(),[&](const auto& profile) { return profile.id==id; })) {
+        if (!begin("正在重命名 WireGuard 配置")) return;
+        const auto store=wireGuardStore_;
+        runTask(this,[store,id,name] { return store->updateProfile(id,name); },[this](WireGuardCatalog saved) {
+            if (saved.result.ok) { wireGuardProfiles_=std::move(saved.profiles); emit profilesChanged(); }
+            finish(saved.result);
+        });
+        return;
+    }
     const int i = profileIndex(id); if (i < 0 || name.trimmed().isEmpty()) return;
     if (!begin("正在重命名订阅")) return;
     auto next = profiles_; next[i].name = name.trimmed().left(120); saveSnapshot(settings_, next, [this](Result r) { finish(r); });
 }
 
 void AppController::deleteProfile(const QString& id) {
+    if (std::any_of(wireGuardProfiles_.begin(),wireGuardProfiles_.end(),[&](const auto& profile) { return profile.id==id; })) {
+        if (wireGuard_.leasePending()) { emit operationFinished(false,"先断开 WireGuard 并确认路由清理，再删除配置"); return; }
+        if (!begin("正在删除 WireGuard 配置")) return;
+        const auto store=wireGuardStore_;
+        runTask(this,[store,id] { return store->updateProfile(id,std::nullopt); },[this](WireGuardCatalog saved) {
+            if (saved.result.ok) { wireGuardProfiles_=std::move(saved.profiles); emit profilesChanged(); }
+            finish(saved.result);
+        });
+        return;
+    }
     const int i = profileIndex(id); if (i < 0) return;
     if (!begin("正在删除订阅")) return;
     protectMajorChange([this,id,i] {

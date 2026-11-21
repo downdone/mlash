@@ -47,6 +47,7 @@
 #include <QTcpServer>
 #include <QRandomGenerator>
 #include <QPlainTextEdit>
+#include <QTextEdit>
 #include <QTcpSocket>
 #include "ui/GuiHost.h"
 #include "ui/StatusSentence.h"
@@ -85,6 +86,204 @@ static bool seedDashboardFixture(const QString& root) {
 class UiTests : public QObject {
     Q_OBJECT
 private slots:
+    void wireGuardCardAndTrafficUseTypedDetails() {
+        QTemporaryDir data;
+        QVERIFY(data.isValid());
+        QVERIFY(seedDashboardFixture(data.path()));
+        const auto source=QByteArray("[Interface]\nAddress=10.42.0.2/32\nPrivateKey=")+QByteArray(32,'a').toBase64()+
+            "\n[Peer]\nPublicKey="+QByteArray(32,'b').toBase64()+"\nEndpoint=192.0.2.1:51820\nAllowedIPs=10.42.0.0/16\n";
+        const auto config=data.filePath("Office.conf");
+        QVERIFY(writeAtomic(config,source).ok);
+        AppController controller(data.path(),true);
+        QSignalSpy ready(&controller,&AppController::initialized);
+        controller.initialize(); QTRY_COMPARE(ready.size(),1);
+        MainWindow window(&controller); window.resize(1040,720); window.show();
+        window.setPage(1);
+        auto* input=window.findChild<QLineEdit*>("profileImportInput");
+        auto* list=window.findChild<QListView*>("profileList");
+        QVERIFY(input); QVERIFY(list);
+        auto* advanced=window.findChild<QPushButton*>("importSubscription");
+        QVERIFY(advanced);
+        advanced->click();
+        auto* paste=window.findChild<QPushButton*>("pasteWireGuardConfig");
+        QVERIFY(paste);
+        paste->click();
+        auto* editor=window.findChild<QDialog*>("wireGuardPaste");
+        QVERIFY(editor);
+        auto* draft=editor->findChild<QPlainTextEdit*>();
+        auto* editorButtons=editor->findChild<QDialogButtonBox*>();
+        const QString invalid="[Interface]\nPrivateKey=invalid";
+        draft->setPlainText(invalid);
+        editorButtons->button(QDialogButtonBox::Ok)->click();
+        QTRY_VERIFY(window.findChild<QDialog*>("wireGuardImportPreview"));
+        auto* failed=window.findChild<QDialog*>("wireGuardImportPreview");
+        QTRY_VERIFY(failed->isVisible());
+        auto* failedButtons=failed->findChild<QDialogButtonBox*>();
+        QVERIFY(!failedButtons->button(QDialogButtonBox::Save)->isEnabled());
+        failedButtons->button(QDialogButtonBox::Cancel)->click();
+        QTRY_VERIFY(editor->isVisible());
+        QCOMPARE(draft->toPlainText(),invalid);
+        editorButtons->button(QDialogButtonBox::Cancel)->click();
+        QTRY_VERIFY(input->isVisible());
+        input->setText(config);
+        QTest::keyClick(input,Qt::Key_Return);
+        QTRY_VERIFY(window.findChild<QDialog*>("wireGuardImportPreview"));
+        auto* preview=window.findChild<QDialog*>("wireGuardImportPreview");
+        auto* save=preview->findChild<QDialogButtonBox*>()->button(QDialogButtonBox::Save);
+        QTRY_VERIFY(save && save->isEnabled());
+        save->click();
+        QTRY_COMPARE(list->model()->rowCount(),2);
+        const auto index=list->model()->index(1,0);
+        QCOMPARE(index.data(ProfileRowModel::Kind).toString(),QString("wireguard"));
+        auto* card=list->indexWidget(index);
+        QVERIFY(card);
+        QCOMPARE(card->findChild<QLabel*>("profileCardSource")->text(),QString("WireGuard"));
+        for (int row:{0,1}) {
+            auto* state=list->indexWidget(list->model()->index(row,0))->findChild<QLabel*>("profileCardStatus");
+            QVERIFY(state);
+            QTRY_VERIFY(state->width()>=state->fontMetrics().horizontalAdvance(state->text()));
+            QTRY_VERIFY(state->parentWidget()->width()>=state->width()+24);
+            QTRY_VERIFY(state->visibleRegion().boundingRect().width()>=state->fontMetrics().horizontalAdvance(state->text()));
+        }
+        const auto output=qEnvironmentVariable("MLASH_UI_SCREENSHOTS");
+        const auto capture=[&](const QString& name) {
+            if (output.isEmpty()) return true;
+            QCoreApplication::processEvents();
+            return QDir().mkpath(output)&&window.grab().save(output+"/"+name+".png");
+        };
+        QVERIFY(capture("dual-profiles"));
+        QApplication::setActiveWindow(&window);
+        list->setCurrentIndex(index);
+        list->setFocus();
+        QTest::keyClick(list,Qt::Key_Return);
+        QTRY_VERIFY(window.findChild<QDialog*>("wireGuardProfileDetail"));
+        auto* detail=window.findChild<QDialog*>("wireGuardProfileDetail");
+        QCOMPARE(detail->findChild<QLabel*>("wireGuardRoutes")->text(),QString("10.42.0.0/16"));
+        auto* ip=detail->findChild<QLineEdit*>("wireGuardTarget");
+        auto* hit=detail->findChild<QLabel*>("wireGuardTargetResult");
+        QVERIFY(ip&&hit);
+        ip->setText("10.42.3.7");
+        QVERIFY(hit->text().contains("包含 10.42.0.0/16"));
+        ip->setText("192.0.2.33");
+        QVERIFY(hit->text().contains("未覆盖"));
+        ip->setText("bad");
+        QVERIFY(hit->text().contains("有效"));
+        auto* back=detail->parentWidget()->parentWidget();
+        while (back&&!qobject_cast<TaskWorkspace*>(back)) back=back->parentWidget();
+        QVERIFY(back);
+        back->findChild<QPushButton*>("taskBack")->click();
+        QTRY_VERIFY(list->isVisible());
+        QCOMPARE(list->currentIndex().data(ProfileRowModel::Kind).toString(),QString("wireguard"));
+        QTRY_VERIFY(window.focusWidget()==list||list->isAncestorOf(window.focusWidget()));
+        window.setPage(0);
+        QTRY_VERIFY(window.findChild<QPushButton*>("wireGuardHomeToggle")->isVisible());
+        QVERIFY(window.findChild<QPushButton*>("mihomoLocalHomeToggle")->isVisible());
+        QVERIFY(capture("dual-home"));
+        window.navigate(Route{ViewIds::Data,kNoCategory,HomeAnchor::Control,int(ViewIds::DataTab::Traffic)});
+        const auto* traffic=window.findChild<QLabel*>("wireGuardTraffic");
+        QVERIFY(traffic&&traffic->isVisible()&&traffic->text().contains("未连接"));
+        QVERIFY(window.findChild<QLabel*>("windowsDirectTraffic")->isVisible());
+        QVERIFY(capture("dual-traffic"));
+        window.findChild<QPushButton*>("wireGuardTrafficDetails")->click();
+        const auto visiblePeerTab=[&]() -> QTabWidget* {
+            for (auto* tab:window.findChildren<QTabWidget*>("wireGuardDetailTabs"))
+                if (tab->isVisible()&&tab->currentIndex()==1) return tab;
+            return nullptr;
+        };
+        QTRY_VERIFY(visiblePeerTab());
+        auto* peerTab=visiblePeerTab();
+        auto* peerWorkspace=peerTab->parentWidget();
+        while (peerWorkspace&&!qobject_cast<TaskWorkspace*>(peerWorkspace)) peerWorkspace=peerWorkspace->parentWidget();
+        QVERIFY(peerWorkspace);
+        peerWorkspace->findChild<QPushButton*>("taskBack")->click();
+        QCOMPARE(window.currentRoute().view,ViewIds::Data);
+        QCOMPARE(window.currentRoute().tab,int(ViewIds::DataTab::Traffic));
+    }
+    void wireGuardVersionsServiceAndLayout() {
+        QTemporaryDir data;
+        QVERIFY(data.isValid()&&seedDashboardFixture(data.path()));
+        auto platform=createPlatformServices();
+        WireGuardStore store(data.path(),platform);
+        const auto source=QByteArray("[Interface]\nAddress=10.42.0.2/32\nPrivateKey=")+QByteArray(32,'a').toBase64()+
+            "\n[Peer]\nPublicKey="+QByteArray(32,'b').toBase64()+"\nEndpoint=192.0.2.1:51820\nAllowedIPs=10.42.0.0/16\n";
+        const auto added=store.saveCandidate("工作隧道 · IPv4 与 IPv6 配置",source);
+        QVERIFY(added.result.ok&&added.profiles.size()==1);
+        const auto profile=added.profiles.first();
+        QVERIFY(store.markStarted(profile.id,profile.candidate).result.ok);
+        auto next=source;
+        next.replace("10.42.0.0/16","10.52.0.0/16, fd52::/48");
+        next.replace(QByteArray(32,'a').toBase64(),QByteArray(32,'c').toBase64());
+        QVERIFY(store.saveCandidate(profile.name,next,profile.id,profile.candidate).result.ok);
+        AppController controller(data.path(),true,nullptr,platform);
+        QSignalSpy ready(&controller,&AppController::initialized);
+        controller.initialize(); QTRY_COMPARE(ready.size(),1);
+        MainWindow window(&controller); window.resize(1040,720); window.show(); window.setPage(1);
+        auto* list=window.findChild<QListView*>("profileList");
+        QVERIFY(list&&list->model()->rowCount()==2);
+        const auto index=list->model()->index(1,0);
+        auto* card=qobject_cast<ProfileCardWidget*>(list->indexWidget(index));
+        QVERIFY(card);
+        card->button(ProfileCardWidget::Action::ReviewUpdate)->click();
+        QTRY_VERIFY(window.findChild<QTabWidget*>("wireGuardDetailTabs"));
+        auto* tabs=window.findChild<QTabWidget*>("wireGuardDetailTabs");
+        QCOMPARE(tabs->currentIndex(),2);
+        auto* changes=window.findChild<QLabel*>("wireGuardDifferences");
+        QTRY_VERIFY(changes->text().contains("10.42.0.0/16")&&changes->text().contains("fd52::/48"));
+        QVERIFY(changes->text().contains("密钥已变更"));
+        QVERIFY(!changes->text().contains(QString::fromLatin1(QByteArray(32,'c').toBase64())));
+        auto* replace=window.findChild<QPushButton*>("wireGuardReplacePaste");
+        QVERIFY(replace); replace->click();
+        auto* editor=window.findChild<QDialog*>("wireGuardPaste");
+        QVERIFY(editor);
+        auto* draft=editor->findChild<QPlainTextEdit*>();
+        auto updated=next;
+        updated.replace("fd52::/48","fd53::/48");
+        draft->setPlainText(QString::fromUtf8(updated));
+        editor->findChild<QDialogButtonBox*>()->button(QDialogButtonBox::Ok)->click();
+        QTRY_VERIFY(window.findChild<QDialog*>("wireGuardImportPreview"));
+        auto* save=window.findChild<QDialog*>("wireGuardImportPreview")->findChild<QDialogButtonBox*>()->button(QDialogButtonBox::Save);
+        QTRY_VERIFY(save->isEnabled());
+        save->click();
+        QTRY_VERIFY(changes->text().contains("fd53::/48"));
+        QCOMPARE(controller.wireGuardProfiles().size(),1);
+        QCOMPARE(controller.wireGuardProfiles().first().active,profile.candidate);
+        QVERIFY(!controller.wireGuardObservation().value("active").toBool());
+        const auto output=qEnvironmentVariable("MLASH_UI_SCREENSHOTS");
+        for (const auto& theme:QStringList{"light","dark","contrast"}) {
+            const int scale=theme=="light"?100:120;
+            const QSize size=theme=="light"?QSize(1040,720):QSize(840,560);
+            UiTheme::setPreferences(theme=="contrast"?QString("system"):theme,scale);
+            if (theme=="contrast") UiTheme::applyAppearance(Qt::ColorScheme::Dark,true);
+            window.resize(size);
+            tabs->setCurrentIndex(2);
+            QCoreApplication::processEvents();
+            QCOMPARE(window.size(),size);
+            QVERIFY(changes->isVisible());
+            for (int tab:{2,0,1}) {
+                tabs->setCurrentIndex(tab);
+                QCoreApplication::processEvents();
+                if (!output.isEmpty()) {
+                    QVERIFY(QDir().mkpath(output));
+                    QVERIFY(window.grab().save(output+QString("/wireguard-%1-%2-tab%3.png").arg(theme).arg(scale).arg(tab)));
+                }
+            }
+        }
+        UiTheme::setPreferences("system",100);
+        window.findChild<QPushButton*>("wireGuardOpenService")->click();
+        QTRY_VERIFY(window.findChild<QLabel*>("wireGuardServiceCapability"));
+        auto* capability=window.findChild<QLabel*>("wireGuardServiceCapability");
+        QTRY_VERIFY(capability->text().startsWith("WireGuard ·")&&!capability->text().contains("正在读取"));
+        if (!output.isEmpty()) QVERIFY(window.grab().save(output+"/wireguard-service.png"));
+        window.setPage(5);
+        auto* levels=window.findChild<QComboBox*>("logLevelFilter");
+        auto* logs=window.findChild<QPlainTextEdit*>("logView");
+        QVERIFY(levels&&logs);
+        levels->setCurrentIndex(levels->findData("wireguard"));
+        controller.diagnostics()->append("app","unrelated fixture");
+        controller.diagnostics()->append("wireguard","tunnel fixture");
+        QTRY_VERIFY(logs->toPlainText().contains("tunnel fixture"));
+        QVERIFY(!logs->toPlainText().contains("unrelated fixture"));
+    }
     void quickImportCreatesProfileAndOffersAdvancedWindow() {
         QTemporaryDir data; ProfileStore store(data.path(),createPlatformServices());
         QVERIFY(store.load().result.ok);
@@ -703,7 +902,18 @@ private slots:
         auto* alarm=window.findChild<QLabel*>("operationAlarm"); auto* resolve=window.findChild<QToolButton*>("statusResolve"); QVERIFY(alarm && resolve);
         QVERIFY(alarm->text().isEmpty()); QVERIFY(!resolve->isVisible());
         state.lastError="恢复日志写入失败"; controller.stateChanged();
-        QCOMPARE(alarm->text(),QString("恢复日志写入失败")); QVERIFY(resolve->isVisible());
+        QCOMPARE(alarm->text(),QString("运行告警"));
+        QCOMPARE(alarm->toolTip(),QString("恢复日志写入失败"));
+        QVERIFY(resolve->isVisible());
+        QVERIFY(resolve->menu()&&!resolve->menu()->actions().isEmpty());
+        resolve->menu()->actions().first()->trigger();
+        QPointer<QDialog> alarmDetail=window.findChild<QDialog*>("statusAlarmDialog");
+        QVERIFY(alarmDetail&&alarmDetail->isVisible());
+        auto* reason=alarmDetail->findChild<QTextEdit*>("statusAlarmReason");
+        QVERIFY(reason);
+        QCOMPARE(reason->toPlainText(),QString("恢复日志写入失败"));
+        alarmDetail->reject();
+        QTRY_VERIFY(alarmDetail.isNull());
     }
     void changingSectionRestoresNetworkSettingsDraft() {
         QTemporaryDir data; QVERIFY(seedDashboardFixture(data.path())); AppController controller(data.path(),true);
@@ -1123,6 +1333,83 @@ private slots:
         auto* full=detail->findChild<QPlainTextEdit*>(); QVERIFY(full&&full->isReadOnly()); QCOMPARE(full->toPlainText(),longMessage); QCOMPARE(window.centralWidget()->geometry(),before);
         detail->reject(); QTRY_VERIFY(detail.isNull());
         const auto output=qEnvironmentVariable("MLASH_UI_SCREENSHOTS"); if (!output.isEmpty()) { QVERIFY(QDir().mkpath(output)); for (int page:{0,2,6}) { window.setPage(page); QCoreApplication::processEvents(); QVERIFY(window.grab().save(output+QString("/status-page-%1.png").arg(page))); } }
+    }
+    void readOnlyAlarmKeepsFailureDetails() {
+        QTemporaryDir data;
+        QVERIFY(data.isValid());
+        const auto statePath=data.path()+"/state.dat";
+        const auto lastGoodPath=data.path()+"/state.last-good.dat";
+        const QByteArray corruptState("unreadable fixture");
+        const QByteArray lastGood("retained fixture");
+        QVERIFY(writeAtomic(statePath,corruptState).ok);
+        QVERIFY(writeAtomic(lastGoodPath,lastGood).ok);
+        AppController controller(data.path(),true);
+        QSignalSpy initialized(&controller,&AppController::initialized);
+        controller.initialize();
+        QTRY_COMPARE(initialized.size(),1);
+        QVERIFY(controller.state().readOnly);
+        const auto initialReason=controller.state().lastError;
+        QVERIFY(initialReason.contains("state.dat")&&initialReason.contains("state.last-good.dat"));
+
+        const auto settings=controller.settings();
+        struct ResetTheme {
+            const Settings& settings;
+            ~ResetTheme() { UiTheme::setPreferences(settings.appearance,settings.textScale); }
+        } resetTheme{settings};
+        MainWindow window(&controller);
+        window.resize(840,560);
+        window.show();
+        auto* bar=window.findChild<QStatusBar*>("operationStatusBar");
+        auto* alarm=window.findChild<QWidget*>("statusAlarm");
+        auto* summary=window.findChild<QLabel*>("operationAlarm");
+        auto* details=window.findChild<QToolButton*>("statusAlarmDetails");
+        auto* resolve=window.findChild<QToolButton*>("statusResolve");
+        QVERIFY(bar&&alarm&&summary&&details&&resolve);
+        const auto output=qEnvironmentVariable("MLASH_UI_SCREENSHOTS");
+        for (const QString& theme : {QString("light"),QString("dark")}) {
+            UiTheme::setPreferences(theme,120);
+            QCoreApplication::processEvents();
+            QVERIFY(alarm->isVisible()&&details->isVisible());
+            QVERIFY(!resolve->isVisible());
+            QCOMPARE(summary->text(),QString("只读保护"));
+            QVERIFY(summary->contentsRect().width()>=summary->fontMetrics().horizontalAdvance(summary->text()));
+            QVERIFY(alarm->rect().contains(details->geometry()));
+            QVERIFY(bar->rect().contains(QRect(alarm->mapTo(bar,QPoint()),alarm->size())));
+            const auto geometry=bar->geometry();
+            if (!output.isEmpty()) {
+                QVERIFY(QDir().mkpath(output));
+                QVERIFY(window.grab().save(output+"/readonly-alarm-"+theme+".png"));
+            }
+
+            details->setFocus(Qt::TabFocusReason);
+            QTest::keyClick(details,Qt::Key_Space);
+            QPointer<QDialog> task=window.findChild<QDialog*>("statusAlarmDialog");
+            QVERIFY(task&&task->isVisible());
+            auto* reason=task->findChild<QTextEdit*>("statusAlarmReason");
+            QVERIFY(reason&&reason->isReadOnly());
+            QCOMPARE(reason->toPlainText(),initialReason);
+            auto* directory=task->findChild<QPushButton*>("openReadOnlyDataDirectory");
+            QVERIFY(directory&&directory->isEnabled());
+            QCOMPARE(bar->geometry(),geometry);
+            if (!output.isEmpty()) QVERIFY(window.grab().save(output+"/readonly-detail-"+theme+".png"));
+            task->reject();
+            QTRY_VERIFY(task.isNull());
+        }
+
+        const auto source=data.path()+"/fixture.yaml";
+        QVERIFY(writeAtomic(source,"proxies: []\nrules: ['MATCH,DIRECT']\n").ok);
+        QSignalSpy finished(&controller,&AppController::operationFinished);
+        controller.importFile("Fixture",source);
+        QTRY_COMPARE(finished.size(),1);
+        QVERIFY(!finished.first().first().toBool());
+        QVERIFY(controller.profiles().isEmpty());
+        QVERIFY(details->isVisible());
+        QCOMPARE(summary->toolTip(),initialReason);
+        QByteArray contents;
+        QVERIFY(readFile(statePath,contents).ok);
+        QCOMPARE(contents,corruptState);
+        QVERIFY(readFile(lastGoodPath,contents).ok);
+        QCOMPARE(contents,lastGood);
     }
     void historyReadingAndDraftFeedback() {
         QTemporaryDir data; AppController controller(data.path(),true); QSignalSpy initialized(&controller,&AppController::initialized); controller.initialize(); QTRY_COMPARE(initialized.size(),1);

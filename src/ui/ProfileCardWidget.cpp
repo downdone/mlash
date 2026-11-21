@@ -205,6 +205,7 @@ ProfileCardWidget::ProfileCardWidget(QWidget* parent) : QFrame(parent) {
     footer_ = footer;
     footer->setSpacing(actionGap);
     statusLine_ = new QWidget;
+    statusLine_->setSizePolicy(QSizePolicy::Expanding,QSizePolicy::Preferred);
     auto* statusLayout = new QVBoxLayout(statusLine_);
     statusLayout->setContentsMargins(identityInset,0,0,0);
     statusLayout->setSpacing(stateGap);
@@ -212,6 +213,7 @@ ProfileCardWidget::ProfileCardWidget(QWidget* parent) : QFrame(parent) {
         auto* tag=new QWidget;
         tag->setProperty("profileCardStateTag",true);
         tag->setAttribute(Qt::WA_StyledBackground);
+        tag->setSizePolicy(QSizePolicy::Fixed,QSizePolicy::Fixed);
         auto* row=new QHBoxLayout(tag);
         row->setContentsMargins(stateInset,stateVerticalInset,stateInset,stateVerticalInset);
         row->setSpacing(5);
@@ -221,19 +223,20 @@ ProfileCardWidget::ProfileCardWidget(QWidget* parent) : QFrame(parent) {
         text=new QLabel;
         text->setObjectName(name);
         text->setProperty("cardState",true);
+        text->setTextFormat(Qt::PlainText);
+        text->setSizePolicy(QSizePolicy::Fixed,QSizePolicy::Fixed);
         row->addWidget(text,0,Qt::AlignVCenter);
         statusLayout->addWidget(tag,0,Qt::AlignLeft);
     };
     addState(statusMark_,status_,"profileCardStatus");
     addState(updateMark_,updateStatus_,"profileCardUpdate");
-    footer->addWidget(statusLine_,1,Qt::AlignVCenter);
-    footer->addStretch();
+    footer->addWidget(statusLine_,1);
     const auto command = [this,footer](const QString& name, Action action) {
         auto* control = new QPushButton(name);
         control->setAutoDefault(false);
         control->setProperty("profileCardAction",true);
         control->setProperty("quiet",true);
-        footer->addWidget(control);
+        footer->addWidget(control,0,Qt::AlignRight|Qt::AlignVCenter);
         connect(control,&QPushButton::clicked,this,[this,action] { emit actionRequested(action); });
         return control;
     };
@@ -258,17 +261,21 @@ void ProfileCardWidget::arrangeFooter() {
         cardLayout_->insertWidget(cardLayout_->count()-1,statusLine_);
     } else {
         cardLayout_->removeWidget(statusLine_);
-        footer_->insertWidget(0,statusLine_,1,Qt::AlignVCenter);
+        footer_->insertWidget(0,statusLine_,1);
     }
 }
 
 void ProfileCardWidget::setProfile(const QModelIndex& index) {
-    const bool remote = index.data(ProfileRowModel::Kind).toString() == "remote";
+    const auto kind = index.data(ProfileRowModel::Kind).toString();
+    const bool remote = kind == "remote";
+    const bool tunnel = kind == "wireguard";
+    setProperty("wireGuardCard",tunnel);
     title_->setText(index.data(Qt::DisplayRole).toString());
     const auto source = index.data(ProfileRowModel::SourceLabel).toString();
     canRefresh_ = index.data(ProfileRowModel::CanRefresh).toBool();
     const auto timestamp=index.data(ProfileRowModel::UpdatedLabel).toString();
-    source_->setText(remote ? "订阅链接" : "本地文件");
+    source_->setText(tunnel?"WireGuard":index.data(ProfileRowModel::MixedEngines).toBool()
+        ?(remote?"Mihomo 订阅":"Mihomo 文件"):(remote?"订阅链接":"本地文件"));
     source_->setToolTip(source);
     time_->setText(timestamp.isEmpty() ? QStringLiteral("尚未更新") : timestamp);
     const auto refreshHint = canRefresh_ ? QStringLiteral("检查更新") : QStringLiteral("此配置没有可刷新的来源");
@@ -289,10 +296,10 @@ void ProfileCardWidget::setProfile(const QModelIndex& index) {
             label->style()->polish(label);
         }
     };
-    if (current) setState(status_,"当前使用","success");
+    if (current) setState(status_,tunnel?"隧道已连接":"当前使用","success");
     else if (candidate && !failed) setState(status_,"待应用","warning");
     else if (failed) setState(status_,"更新失败","error");
-    else setState(status_,"未启用","idle");
+    else setState(status_,tunnel?"未连接":"未启用","idle");
     const bool separateUpdate=(current && candidate) || (failed && (current || candidate));
     setState(updateStatus_,failed && current?"更新失败":"待应用",failed && current?"error":"warning");
     updateStatus_->parentWidget()->setVisible(separateUpdate);
@@ -305,9 +312,19 @@ void ProfileCardWidget::setProfile(const QModelIndex& index) {
 
 void ProfileCardWidget::updateAppearance() {
     using G = UiIcons::Glyph;
-    mark_->setPixmap(UiIcons::icon(G::Folder,UiTheme::Brand).pixmap(23,23));
+    mark_->setPixmap(UiIcons::icon(property("wireGuardCard").toBool()?G::Link:G::Folder,UiTheme::Brand).pixmap(23,23));
     statusMark_->setPixmap(StatusShape::pixmap(status_->property("tone").toString(),devicePixelRatioF()));
     updateMark_->setPixmap(StatusShape::pixmap(updateStatus_->property("tone").toString(),devicePixelRatioF()));
+    int statusWidth=0;
+    for (auto* state:{status_,updateStatus_}) {
+        state->ensurePolished();
+        state->setFixedSize(state->fontMetrics().size(Qt::TextSingleLine,state->text()));
+        auto* tag=state->parentWidget();
+        const int width=state->width()+2*stateInset+17;
+        tag->setFixedWidth(width);
+        if (!tag->isHidden()) statusWidth=qMax(statusWidth,width);
+    }
+    statusLine_->setMinimumWidth(identityInset+statusWidth);
     refresh_->setIcon(UiIcons::icon(G::Refresh,UiTheme::Secondary));
     menu_->setIcon(UiIcons::icon(G::More,UiTheme::Secondary));
     reviewUpdate_->ensurePolished();

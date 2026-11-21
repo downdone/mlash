@@ -50,6 +50,7 @@ target_link_libraries(mlash_domain PUBLIC Qt6::Core Qt6::Network)
 add_library(mlash_engine STATIC
     src/app/Async.h src/app/AppUpdateSource.h src/app/AppUpdateSource.cpp src/app/ConnectivityProbe.h src/app/ConnectivityProbe.cpp src/app/AppController.h src/app/AppController.cpp src/app/AppControllerLiveViews.cpp src/app/AppControllerRuntime.cpp src/app/AppControllerPreferences.cpp src/app/AppControllerDiagnostics.cpp src/app/AppControllerLifecycle.cpp src/app/AppControllerBackup.cpp src/app/AppControllerCoreUpdate.cpp src/app/AppControllerAppUpdate.cpp src/app/AppControllerProfiles.cpp src/app/AppControllerTransaction.cpp src/app/AppControllerProxySwitch.cpp
     src/app/ProfileMaintenance.h src/app/ProfileMaintenance.cpp
+    src/app/AppControllerWireGuard.cpp
     src/app/ConnectionSession.h src/app/ConnectionSession.cpp
     src/app/HomeMetrics.h src/app/HomeMetrics.cpp
     src/app/HomeNodeProbe.h src/app/HomeNodeProbe.cpp
@@ -60,7 +61,10 @@ add_library(mlash_engine STATIC
     src/core/CoreDtos.h src/core/CoreDtos.cpp src/core/CoreApi.h src/core/MihomoClient.h src/core/MihomoClient.cpp src/core/MihomoEndpoints.cpp src/core/CoreManager.h src/core/CoreManager.cpp
     src/core/CoreUpdate.h src/core/CoreUpdate.cpp src/core/OfficialCoreSource.h src/core/OfficialCoreSource.cpp
     src/core/TunPolicy.h src/core/TunPolicy.cpp src/core/TunSession.h src/core/TunSession.cpp src/core/TunApiGate.h src/core/TunApiGate.cpp
+    src/core/WireGuardSession.h src/core/WireGuardSession.cpp
     src/profile/ConfigBuilder.h src/profile/ConfigBuilder.cpp
+    src/profile/WireGuardConfig.h src/profile/WireGuardConfig.cpp
+    src/profile/WireGuardStore.h src/profile/WireGuardStore.cpp
     src/profile/ProxyEdits.h src/profile/ProxyEdits.cpp
     src/profile/ProxyImpact.h src/profile/ProxyImpact.cpp
     src/profile/MrsSnapshot.h src/profile/MrsSnapshot.cpp
@@ -116,6 +120,7 @@ add_library(mlash_ui STATIC src/ui/Route.h src/ui/Route.cpp src/ui/ViewIds.h src
     src/ui/ProtocolSettingsDialog.h src/ui/ProtocolSettingsDialog.cpp
     src/ui/ProxyBypassDialog.h src/ui/ProxyBypassDialog.cpp
     src/ui/CoreUpdateDialog.h src/ui/CoreUpdateDialog.cpp
+    src/ui/MainWindowWireGuard.cpp
     src/ui/AppUpdateDialog.h src/ui/AppUpdateDialog.cpp
     src/ui/RemoteBackupDialog.h src/ui/RemoteBackupDialog.cpp
     src/ui/GeoDataDialog.h src/ui/GeoDataDialog.cpp
@@ -143,11 +148,28 @@ if(WIN32)
 endif()
 install(TARGETS Mlash RUNTIME DESTINATION .)
 if(WIN32)
-    add_executable(MlashTunService src/platform/windows/TunServiceMain.cpp resources/mlash.rc)
+    find_program(MLASH_GO_EXECUTABLE go REQUIRED)
+    set(wg_module "${CMAKE_CURRENT_SOURCE_DIR}/src/core/wireguard")
+    set(wg_assets "${CMAKE_RUNTIME_OUTPUT_DIRECTORY}")
+    set(wg_hash "${CMAKE_CURRENT_BINARY_DIR}/generated/wireguard_hash.h")
+    file(GLOB_RECURSE wg_sources CONFIGURE_DEPENDS "${wg_module}/*.go")
+    add_custom_command(
+        OUTPUT "${wg_assets}/MlashWireGuard.exe" "${wg_hash}"
+        COMMAND "${CMAKE_COMMAND}" -E make_directory "${wg_assets}" "${CMAKE_CURRENT_BINARY_DIR}/generated"
+        COMMAND "${CMAKE_COMMAND}" -E env GOTOOLCHAIN=local GOOS=windows GOARCH=amd64 CGO_ENABLED=0
+            "${MLASH_GO_EXECUTABLE}" build -mod=readonly -trimpath -buildvcs=false -o "${wg_assets}/MlashWireGuard.exe" ./cmd/mlash-wireguard
+        COMMAND "${CMAKE_COMMAND}" "-DHELPER=${wg_assets}/MlashWireGuard.exe" "-DOUTPUT=${wg_hash}"
+            -P "${CMAKE_CURRENT_SOURCE_DIR}/scripts/write-wireguard-hash.cmake"
+        DEPENDS ${wg_sources} "${wg_module}/go.mod" "${wg_module}/go.sum" scripts/write-wireguard-hash.cmake
+        WORKING_DIRECTORY "${wg_module}"
+        VERBATIM)
+    add_executable(MlashTunService src/platform/windows/TunServiceMain.cpp
+        src/platform/windows/WireGuardService.cpp "${wg_hash}" resources/mlash.rc)
     target_link_libraries(MlashTunService PRIVATE mlash_engine)
     target_compile_definitions(MlashTunService PRIVATE WIN32_LEAN_AND_MEAN NOMINMAX UNICODE _UNICODE)
     target_include_directories(MlashTunService PRIVATE resources "${CMAKE_CURRENT_BINARY_DIR}/generated")
     install(TARGETS MlashTunService RUNTIME DESTINATION .)
+    install(PROGRAMS "${wg_assets}/MlashWireGuard.exe" DESTINATION .)
 endif()
 
 include(CTest)
@@ -187,6 +209,9 @@ if(BUILD_TESTING)
     add_test(NAME core_readiness_tests COMMAND mlash_readiness_tests -o "${CMAKE_BINARY_DIR}/core-readiness-tests.xml,xml")
     set_tests_properties(core_readiness_tests PROPERTIES TIMEOUT 30)
     add_test(NAME engine COMMAND mlash_tests -o "${CMAKE_BINARY_DIR}/engine-tests.xml,xml")
+    add_test(NAME wireguard_profile_tests COMMAND mlash_tests wireGuardConfigurationValidation wireGuardImportAndEncryptedCandidate wireGuardWindowsStorage wireGuardPreviewBindsInput wireGuardClientLeaseAndCleanup
+        -o "${CMAKE_BINARY_DIR}/wireguard-profile-tests.xml,xml")
+    set_tests_properties(wireguard_profile_tests PROPERTIES TIMEOUT 30 LABELS "integration")
     set_tests_properties(engine PROPERTIES TIMEOUT 90 ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
     add_executable(mlash_ui_model_tests tests/UiModelTests.cpp src/ui/ProxyTableModel.h src/ui/ProxyTableModel.cpp)
     target_link_libraries(mlash_ui_model_tests PRIVATE Qt6::Core Qt6::Gui Qt6::Test)
@@ -218,6 +243,8 @@ if(BUILD_TESTING)
     set_tests_properties(ui_interactions PROPERTIES TIMEOUT 30 ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
     add_test(NAME profile_rename_ui COMMAND mlash_ui_tests subscriptionCardEditingAndReturnPreserveObject -o "${CMAKE_BINARY_DIR}/profile-rename-ui.xml,xml")
     add_test(NAME subscription_cards_ui COMMAND mlash_ui_tests quickImportCreatesProfileAndOffersAdvancedWindow subscriptionCardsRouteActionsWithoutChangingUse subscriptionOrderKeepsSelectedObject subscriptionRollbackRequiresExplicitConfirmation -o "${CMAKE_BINARY_DIR}/subscription-cards-ui.xml,xml")
+    add_test(NAME wireguard_ui COMMAND mlash_ui_tests wireGuardCardAndTrafficUseTypedDetails wireGuardVersionsServiceAndLayout -o "${CMAKE_BINARY_DIR}/wireguard-ui.xml,xml")
+    set_tests_properties(wireguard_ui PROPERTIES TIMEOUT 30 ENVIRONMENT "QT_QPA_PLATFORM=offscreen" LABELS "ui")
     set_tests_properties(subscription_cards_ui PROPERTIES TIMEOUT 20 ENVIRONMENT "QT_QPA_PLATFORM=offscreen" LABELS "ui")
     set_tests_properties(profile_rename_ui PROPERTIES TIMEOUT 20 ENVIRONMENT "QT_QPA_PLATFORM=offscreen" LABELS "ui")
     add_test(NAME profile_navigation_ui COMMAND mlash_ui_tests subscriptionCardReturnRestoresGridPosition changingSectionRestoresNetworkSettingsDraft settingsSearchDoesNotRearrangeDirtyNetworkTask changingSectionRestoresEmbeddedTaskDraft settingsSearchKeepsDirtyTaskVisible -o "${CMAKE_BINARY_DIR}/profile-navigation-ui.xml,xml")
@@ -243,7 +270,7 @@ if(BUILD_TESTING)
     # 该系统剪贴板是进程外共享资源：并行 ctest 时与其他用例互相覆盖。
     # 用 RESOURCE_LOCK 串行化，而不是放宽断言。
     set_tests_properties(ui_components PROPERTIES TIMEOUT 60 ENVIRONMENT "QT_QPA_PLATFORM=offscreen" RESOURCE_LOCK system_clipboard)
-    add_test(NAME status_bar_tests COMMAND mlash_ui_tests persistentStatusBarDoesNotMovePages -o "${CMAKE_BINARY_DIR}/status-bar-tests.xml,xml")
+    add_test(NAME status_bar_tests COMMAND mlash_ui_tests persistentStatusBarDoesNotMovePages readOnlyAlarmKeepsFailureDetails -o "${CMAKE_BINARY_DIR}/status-bar-tests.xml,xml")
     # P4.1 反馈路由：页面级结果不进状态栏、告警与最近操作两段并存、归属表逐条固定。
     add_test(NAME feedback_routing_tests COMMAND mlash_ui_tests operationResultsGoToTheirOwnPage feedbackTargetsStayExplicit -o "${CMAKE_BINARY_DIR}/feedback-routing-tests.xml,xml")
     set_tests_properties(feedback_routing_tests PROPERTIES TIMEOUT 60 ENVIRONMENT "QT_QPA_PLATFORM=offscreen")

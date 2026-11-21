@@ -128,6 +128,107 @@ QWidget* MainWindow::homePage() {
     syncControlRowHeight();
     connect(UiTheme::notifier(),&UiTheme::AppearanceNotifier::changed,currentRow,syncControlRowHeight);
     summary->addWidget(connectivityRow);
+    auto* dual=new QWidget(control);
+    auto* dualLayout=new QVBoxLayout(dual);
+    dualLayout->setContentsMargins(0,0,0,0);
+    dualLayout->setSpacing(0);
+    auto addLink=[dualLayout](const QString& name,UiIcons::Glyph glyph) {
+        auto* separator=new QFrame;
+        separator->setObjectName("homeControlSeparator");
+        separator->setFixedHeight(1);
+        dualLayout->addWidget(separator);
+        auto* row=new QWidget;
+        auto* line=new QHBoxLayout(row);
+        line->setContentsMargins(0,3,0,3);
+        line->setSpacing(10);
+        row->setMinimumHeight(UiTheme::RowHeight);
+        auto* icon=new QLabel;
+        icon->setFixedSize(22,22);
+        const auto updateIcon=[icon,glyph] { icon->setPixmap(UiIcons::icon(glyph,UiTheme::Brand).pixmap(22,22)); };
+        updateIcon();
+        connect(UiTheme::notifier(),&UiTheme::AppearanceNotifier::changed,icon,updateIcon);
+        line->addWidget(icon);
+        auto* text=new ElidedLabel;
+        text->setText(name);
+        text->setObjectName("homeControlTitle");
+        text->setMinimumWidth(0);
+        auto* action=new QPushButton;
+        action->setProperty("quiet",true);
+        line->addWidget(text,1); line->addWidget(action);
+        dualLayout->addWidget(row);
+        return qMakePair(text,action);
+    };
+    auto [localLabel,localAction]=addLink("Mihomo 本地代理",UiIcons::Glyph::Globe);
+    auto [tunnelLabel,tunnelAction]=addLink("WireGuard 隧道",UiIcons::Glyph::Link);
+    tunnelAction->setObjectName("wireGuardHomeToggle");
+    localAction->setObjectName("mihomoLocalHomeToggle");
+    connect(tunnelAction,&QPushButton::clicked,dual,[this,tunnelAction] {
+        const auto seen=controller_->wireGuardObservation();
+        if (seen.value("active").toBool()||seen.value("cleanup_pending").toBool()) {
+            controller_->disconnectWireGuard();
+            return;
+        }
+        if (seen.value("error").toString().contains("服务")) { openWireGuardService(); return; }
+        const auto profiles=controller_->wireGuardProfiles();
+        if (profiles.isEmpty()) { addUrl(); return; }
+        if (profiles.size()==1) {
+            const auto& profile=profiles.first();
+            if (profile.summary.value("full_v4").toBool()||profile.summary.value("full_v6").toBool())
+                showWireGuardProfile(profile.id);
+            else controller_->connectWireGuard(profile.id,profile.candidate);
+            return;
+        }
+        auto* menu=new QMenu(tunnelAction);
+        menu->setObjectName("wireGuardHomeChoices");
+        for (const auto& profile:profiles) {
+            auto* entry=menu->addAction(profile.name);
+            const bool full=profile.summary.value("full_v4").toBool()||profile.summary.value("full_v6").toBool();
+            if (full) entry->setText(profile.name+" · 查看配置");
+            connect(entry,&QAction::triggered,this,[this,id=profile.id,version=profile.candidate,full] {
+                if (full) showWireGuardProfile(id);
+                else controller_->connectWireGuard(id,version);
+            });
+        }
+        connect(menu,&QMenu::aboutToHide,menu,&QObject::deleteLater);
+        WidgetStyle::popupMenu(menu,tunnelAction->mapToGlobal(QPoint(0,tunnelAction->height())));
+    });
+    connect(localAction,&QPushButton::clicked,dual,[this] {
+        if (controller_->state().activeProfile.isEmpty()) { openProfileSetup(); return; }
+        if (controller_->state().ready) controller_->stopCore();
+        else controller_->startCore(false);
+    });
+    const auto updateLinks=[this,dual,tunnelLabel,tunnelAction,localLabel,localAction] {
+        const auto obs=controller_->wireGuardObservation();
+        const bool on=obs.value("active").toBool(), cleanup=obs.value("cleanup_pending").toBool();
+        const auto phase=obs.value("phase").toString();
+        const auto error=obs.value("error").toString(),block=obs.value("connect_block").toString();
+        dual->setVisible(!controller_->wireGuardProfiles().isEmpty()||on||cleanup);
+        const auto& state=controller_->state();
+        const auto& profiles=controller_->wireGuardProfiles();
+        const auto active=std::find_if(profiles.cbegin(),profiles.cend(),[&](const auto& profile) {
+            return profile.id==obs.value("profile_id").toString();
+        });
+        const QString tunnelState=phase=="connecting"?"正在连接":phase=="disconnecting"?"正在清理":
+            cleanup?"待清理":on&&active!=profiles.cend()?active->name+" · 已连接":on?"已连接":
+            !error.isEmpty()?error:!block.isEmpty()?block:"未连接";
+        tunnelLabel->setText("WireGuard 隧道 · "+tunnelState);
+        tunnelLabel->setToolTip(tunnelLabel->text());
+        const bool serviceIssue=error.contains("服务");
+        tunnelAction->setText(on?"断开":cleanup?"重试清理":serviceIssue?"权限服务…":profiles.size()==1?"连接":"选择配置");
+        tunnelAction->setEnabled(!state.busy&&!state.exiting&&phase.isEmpty()&&
+            (on||cleanup||serviceIssue||(!state.readOnly&&block.isEmpty())));
+        localLabel->setText(state.tunObserved?"Mihomo · TUN 正在接管":state.ready?QString("Mihomo 本地代理 · 127.0.0.1:%1").arg(controller_->settings().mixedPort)
+                                      :QString("Mihomo 本地代理 · 未启动"));
+        localAction->setText(state.ready?"停止":state.activeProfile.isEmpty()?"选择配置":"启动");
+        localLabel->setToolTip(localLabel->text());
+        localAction->setEnabled(!state.busy&&!state.exiting&&!state.readOnly&&
+            !controller_->settings().tunEnabled&&!state.tunObserved);
+    };
+    connect(controller_,&AppController::stateChanged,dual,updateLinks);
+    connect(controller_,&AppController::profilesChanged,dual,updateLinks);
+    connect(controller_,&AppController::wireGuardChanged,dual,updateLinks);
+    updateLinks();
+    summary->addWidget(dual);
     layout->addWidget(control);
     // 对象内结果（P4.1）：挂到「更多运行信息」抽屉之前的位置无法保证可见，改挂在控制区之后——
     // 「请先激活订阅」这类结论恰恰出现在控制区被隐藏的时候，所以它按原设计留在面板外。

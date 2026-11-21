@@ -49,9 +49,9 @@ ImportDialog::ImportDialog(QWidget* parent) : TaskDialog(parent) {
     urlForm->addWidget(url_); auto* show = new QCheckBox("显示地址"); urlForm->addWidget(show);
     connect(show, &QCheckBox::toggled, this, [this](bool visible) { url_->setEchoMode(visible ? QLineEdit::Normal : QLineEdit::Password); });
     auto* filePage = new QWidget; filePage->setObjectName("importSource"); filePage->setAttribute(Qt::WA_StyledBackground, true); auto* fileLayout = new QVBoxLayout(filePage); fileLayout->addWidget(new QLabel("配置文件"));
-    auto* fileRow = new QHBoxLayout; file_ = new QLineEdit; file_->setObjectName("subscriptionFile"); file_->setPlaceholderText("选择完整 YAML 配置文件"); file_->setClearButtonEnabled(true);
+    auto* fileRow = new QHBoxLayout; file_ = new QLineEdit; file_->setObjectName("subscriptionFile"); file_->setPlaceholderText("选择 YAML 或 WireGuard CONF"); file_->setClearButtonEnabled(true);
     fileRow->addWidget(file_, 1); auto* browse = new QPushButton("浏览…"); browse->setAutoDefault(false); fileRow->addWidget(browse); fileLayout->addLayout(fileRow);
-    connect(browse, &QPushButton::clicked, this, [this] { const auto path = QFileDialog::getOpenFileName(this, "选择订阅配置", {}, "YAML (*.yaml *.yml)"); if (!path.isEmpty()) file_->setText(path); });
+    connect(browse, &QPushButton::clicked, this, [this] { const auto path = QFileDialog::getOpenFileName(this, "选择配置", {}, "配置文件 (*.yaml *.yml *.conf)"); if (!path.isEmpty()) file_->setText(path); });
     urlForm->addStretch(1); fileLayout->addStretch(1); tabs_->addTab(urlPage, "订阅链接"); tabs_->addTab(filePage, "配置文件"); links_=new NodeLinksEditor(nullptr); tabs_->addTab(links_,"节点链接"); static_cast<ImportSourceTabs*>(tabs_)->fitCurrent(); layout->addWidget(tabs_,0,Qt::AlignTop);
     auto* form = new QFormLayout; name_ = new QLineEdit; name_->setObjectName("subscriptionName"); name_->setMaxLength(120); name_->setPlaceholderText("可选，留空使用默认名称"); form->addRow("名称", name_); layout->addLayout(form);
     auto* advanced = new QPushButton("下载设置"); advanced->setObjectName("importAdvanced"); advanced->setCheckable(true); advanced->setAutoDefault(false); layout->addWidget(advanced, 0, Qt::AlignLeft);

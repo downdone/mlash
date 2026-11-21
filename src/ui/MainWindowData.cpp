@@ -130,7 +130,78 @@ void MainWindow::updateDataPanelVisibility() {
 QWidget* MainWindow::trafficPanel() {
     // This page is already the detail surface. Show its one metric source directly.
     auto* panel = new QWidget; panel->setObjectName("trafficPanel"); auto* layout = new QVBoxLayout(panel); layout->setContentsMargins(0,0,0,0); layout->setSpacing(12);
+    auto* proxyHeading=new QLabel("Mihomo 代理");
+    proxyHeading->setObjectName("sectionTitle");
+    layout->addWidget(proxyHeading);
     auto* metrics = new HomeMetricsView(controller_->homeMetrics()); connect(metrics,&HomeMetricsView::inspectRequested,this,&MainWindow::showOutboundDiagnostics); layout->addWidget(metrics);
+    auto* links=WindowParts::panel();
+    auto* linksLayout=new QVBoxLayout(links);
+    linksLayout->setContentsMargins(14,10,14,10);
+    linksLayout->setSpacing(8);
+    auto* tunnelRow=new QHBoxLayout;
+    auto* wireTraffic=new QLabel(links);
+    wireTraffic->setObjectName("wireGuardTraffic");
+    wireTraffic->setTextFormat(Qt::PlainText);
+    wireTraffic->setWordWrap(true);
+    wireTraffic->setSizePolicy(QSizePolicy::Ignored,QSizePolicy::Preferred);
+    tunnelRow->addWidget(wireTraffic,1);
+    auto* inspectTunnel=new QPushButton("Peer 详情 ›");
+    inspectTunnel->setObjectName("wireGuardTrafficDetails");
+    inspectTunnel->setProperty("quiet",true);
+    tunnelRow->addWidget(inspectTunnel);
+    linksLayout->addLayout(tunnelRow);
+    auto* direct=new QLabel("Windows 直连 · 未统计",links);
+    direct->setObjectName("windowsDirectTraffic");
+    direct->setProperty("secondary",true);
+    direct->setWordWrap(true);
+    linksLayout->addWidget(direct);
+    auto* proxyFoot=new QLabel("Mihomo 按代理连接统计 · 物理出口未确认",links);
+    proxyFoot->setObjectName("mihomoTrafficScope");
+    proxyFoot->setProperty("secondary",true);
+    proxyFoot->setWordWrap(true);
+    linksLayout->addWidget(proxyFoot);
+    connect(inspectTunnel,&QPushButton::clicked,panel,[this,inspectTunnel] {
+        const auto id=inspectTunnel->property("profileId").toString();
+        if (!id.isEmpty()) showWireGuardProfile(id,1);
+    });
+    const auto recordTunnel=[this,links,proxyHeading,wireTraffic,proxyFoot,inspectTunnel] {
+        const auto observation=controller_->wireGuardObservation();
+        const auto& catalog=controller_->wireGuardProfiles();
+        const bool cleanup=observation.value("cleanup_pending").toBool();
+        const bool active=observation.value("active").toBool();
+        const bool visible=!catalog.isEmpty()||cleanup||active;
+        links->setVisible(visible);
+        proxyHeading->setVisible(visible);
+        if (!visible) return;
+        const auto peers=observation.value("observation").toObject().value("peers").toArray();
+        double received=0,sent=0;
+        for (const auto& entry:peers) {
+            const auto peer=entry.toObject();
+            received+=peer.value("rx_bytes").toString().toDouble();
+            sent+=peer.value("tx_bytes").toString().toDouble();
+        }
+        const auto phase=observation.value("phase").toString();
+        const auto sample=QDateTime::fromString(observation.value("sampled_at").toString(),Qt::ISODate).toLocalTime();
+        const QString summary=phase=="connecting"?"正在连接":phase=="disconnecting"?"正在清理":cleanup?"待清理":
+            active&&sample.isValid()?QString("累计 ↓ %1  ↑ %2 · %3").arg(ActivityTableModel::formatBytes(received),
+                ActivityTableModel::formatBytes(sent),sample.toString("HH:mm:ss")):QString("未连接");
+        wireTraffic->setText("WireGuard 隧道 · "+summary);
+        const auto mihomoSample=QDateTime::fromString(controller_->homeMetrics()->snapshot().value("measured_utc").toString(),
+                                                      Qt::ISODateWithMs).toLocalTime();
+        proxyHeading->setText(controller_->state().tunObserved?"Mihomo 流量":"Mihomo 代理");
+        proxyFoot->setText(QString(controller_->state().tunObserved?"含 Mihomo TUN 流量 · 物理出口未确认":"按 Mihomo 连接统计 · 物理出口未确认")+
+            (mihomoSample.isValid()?" · "+mihomoSample.toString("HH:mm:ss"):QString()));
+        proxyFoot->setVisible(controller_->state().ready);
+        const auto id=observation.value("profile_id").toString();
+        const auto selected=id.isEmpty()&&catalog.size()==1?catalog.first().id:id;
+        inspectTunnel->setProperty("profileId",selected);
+        inspectTunnel->setVisible(!selected.isEmpty());
+    };
+    connect(controller_,&AppController::wireGuardChanged,panel,recordTunnel);
+    connect(controller_,&AppController::stateChanged,panel,recordTunnel);
+    connect(controller_,&AppController::profilesChanged,panel,recordTunnel);
+    connect(controller_->homeMetrics(),&HomeMetrics::changed,panel,recordTunnel);
+    recordTunnel();
     auto* missing=new QLabel; missing->setObjectName("trafficNextReason"); missing->setWordWrap(true);
     auto* next=new QPushButton; next->setObjectName("trafficNextStep"); next->setProperty("primary",true);
     auto* empty=new QFrame; empty->setObjectName("panel"); auto* emptyLayout=new QVBoxLayout(empty);
@@ -138,17 +209,23 @@ QWidget* MainWindow::trafficPanel() {
     missing->setAlignment(Qt::AlignHCenter);
     emptyLayout->addWidget(missing); emptyLayout->addWidget(next,0,Qt::AlignHCenter);
     layout->addWidget(empty);
+    layout->addWidget(links);
     connect(next,&QPushButton::clicked,this,[this] {
         if (controller_->state().activeProfile.isEmpty()) openProfileSetup();
         else navigate(Route{ViewIds::Home});
     });
-    const auto refresh=[this,metrics,empty,missing,next] {
+    const auto refresh=[this,metrics,empty,emptyLayout,missing,next] {
         const auto& state=controller_->state();
         const bool hasProfile=!state.activeProfile.isEmpty();
         const bool waiting=state.core==CoreState::Starting || state.core==CoreState::Stopping || state.busy;
         const bool sampled=!controller_->homeMetrics()->snapshot().isEmpty();
         metrics->setVisible(sampled);
         empty->setVisible(!sampled);
+        const bool dual=!controller_->wireGuardProfiles().isEmpty();
+        emptyLayout->setDirection(dual?QBoxLayout::LeftToRight:QBoxLayout::TopToBottom);
+        emptyLayout->setContentsMargins(16,dual?10:20,16,dual?10:20);
+        emptyLayout->setStretchFactor(missing,dual?1:0);
+        missing->setAlignment(dual?Qt::AlignVCenter|Qt::AlignLeft:Qt::AlignCenter);
         const auto copy=profileSetupCopy(!controller_->profiles().isEmpty());
         missing->setText(!hasProfile?copy.title:waiting?"正在等待连接…":
             !state.ready?"前往首页开启代理后查看流量。":
@@ -157,6 +234,7 @@ QWidget* MainWindow::trafficPanel() {
         next->setVisible(!sampled && (!hasProfile || (!waiting && !state.ready)));
     };
     connect(controller_,&AppController::stateChanged,panel,refresh);
+    connect(controller_,&AppController::profilesChanged,panel,refresh);
     connect(controller_->homeMetrics(),&HomeMetrics::changed,panel,refresh);
     refresh();
     homeOutboundSummary_ = new QLabel; homeOutboundSummary_->setObjectName("outboundSummary"); homeOutboundSummary_->setProperty("secondary", true); homeOutboundSummary_->setWordWrap(true); layout->addWidget(homeOutboundSummary_);
@@ -181,7 +259,7 @@ QWidget* MainWindow::diagnosticsPanel() {
     auto* toolbar=new QWidget; toolbar->setObjectName("logToolbar"); auto* actions = new WrapLayout(toolbar);
     auto* logPanel = panel(); auto* logLayout = new QVBoxLayout(logPanel); logLayout->setContentsMargins(10, 8, 10, 8); logLayout->setSpacing(6); layout->addWidget(logPanel, 1);
     logSearch_ = new QLineEdit; logSearch_->setObjectName("logSearch"); logSearch_->setPlaceholderText("搜索日志…"); logSearch_->setAccessibleName("搜索日志"); logSearch_->setClearButtonEnabled(true); actions->addWidget(logSearch_);
-    logFilter_ = new CompactComboBox; logFilter_->setObjectName("logLevelFilter"); for (const auto& pair : QList<QPair<QString,QString>>{{"全部","all"},{"调试","debug"},{"信息","info"},{"警告","warning"},{"错误","error"},{"应用","app"}}) logFilter_->addItem(pair.first,pair.second); actions->addWidget(logFilter_);
+    logFilter_ = new CompactComboBox; logFilter_->setObjectName("logLevelFilter"); for (const auto& pair : QList<QPair<QString,QString>>{{"全部","all"},{"调试","debug"},{"信息","info"},{"警告","warning"},{"错误","error"},{"应用","app"},{"WireGuard","wireguard"}}) logFilter_->addItem(pair.first,pair.second); actions->addWidget(logFilter_);
     auto* pause = new QPushButton("暂停显示"); actions->addWidget(pause); pause->setObjectName("pauseLogs"); pause->setCheckable(true);
     auto* more = new MenuPushButton("日志选项"); actions->addWidget(more); auto* menu = new QMenu(more); menu->setObjectName("logOptionsMenu"); more->setMenu(menu);
     auto* report = new QAction("导出脱敏诊断…", this); report->setObjectName("exportDiagnostics");

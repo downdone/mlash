@@ -15,6 +15,7 @@ struct AppController::ActivationTransaction {
 };
 
 void AppController::transact(PreparedProfile prepared, Settings nextSettings) {
+    if (nextSettings.tunEnabled&&wireGuard_.leasePending()) { finish(Result::fail("WireGuard 持有系统路由，请先安全断开")); return; }
     if (!changeBackupDone_ && settings_.localBackup.value("before_changes").toBool()) {
         protectMajorChange([this,prepared,nextSettings] { transact(prepared,nextSettings); });
         return;

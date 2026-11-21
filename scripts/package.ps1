@@ -40,6 +40,14 @@ if (Test-Path $stageDirectory) {
 New-Item -ItemType Directory -Force $stageDirectory | Out-Null
 Copy-Item -LiteralPath "$buildDirectory/bin/Mlash.exe" -Destination $stageDirectory
 Copy-Item -LiteralPath "$buildDirectory/bin/MlashTunService.exe" -Destination $stageDirectory
+$wireGuardHelper = "$buildDirectory/bin/MlashWireGuard.exe"
+$wireGuardHashHeader = Get-Content -Raw -LiteralPath "$buildDirectory/generated/wireguard_hash.h"
+$wireGuardExpected = [regex]::Match($wireGuardHashHeader, 'MLASH_WIREGUARD_SHA256 "([0-9a-f]{64})"').Groups[1].Value
+if (!$wireGuardExpected -or (Get-FileHash -LiteralPath $wireGuardHelper).Hash -ine $wireGuardExpected) {
+    throw 'WireGuard helper does not match the fixed service hash'
+}
+Copy-Item -LiteralPath $wireGuardHelper -Destination $stageDirectory
+& "$PSScriptRoot/prepare-wintun.ps1" -Destination $stageDirectory
 if ($Preset -like 'windows-mingw*' -or $Preset -eq 'windows-ci') { $compilerBin=if ($Preset -eq 'windows-ci') { "$env:MLASH_MINGW/bin" } else { "$env:MLASH_MINGW/bin" }; $env:PATH = "$compilerBin;$qtKit/bin;$env:PATH" }
 & "$qtKit/bin/windeployqt.exe" --release --no-translations --no-system-d3d-compiler --no-system-dxc-compiler --no-opengl-sw --skip-plugin-types iconengines,imageformats,generic "$stageDirectory/Mlash.exe"
 if ($LASTEXITCODE -ne 0) { throw 'Qt deployment failed' }
