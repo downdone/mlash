@@ -64,6 +64,7 @@ private:
     void updateDataPanelVisibility();
     int currentDataTab() const;
     void applyAppearance();
+    void updateSidebar();
     void updateRulesProfiles(); void loadRuleDraft();
     void rebuildRuleList(); void updateConnections();
     void rememberConnectionPosition();
@@ -111,6 +112,7 @@ private:
     void shareProfileScheme();
     void wireProfileList(QListView* list);
     void showProfileMenu(const QString& id, const QPoint& globalPoint);
+    void openProfileSetup();
     void updateProfileGrid();
     QStringList selectedProfileIds() const;
     void updateNodeCount();                      // 标题行的成员计数
@@ -118,7 +120,14 @@ private:
     void editNodePreferences();
     void applyNodeFilters();
     void importPayload(const QString& input);
-    void showProfileBatch(bool start);
+    struct ProfileBatchScope {
+        QStringList ids;
+        int skipped = 0;
+        bool selected = false;
+    };
+    ProfileBatchScope profileBatchScope() const;
+    void updateProfileBatchAction();
+    void showProfileBatch();
     void showProviders(const QString& id, const QString& kind = {});
     void showProfileCompatibility(const QString& id);
     bool logMatches(const QString& line) const;
@@ -150,6 +159,7 @@ private:
     Settings displayedSettings_;
     QListWidget* navigation_;
     QToolButton* settingsNav_ = nullptr;
+    bool sidebarCollapsed_ = false;
     QStackedWidget* pages_;
     // K1：内容区首行的固定顶栏（72px）。标题/副标题随路由变化，右侧是状态胶囊与两个图标钮。
     QLabel* topbarTitle_ = nullptr;
@@ -181,7 +191,8 @@ private:
     OperationId noticeOperation_ = OperationId::Unspecified;
     QLabel *homeSelection_, *proxyProfileHint_, *statusDot_;
     QComboBox* profilesCombo_;
-    QLabel *message_, *groupHint_, *overviewTitle_;
+    QLabel *message_, *groupHint_;
+    QLabel *homeCurrentNode_ = nullptr, *homeTakeoverStatus_ = nullptr;
     // 节点区标题行（H3 / 原型 01）：标题、计数、分组说明。
     QLabel *nodeHeadingTitle_ = nullptr, *nodeCount_ = nullptr;
     // 构造顺序敏感：这些指针在页面构造里赋值，updateActions 会在构造中调用，

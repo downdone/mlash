@@ -94,7 +94,6 @@ void MainWindow::updateState() {
     if (state.core == CoreState::Starting) title = "正在启动内核…";
     if (state.core == CoreState::Failed) title = "内核启动或运行失败";
     if (state.core==CoreState::Stopping) title="正在停止内核…";
-    overviewTitle_->setText(title);
     // 首页状态点的颜色与字形同样交给 QSS：代码只声明状态，不写颜色与字号。
     const QString dotState = state.core == CoreState::Failed ? QString("error")
         : state.core == CoreState::Starting || state.core == CoreState::Stopping || state.proxy == ProxyState::Unknown ? QString("warning")
@@ -136,13 +135,10 @@ void MainWindow::updateActions() {
     }
     const auto& state = controller_->state(); const bool idle = !state.busy && !state.exiting && !state.readOnly;
     const auto& profiles=controller_->profiles();
-    const bool batchAvailable=std::count_if(profiles.cbegin(),profiles.cend(),
-        [](const Profile& profile) { return !profile.source.isEmpty(); }) > 1;
     enable("exportDiagnostics", !state.busy&&!state.exiting);
     enable("nodePreferences", idle&&!selectedGroup_.isEmpty()&&profilesCombo_->currentData().toString()==state.activeProfile);
     enable("ruleProviders", !state.busy&&!state.exiting&&!rulesProfiles_->currentData().toString().isEmpty());
     if (auto* objectActions=findChild<QWidget*>("profileObjectActions")) objectActions->setVisible(!selectedProfile().isEmpty());
-    if (auto* batch=findChild<QPushButton*>("batchProfiles")) batch->setVisible(batchAvailable);
     if (auto* order=findChild<QToolButton*>("profileOrder")) order->setVisible(profiles.size()>1);
     const auto draftError=ruleDraftError();
 if (saveRules_)     saveRules_->setEnabled(idle && !rulesProfiles_->currentData().toString().isEmpty() && rulesDirty_ && draftError.isEmpty());
@@ -276,8 +272,7 @@ if (proxyMasterSwitch_)         proxyMasterSwitch_->setEnabled(usable);
     enable("deleteProfile", valid);
     enable("profileUpdatePolicy", valid);
     if (auto* action = findChild<QAction*>("replaceProfileSource")) action->setEnabled(valid && profile->sourceType == "file");
-    // K7：配置页的动作全在行详情抽屉里，顶部只剩三个与选择无关的按钮。
-    if (auto* batch = findChild<QPushButton*>("batchProfiles")) batch->setEnabled(batchAvailable && idle);
+    updateProfileBatchAction();
     // 页面级反馈（P4.1）：订阅页最近一次更新/激活/批量更新的结论。空串表示没有待说明的结果。
     if (auto* hint = findChild<QLabel*>("profileSubmitHint"); hint && pageFeedback_.size() > 1) {
         const bool show = route_.view == ViewIds::Profiles && !pageFeedback_[1].isEmpty();
@@ -307,9 +302,10 @@ if (homeControlHint_)         homeControlHint_->setVisible(show);
     if (connectionSummary_) connectionSummary_->setVisible(hasConnectionMetrics || canCloseAll);
     if (connectionPause_) connectionPause_->setEnabled(!state.exiting&&state.ready&&!state.busy&&controller_->connectionsVisible());
     if (connectionEmpty_) connectionEmpty_->setVisible(connectionsFilter_.rowCount()==0);
+    const auto setup=profileSetupCopy(!controller_->profiles().isEmpty());
     connectionEmpty_->setText(!controller_->connectionError().isEmpty()
         ? (controller_->connectionsStale() ? QString("刷新失败 · 下方保留上次快照") + QChar(10) + QString("详情见状态栏或日志页") : QString("连接读取失败"))
-        : !state.ready ? (state.activeProfile.isEmpty()?QString("请先选择配置"):state.core==CoreState::Starting?QString("正在启动内核…"):state.core==CoreState::Running?QString("正在确认内核…"):state.core==CoreState::Stopping?QString("正在停止内核…"):QString("内核未就绪"))
+        : !state.ready ? (state.activeProfile.isEmpty()?setup.title:state.core==CoreState::Starting?QString("正在启动内核…"):state.core==CoreState::Running?QString("正在确认内核…"):state.core==CoreState::Stopping?QString("正在停止内核…"):QString("内核未就绪"))
         : connectionsModel_.rowCount()>0 ? QString("没有匹配的连接") + QChar(10) + QString("请调整搜索条件")
         : connectionView_->currentIndex()==1 ? QString("内核已就绪，暂无已结束的连接")
         : controller_->connectionsPaused() ? QString("已暂停") + QChar(10) + QString("恢复刷新后继续采样")
@@ -319,11 +315,20 @@ if (homeControlHint_)         homeControlHint_->setVisible(show);
     {
         const bool failed = !controller_->connectionError().isEmpty(), noMatch = connectionsModel_.rowCount() > 0;
         const bool canStartCore=state.core==CoreState::Stopped || state.core==CoreState::Failed;
-        const QString text = connectionsFilter_.rowCount()>0 ? QString() : failed ? QString("查看日志") : noMatch ? QString("清除筛选") : !state.ready ? (state.activeProfile.isEmpty()?QString("选择配置"):canStartCore?QString("启动内核"):QString()) : QString("刷新");
+        const bool needsSetup=!failed && !noMatch && !state.ready && state.activeProfile.isEmpty();
+        if (auto* action=emptyStateAction(connectionsTable_)) {
+            if (action->property("primary").toBool()!=needsSetup) {
+                action->setProperty("primary",needsSetup);
+                action->setProperty("quiet",!needsSetup);
+                action->style()->unpolish(action);
+                action->style()->polish(action);
+            }
+        }
+        const QString text = connectionsFilter_.rowCount()>0 ? QString() : failed ? QString("查看日志") : noMatch ? QString("清除筛选") : !state.ready ? (needsSetup?setup.action:canStartCore?QString("启动内核"):QString()) : QString("刷新");
         setEmptyStateAction(connectionsTable_, text, [this, failed, noMatch] {
             if (failed) navigate(Route{ViewIds::Data, kNoCategory, HomeAnchor::Control, int(ViewIds::DataTab::Logs)});
             else if (noMatch) connectionsFilter_.setFilterFixedString({});
-            else if (!controller_->state().ready) { const auto& st = controller_->state(); if (st.activeProfile.isEmpty()) navigate(Route{ViewIds::Profiles}); else if (st.core==CoreState::Stopped || st.core==CoreState::Failed) controller_->startCore(); }
+            else if (!controller_->state().ready) { const auto& st = controller_->state(); if (st.activeProfile.isEmpty()) openProfileSetup(); else if (st.core==CoreState::Stopped || st.core==CoreState::Failed) controller_->startCore(); }
             else controller_->refresh();
         });
     }}

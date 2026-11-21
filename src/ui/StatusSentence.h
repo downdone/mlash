@@ -23,6 +23,7 @@ struct StatusFacts {
 };
 
 StatusSentence statusSentence(const StatusFacts& facts);
+QString takeoverText(const StatusFacts& facts);
 StatusFacts statusFacts(const AppState& state, const Settings& settings, const QString& profileName);
 
 } // namespace mlash

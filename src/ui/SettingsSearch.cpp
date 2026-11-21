@@ -1,5 +1,6 @@
 #include "SettingsSearch.h"
 #include "UiIcons.h"
+#include "UiTheme.h"
 #include <QHBoxLayout>
 #include <QLineEdit>
 #include <QLabel>
@@ -9,11 +10,31 @@
 #include <QKeyEvent>
 #include <QRegularExpression>
 #include <QStyle>
+#include <QApplication>
+#include <QStyledItemDelegate>
 namespace mlash {
+namespace {
+class SettingsResultDelegate final : public QStyledItemDelegate {
+public:
+    using QStyledItemDelegate::QStyledItemDelegate;
+    void paint(QPainter* painter,const QStyleOptionViewItem& option,const QModelIndex& index) const override {
+        QStyleOptionViewItem item(option);
+        initStyleOption(&item,index);
+        const bool actionable=index.data(Qt::UserRole).toBool();
+        if (actionable) item.text=item.fontMetrics.elidedText(item.text,Qt::ElideRight,qMax(0,item.rect.width()-48));
+        const auto* style=item.widget?item.widget->style():QApplication::style();
+        style->drawControl(QStyle::CE_ItemViewItem,&item,painter,item.widget);
+        if (actionable) UiIcons::icon(UiIcons::Glyph::ChevronRight,UiTheme::Secondary)
+            .paint(painter,QRect(item.rect.right()-26,item.rect.center().y()-7,14,14));
+    }
+};
+}
 void SettingsSearch::remapAnchor(const QString& name,QWidget* anchor) {
     for (auto& entry:entries_) if (entry.anchor&&entry.anchor->property("settingSearchName").toString()==name) {
         entry.anchor=anchor;
-        entry.title=name;
+        const auto section=anchor&&anchor->parentWidget()?anchor->parentWidget()->property("settingSection").toString():QString();
+        entry.title=section.isEmpty()?name:section+" › "+name;
+        entry.terms+=' '+section;
     }
 }
 SettingsSearch::SettingsSearch(QWidget* catalog,QWidget* parent):QWidget(parent) {
@@ -37,6 +58,7 @@ void SettingsSearch::installResults(QWidget* resultsParent,QWidget* taskBody) {
     results_->setAccessibleName("设置搜索结果");
     results_->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
     results_->setUniformItemSizes(true);
+    results_->setItemDelegate(new SettingsResultDelegate(results_));
     resultsParent->hide();
     connect(results_,&QListWidget::itemClicked,this,[this](QListWidgetItem* item) { locate(results_->row(item)); });
     results_->installEventFilter(this);
@@ -74,7 +96,11 @@ void SettingsSearch::showMatches() {
         auto* empty=new QListWidgetItem("未找到匹配的设置。试试其他关键词。",results_);
         empty->setFlags(Qt::NoItemFlags);
     }
-    for (const int index:matches_) new QListWidgetItem(entries_[index].title,results_);
+    for (const int index:matches_) {
+        const auto& title=entries_[index].title;
+        auto* result=new QListWidgetItem(title,results_);
+        result->setData(Qt::UserRole,true);
+    }
     results_->ensurePolished();
     const int rowHeight=qMax(results_->fontMetrics().height()+12,results_->sizeHintForRow(0));
     results_->setMaximumHeight(rowHeight*qMin(results_->count(),8)+2*results_->frameWidth());

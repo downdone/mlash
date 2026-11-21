@@ -103,6 +103,11 @@ private slots:
         QTest::keyClick(search,Qt::Key_Escape);
         QVERIFY(search->text().isEmpty());
 
+        search->setText("外观");
+        QVERIFY(results->isVisible());
+        QVERIFY(results->item(0)->text().contains("常用 › 外观"));
+        QVERIFY(results->item(0)->data(Qt::UserRole).toBool());
+        if (!output.isEmpty()) QVERIFY(window.grab().save(output+"/settings-search-appearance.png"));
         search->setText("规则 自定义");
         QVERIFY(results->isVisible());
         QVERIFY(results->item(0)->text().contains("自定义规则"));
@@ -250,7 +255,54 @@ private slots:
         const auto connection=connect(&c,&AppController::profileBatchChanged,&c,[&] { if (c.profileBatch().value("results").toArray().size()==1) c.cancelProfileBatch(); });
         c.updateProfilesBatch(ids); QTRY_VERIFY(!c.state().busy); disconnect(connection); QCOMPARE(c.profileBatch().value("results").toArray().size(),1); QCOMPARE(c.profileBatch().value("skipped").toInt(),2);
         c.moveProfile(ids[2],-1); QTRY_VERIFY(!c.state().busy); QCOMPARE(c.profiles()[1].id,ids[2]); QCOMPARE(store.load().profiles[1].id,ids[2]);
-        MainWindow window(&c); window.show(); window.setPage(1); QVERIFY(window.findChild<QPushButton*>("batchProfiles")->isVisible()); window.findChild<QPushButton*>("batchProfiles")->click(); auto* dialog=window.findChild<QDialog*>("profileBatchDialog"); QVERIFY(dialog); QCOMPARE(dialog->findChild<QTableWidget*>("profileBatchResults")->rowCount(),1); const auto output=qEnvironmentVariable("MLASH_UI_SCREENSHOTS"); if (!output.isEmpty()) { QCoreApplication::processEvents(); QVERIFY(QDir().mkpath(output)); QVERIFY(dialog->grab().save(output+"/subscription-batch.png")); } dialog->close(); QCOMPARE(platform->writes,0);
+        auto& current=const_cast<QVector<Profile>&>(c.profiles());
+        for (int i=0;i<2;++i) {
+            Profile snapshot; snapshot.id=newId(); snapshot.name=QString("快照 %1").arg(i);
+            snapshot.sourceType="file";
+            const auto prepared=store.prepare(snapshot,source,settings,19090,QString(64,'a'));
+            QVERIFY(prepared.result.ok);
+            current.append(prepared.profile);
+        }
+        MainWindow window(&c); window.show(); window.setPage(1);
+        auto* batch=window.findChild<QPushButton*>("batchProfiles"); QVERIFY(batch && batch->isVisible());
+        auto* list=window.findChild<QListView*>("profileList"); QVERIFY(list);
+        auto* selection=list->selectionModel();
+        const auto item=[list](int row) { return list->model()->index(row,0); };
+        selection->clearSelection();
+        QCOMPARE(batch->text(),QString("更新全部…"));
+        selection->select(item(0),QItemSelectionModel::Select);
+        QCOMPARE(batch->text(),QString("更新全部…"));
+        batch->click();
+        QPointer<QDialog> all=window.findChild<QDialog*>("profileBatchDialog"); QVERIFY(all);
+        QCOMPARE(all->findChild<QTableWidget*>("profileBatchResults")->rowCount(),1);
+        all->close(); QTRY_VERIFY(all.isNull());
+        selection->select(item(3),QItemSelectionModel::Select);
+        QCOMPARE(batch->text(),QString("更新所选 1 项…"));
+        batch->click();
+        QPointer<QDialog> selected=window.findChild<QDialog*>("profileBatchDialog"); QVERIFY(selected);
+        auto* status=selected->findChild<QLabel*>("profileBatchStatus"); QVERIFY(status);
+        QVERIFY(status->text().contains("跳过 1 项无来源快照"));
+        auto* plan=selected->findChild<QTableWidget*>("profileBatchResults"); QVERIFY(plan);
+        QCOMPARE(plan->rowCount(),1);
+        QCOMPARE(plan->item(0,0)->text(),profiles[0].name);
+        QCOMPARE(plan->item(0,1)->text(),QString("待更新"));
+        QVERIFY(plan->height()<100);
+        QVERIFY(selected->findChild<QPushButton*>("startProfileBatch")->property("primary").toBool());
+        const auto output=qEnvironmentVariable("MLASH_UI_SCREENSHOTS");
+        if (!output.isEmpty()) {
+            QCoreApplication::processEvents();
+            QVERIFY(QDir().mkpath(output));
+            QVERIFY(selected->grab().save(output+"/subscription-batch.png"));
+        }
+        selected->findChild<QPushButton*>("startProfileBatch")->click();
+        QTRY_VERIFY(!c.state().busy);
+        QCOMPARE(c.profileBatch().value("ids").toArray(),QJsonArray{ids[0]});
+        QCOMPARE(c.profiles()[0].active,profiles[0].active);
+        selected->close(); QTRY_VERIFY(selected.isNull());
+        selection->select(item(3),QItemSelectionModel::ClearAndSelect);
+        selection->select(item(4),QItemSelectionModel::Select);
+        QVERIFY(!batch->isEnabled());
+        QCOMPARE(platform->writes,0);
     }
     void sourceEditValidatesBeforeCommitAndRejectsStaleDraft() {
         QTemporaryDir root; auto platform=std::make_shared<DepthPlatform>(); ProfileStore store(root.path(),platform); QVERIFY(store.load().result.ok); Settings settings; settings.startCore=false; settings.corePath=QCoreApplication::applicationDirPath()+"/fake_core.exe";
@@ -291,7 +343,46 @@ private slots:
         const auto report=VersionChanges::inspect(store,p); QVERIFY2(report.ok,qUtf8Printable(report.error)); const auto sections=report.data.value("sections").toArray(); QCOMPARE(sections.size(),5); QCOMPARE(sections[0].toObject().value("added_count").toInt(),1); QCOMPARE(sections[0].toObject().value("removed_count").toInt(),1); QCOMPARE(sections[0].toObject().value("changed_count").toInt(),1); QCOMPARE(sections[2].toObject().value("changed_count").toInt(),1); QCOMPARE(sections[3].toObject().value("added_count").toInt(),1); QCOMPARE(sections[3].toObject().value("removed_count").toInt(),1); QVERIFY(report.data.value("lost_selections").toArray().contains("Test → Old")); QCOMPARE(report.data.value("lost_selections").toArray().size(),1);
         const auto serialized=QJsonDocument(report.data).toJson(); QVERIFY(!serialized.contains("CREDENTIAL")); QVERIFY(!serialized.contains("PRIVATE_SOURCE")); QVERIFY(!serialized.contains(QByteArray(64,'a'))); QVERIFY(!serialized.contains("old.example"));
         auto firstUse=p; firstUse.active.clear(); const auto initial=VersionChanges::inspect(store,firstUse); QVERIFY(initial.ok); QVERIFY(initial.data.value("first_use").toBool()); QCOMPARE(initial.data.value("sections").toArray()[0].toObject().value("added_count").toInt(),2);
-        QVERIFY(store.save(settings,{p}).ok); AppController c(root.path(),true,nullptr,platform); QSignalSpy init(&c,&AppController::initialized); c.initialize(); QTRY_COMPARE(init.size(),1); bool inspected=false; Result providerInfo; c.inspectProviders(p.id,[&](Result result) { providerInfo=result; inspected=true; }); QTRY_VERIFY(inspected); QVERIFY(providerInfo.ok); QCOMPARE(providerInfo.data.value("scope").toString(),QString("candidate")); QCOMPARE(providerInfo.data.value("providers").toArray().first().toObject().value("count").toInt(),2); inspected=false; c.inspectProviders(p.id,[&](Result result) { providerInfo=result; inspected=true; },true); QTRY_VERIFY(inspected); QVERIFY(providerInfo.ok); QCOMPARE(providerInfo.data.value("scope").toString(),QString("active")); QCOMPARE(providerInfo.data.value("providers").toArray().first().toObject().value("count").toInt(),1); auto* dialog=new ProfileChangesDialog(&c,p.id); dialog->show(); QTRY_COMPARE(dialog->findChild<QTableWidget*>("versionChangesTable")->rowCount(),5); auto* apply=dialog->findChild<QPushButton*>("applyComparedVersion"); QVERIFY(apply->isEnabled()); const auto output=qEnvironmentVariable("MLASH_UI_SCREENSHOTS"); if (!output.isEmpty()) { QVERIFY(QDir().mkpath(output)); QCoreApplication::processEvents(); QVERIFY(dialog->grab().save(output+"/version-changes.png")); } const_cast<QVector<Profile>&>(c.profiles())[0].candidate=newId(); emit c.profilesChanged(); QVERIFY(!apply->isEnabled()); dialog->close();
+        QVERIFY(store.save(settings,{p}).ok); AppController c(root.path(),true,nullptr,platform); QSignalSpy init(&c,&AppController::initialized); c.initialize(); QTRY_COMPARE(init.size(),1); bool inspected=false; Result providerInfo; c.inspectProviders(p.id,[&](Result result) { providerInfo=result; inspected=true; }); QTRY_VERIFY(inspected); QVERIFY(providerInfo.ok); QCOMPARE(providerInfo.data.value("scope").toString(),QString("candidate")); QCOMPARE(providerInfo.data.value("providers").toArray().first().toObject().value("count").toInt(),2); inspected=false; c.inspectProviders(p.id,[&](Result result) { providerInfo=result; inspected=true; },true); QTRY_VERIFY(inspected); QVERIFY(providerInfo.ok); QCOMPARE(providerInfo.data.value("scope").toString(),QString("active")); QCOMPARE(providerInfo.data.value("providers").toArray().first().toObject().value("count").toInt(),1);
+        QSignalSpy submitted(&c,&AppController::operationFinished);
+        auto* dialog=new ProfileChangesDialog(&c,p.id); dialog->show();
+        QTRY_COMPARE(dialog->findChild<QTableWidget*>("versionChangesTable")->rowCount(),5);
+        auto* apply=dialog->findChild<QPushButton*>("applyComparedVersion"); QVERIFY(apply && apply->isEnabled());
+        auto* hint=dialog->findChild<QLabel*>("versionChangesHint"); QVERIFY(hint);
+        auto* summary=dialog->findChild<QLabel*>("versionChangesSummary"); QVERIFY(summary);
+        QVERIFY(summary->text().contains(p.name));
+        QVERIFY(summary->text().contains("有 1 项已保存选择在候选中不可用"));
+        QVERIFY(!summary->text().contains(p.candidate.left(12)));
+        auto* metadata=dialog->findChild<QLabel*>("versionChangesMetadata"); QVERIFY(metadata);
+        QVERIFY(metadata->toolTip().contains(p.candidate));
+        const auto output=qEnvironmentVariable("MLASH_UI_SCREENSHOTS");
+        if (!output.isEmpty()) {
+            QVERIFY(QDir().mkpath(output));
+            QCoreApplication::processEvents();
+            QVERIFY(dialog->grab().save(output+"/version-changes.png"));
+        }
+        apply->click();
+        QPointer<QMessageBox> prompt=dialog->findChild<QMessageBox*>("profileVersionConfirmation"); QVERIFY(prompt);
+        QVERIFY(prompt->text().contains(p.candidate));
+        QVERIFY(prompt->informativeText().contains("中断连接"));
+        QCOMPARE(prompt->defaultButton(),prompt->button(QMessageBox::No));
+        QTest::keyClick(prompt,Qt::Key_Escape);
+        QTRY_VERIFY(prompt.isNull());
+        QCOMPARE(submitted.size(),0);
+        apply->click();
+        prompt=dialog->findChild<QMessageBox*>("profileVersionConfirmation"); QVERIFY(prompt);
+        const_cast<QVector<Profile>&>(c.profiles())[0].candidate=newId();
+        emit c.profilesChanged();
+        QVERIFY(!apply->isEnabled());
+        QVERIFY(hint->text().contains("比较已失效"));
+        prompt->button(QMessageBox::Yes)->click();
+        QTRY_VERIFY(prompt.isNull());
+        QCOMPARE(submitted.size(),0);
+        c.activateProfile(p.id,false,p.candidate);
+        QCOMPARE(submitted.size(),1);
+        QVERIFY(!submitted.last()[0].toBool());
+        QCOMPARE(c.profiles().first().active,p.active);
+        dialog->close();
         const auto malformed=writeAtomic(next.configPath,"proxies: [ PRIVATE_YAML_SECRET"); QVERIFY(malformed.ok); const auto failed=VersionChanges::inspect(store,p); QVERIFY(!failed.ok); QVERIFY(!failed.error.contains("PRIVATE_YAML_SECRET")); auto invalid=p; invalid.candidate="../outside"; QVERIFY(!VersionChanges::inspect(store,invalid).ok); QCOMPARE(platform->writes,0);
     }
     void homeModeRulesMetricsAndTunMeaning() {
@@ -306,17 +397,24 @@ private slots:
         // 选路语义本身不变：规则模式按探测组逐层解析到唯一叶子。
         c.setHomeProbeGroup("Test");
         MainWindow window(&c); window.show(); QCoreApplication::processEvents();
-        auto* currentMember=window.findChild<QLabel*>("overviewTitle"); QVERIFY(currentMember);
+        auto* currentMember=window.findChild<QLabel*>("homeCurrentNode"); QVERIFY(currentMember);
+        auto* takeover=window.findChild<QLabel*>("homeTakeoverStatus"); QVERIFY(takeover);
         auto* inlineStat=window.findChild<QLabel*>("homeInlineStatText"); QVERIFY(inlineStat);
         QCOMPARE(c.homeNode(),QString("Leaf")); QTRY_COMPARE(currentMember->text(),QString("Leaf"));
+        QCOMPARE(takeover->text(),QString("未接管流量"));
         state.mode="global"; emit c.stateChanged(); QCOMPARE(c.homeNode(),QString("Other")); QCOMPARE(currentMember->text(),QString("Other"));
         state.mode="direct"; emit c.stateChanged(); QCOMPARE(c.homeNode(),QString("DIRECT")); QCOMPARE(currentMember->text(),QString("DIRECT"));
         auto& metrics=const_cast<QJsonObject&>(c.homeMetrics()->snapshot()); metrics={{"active_count",7}}; emit const_cast<HomeMetrics*>(c.homeMetrics())->changed();
         QTRY_VERIFY(inlineStat->text().contains("7 条连接"));
-        // 接管状态由连接开关与固定状态栏表达，首页控制行不重复技术说明。
+        state.proxy=ProxyState::Unknown; emit c.stateChanged();
+        QCOMPARE(takeover->text(),QString("系统代理状态未知"));
+        state.proxy=ProxyState::Owned; emit c.stateChanged();
+        QCOMPARE(takeover->text(),QString("系统代理已接管"));
         state.tunObserved=true; state.proxy=ProxyState::External; emit c.stateChanged();
         auto* proxySwitch=window.findChild<QCheckBox*>("systemProxy"); QVERIFY(proxySwitch);
         QTRY_VERIFY(proxySwitch->isChecked());
+        QCOMPARE(takeover->text(),QString("系统代理由其他程序管理 · TUN 已接管"));
+        QCOMPARE(proxySwitch->accessibleDescription(),takeover->text());
         QCOMPARE(currentMember->text(),QString("DIRECT"));
         QVERIFY(!window.findChild<QLabel*>("homeStateLine"));
         auto* control=window.findChild<QWidget*>("homeControlCard"); QVERIFY(control);

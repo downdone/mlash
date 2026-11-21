@@ -6,7 +6,7 @@ Windows GUI 入口在创建 `QApplication` 前选择 Qt Windows 插件的 FreeTy
 
 ## 1. 进程与依赖图
 
-U34 的视觉契约由 [VI 规范](design/u32-mlash-visual-identity.md) 维护。UiTheme 提供语义色和缩放字阶，应用级输入来源驱动键盘焦点；侧栏和关于复用品牌组合。托盘在同一应用图标上绘制状态徽标，内核、代理和路由状态仍由原状态投影提供。
+视觉契约由 [VI 规范](design/u32-mlash-visual-identity.md) 维护。UiTheme 提供 Daymark 语义色和缩放字阶，应用级输入来源驱动键盘焦点。主路由决定侧栏选中，配置卡和网站测速卡复用摘要卡样式。托盘在同一应用图标上绘制状态徽标，内核、代理和路由状态仍由原状态投影提供。
 
 ```mermaid
 flowchart TD
@@ -39,7 +39,7 @@ Mlash.exe 的 FileDescription 和 ProductName 均为 Mlash。mihomo 仍是 QProc
 普通模式使用 Windows Job 管理生命周期；TUN 模式由单独 SCM 权限服务拥有 Job。服务保留安装但核心绑定客户端心跳/管道，不能脱离客户端无限运行。任务管理器分组显示不是父子进程契约。
 界面不持有 Windows 句柄、文件事务或子进程；所有动作通过 Controller 方法。一级导航按首页/配置/数据/设置组织，内部使用五个主视图与数据四页签，历史八页入口由 ViewIds 适配；规则属于配置详情，跨页导航同步页签及分区，不增加持久化字段。
 
-配置页由 `ProfileRowModel` 提供数据，`ProfileCardWidget` 在列表等宽网格中呈现远程或本地配置。卡片主体打开编辑工作区，使用、更新、查看候选和应用各有独立动作。`MainWindow` 负责将动作路由至 Controller 或对应工作区。内容工作区按配置 ID 管理节点、规则、DNS、拨号链、规则源和兼容性，各任务保留自身草稿。列表排序属于集合工具，回滚属于来源维护。
+配置页由 `ProfileRowModel` 提供数据，`ProfileCardWidget` 在网格或单列中呈现远程或本地配置。卡片主体打开编辑工作区。使用和检查更新各有独立动作，查看更新进入候选比较及应用流程。`MainWindow` 负责将动作路由至 Controller 或对应工作区。内容工作区按配置 ID 管理节点、规则、DNS、拨号链、规则源和兼容性，各任务保留自身草稿。列表排序属于集合工具，回滚属于来源维护。
 
 快速导入在配置页可见，独立 `ImportDialog` 承载高级新增及外部来源确认。两种入口共用 Controller 的校验和导入命令，导入成功后仍由用户决定何时启用。布局与控件状态见[视觉识别规范](design/u32-mlash-visual-identity.md)，任务细节见[交互契约](ui-interactions.md)。
 

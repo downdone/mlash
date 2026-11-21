@@ -4,42 +4,45 @@
 
 namespace mlash::design::ShadowrocketStyle {
 
-inline constexpr Geometry geometry{30,28,8,8, 14,12,12,216, 42,40,34,36, 36,38,52,350, 12,2,16,76,4};
+inline constexpr Geometry geometry{30,28,8,8, 14,12,12,200, 42,32,34,36, 36,38,52,350, 10,2,16,76,4};
 inline constexpr int narrowSidebarWidth=144;
 inline constexpr int narrowSidebarBreakpoint=960;
+inline constexpr int collapsedSidebarWidth=44;
+inline constexpr int navigationRowHeight=38;
 inline constexpr Typography typography{10.5,10.5,9, 13,11.5,15,13};
 inline constexpr int brandPoints=16;
-inline constexpr const char* artworkSurface="#F2F2F7";
+inline constexpr const char* artworkSurface="#f2f3f6";
+inline constexpr const char* scheduleFill(bool dark) { return dark ? "#173b29" : "#def3e6"; }
 
-// Header-only immutable values keep lightweight UI consumers link-independent.
+// Daymark DesignTokens colors, mapped to the existing Mlash widget roles.
 inline constexpr Colors light{
-    "#F7F7F7","#F0F0F0","#FFFFFF",
-    "#202020","#5B5B5B","#646464","#999999",
-    "#DDDDDD","#E7E7E7","#0059B9","#E7F2FF",
-    "#0069DC","#FFFFFF","#EAF4FF","#005FC7",
-    "#EEEEEE","#E2EBF7","#005BBF",
-    "#21683D","#91451F","#AB263B","#777777","#F2F2F7","#21864A"};
+    "#ffffff","#f3f4f6","#f6f6f8",
+    "#1c1c1e","#5d5d66","#5d5d66","#989ca5",
+    "#e0e1e7","#e0e1e7","#0063cf","#eaf1fc",
+    "#0063cf","#ffffff","#f0f2f6","#0063cf",
+    "#f2f3f6","#edf0f5","#005bbb",
+    "#236e46","#945000","#b92330","#787883",artworkSurface,"#248a3d"};
 inline constexpr Colors dark{
-    "#181818","#202020","#2A2A2A",
-    "#F7F7F7","#C3C3C3","#B4B4B4","#898989",
-    "#505050","#404040","#CDE7FF","#20374F",
-    "#65B1FF","#112337","#333B45","#82C1FF",
-    "#343434","#3B4653","#8BC4FF",
-    "#83DEA2","#FFC1A0","#FFADBA","#929292","#F2F2F7","#4FD183"};
+    "#1c1c1e","#171719","#252527",
+    "#f2f2f7","#b7b7c2","#b7b7c2","#6f7580",
+    "#424249","#424249","#83baff","#263a52",
+    "#83baff","#102038","#303034","#83baff",
+    "#2b2b30","#38383e","#90c5ff",
+    "#83d6aa","#ffc18c","#ff9ca4","#8b8b97",artworkSurface,"#32d45a"};
 inline constexpr Colors highContrastLight{
-    "#FFFFFF","#F3F3F3","#FFFFFF",
-    "#141414","#3C3C3C","#333333","#6B6B6B",
-    "#666666","#666666","#00448F","#E1EEFF",
-    "#00448F","#FFFFFF","#EDEDED","#00458F",
-    "#F2F2F2","#D9D9D9","#082C6B",
-    "#075D2C","#793212","#8B0628","#505050","#F2F2F7","#075D2C"};
+    "#ffffff","#f3f4f6","#f6f6f8",
+    "#1c1c1e","#484a50","#484a50","#989ca5",
+    "#626772","#9fa5b0","#004ca8","#d9e8ff",
+    "#004ca8","#ffffff","#f0f2f6","#004ca8",
+    "#f2f3f6","#edf0f5","#004ca8",
+    "#236e46","#945000","#b92330","#626772",artworkSurface,"#248a3d"};
 inline constexpr Colors highContrastDark{
-    "#000000","#131313","#171717",
-    "#FFFFFF","#E4E4E4","#E6E6E6","#8C8C8C",
-    "#AAAAAA","#AAAAAA","#E4F2FF","#17344F",
-    "#A9D4FF","#0E1E30","#262626","#9FCFFF",
-    "#1C1C1C","#333333","#C0DFFF",
-    "#9DF6B9","#FFD2BC","#FFD0D8","#AAAAAA","#F2F2F7","#73F0A3"};
+    "#1c1c1e","#171719","#252527",
+    "#f2f2f7","#ced2da","#ced2da","#6f7580",
+    "#a4afbe","#77808d","#a7ceff","#29466d",
+    "#a7ceff","#102038","#303034","#a7ceff",
+    "#2b2b30","#38383e","#a7ceff",
+    "#83d6aa","#ffc18c","#ff9ca4","#a4afbe",artworkSurface,"#32d45a"};
 
 constexpr const Colors& colors(bool isDark, bool highContrast) {
     if (highContrast) return isDark ? highContrastDark : highContrastLight;

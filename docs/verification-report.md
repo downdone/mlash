@@ -1,5 +1,105 @@
 # 验证报告
 
+## U40 导入栏紧凑精修
+
+按[导入栏设计](design/u40-visual-interaction-design.md#导入栏紧凑精修)检查 1040 DIP 四配置截图。导入栏按截图缩放比例换算，从约 78 DIP 降至约 48 DIP，顶边上移约 6 DIP。840 DIP、120% 字号的浅深截图均约 48 DIP，提示完整，输入框与按钮对齐，「高级」右侧箭头可见。
+
+`scripts/build.ps1 -Preset windows-mingw-open` 通过。`scripts/test.ps1` 配置导入、返回及反馈路由 3 组通过，耗时 8.23 秒。Windows 原生 3 条用例通过，覆盖空状态、浅深主题、列表动作、快速导入、失败后保留输入和高级窗口取消。受限环境首轮无法核对本机回环内核监听端口，放行隔离夹具后复测通过。证据在本地 `build/u40-compact-import/`。
+
+本地便携预览包 `dist/Mlash-1.22.0-u40-compact-import-portable.zip` 的 SHA-256 为 `d15828775e36f7d3e4cd9b37022c79c9385e8594277e8273653cb241def4157b`。隔离冒烟通过八页路由、设置搜索和返回、Schannel TLS。核对 ZIP 内 35 个文件、清单哈希、主程序与构建产物一致及双 EXE 的 7 个嵌入图标尺寸。预览包为 `release_qualified=false`。
+
+## U40 导入栏与配置卡按图重排
+
+按[参考图重排设计](design/u40-visual-interaction-design.md#导入栏与配置卡按图重排)核对 1040 DIP 四张匿名配置的原生截图。导入栏内置链接及文件夹图标，卡片采用类型、时间和状态三类圆角标签。空输入时导入按钮禁用。首次 840 DIP、120% 字号测试发现标签宽度小于内容，调整卡片实际内边距和按标签宽度转列的条件后复测通过。
+
+`scripts/build.ps1 -Preset windows-mingw-open` 通过。定向 `scripts/test.ps1` 通过配置导入、返回、反馈路由和配置切换 4 组。Windows 原生 4 条用例通过，覆盖窄窗浅深色、长名称、临时内核导入、更多菜单启用、候选比较、刷新与回位。截图和日志在本地 `build/u40-config-reference-match/`。
+
+本地便携预览包 `dist/Mlash-1.22.0-u40-config-reference-match-portable.zip` 的 SHA-256 为 `346307b09d99691c9e12562651dc057e68e2a455e4ed799935a6128353f9acab`。包内隔离冒烟通过八页路由、设置搜索和返回、Schannel TLS。核对 ZIP 内 35 个文件、清单哈希、构建产物以及双 EXE 的 7 个图标尺寸。预览包为 `release_qualified=false`。
+
+## U40 配置页参考稿精修
+
+按[精修设计](design/u40-visual-interaction-design.md#配置页参考稿精修)合并导入栏，补足卡片边界、刷新与更多按钮的细边，将状态放到名称与元信息下方。首轮 840 DIP、120% 截图发现导入提示省略，导入列表顶边也超过上一轮布局上限。缩短提示、收回组后额外间距，并验证仅由导入栏内边距增加 20 DIP 的上限。
+
+`scripts/build.ps1 -Preset windows-mingw-open` 构建通过。`scripts/test.ps1` 的配置导入、返回和反馈路由 3 组通过，耗时 2.74 秒。4 条 Windows 原生用例通过，覆盖导入栏浅深色、提示完整、卡片状态对齐、候选与刷新、返回、导入及取消。目检 840 DIP、120% 浅深截图。日志和截图在本地 `build/u40-config-reference/`。
+
+本地便携预览包 `dist/Mlash-1.22.0-u40-config-reference-portable.zip` 的 SHA-256 为 `61dd73a808f1db38cf4d8d24adc2b3cc57bd4003a8e9ab2c277f0cab4dcd4e7f`。包内隔离冒烟通过八页路由、设置搜索和返回、Schannel TLS。核对 ZIP 内 35 个文件、清单哈希、构建产物一致性和双 EXE 的 7 个图标尺寸。预览包为 `release_qualified=false`。
+
+## U40 侧栏竖排
+
+按[侧栏设计](design/u40-visual-interaction-design.md#侧栏竖排)将首页、配置、数据排为等宽图文行。以 840 DIP 的浅深色、120% 字号和 1040 DIP 常规窗口检查侧栏。验证上下键和回车、鼠标切页、折叠往返、设置选中及页面返回。
+
+`scripts/build.ps1 -Preset windows-mingw-open` 通过。定向 `scripts/test.ps1` 通过原型界面、导航契约和配置返回 3 组，耗时 22.39 秒。Windows 原生 Qt FreeType 通过 3 条用例。样片和日志位于本地 `build/u40-vertical-sidebar/`。
+
+本地预览包 `dist/Mlash-1.22.0-u40-vertical-sidebar-portable.zip` 的 SHA-256 为 `b0bbd2acb9692328bf2c1e0920768ecfe3f1832e56524983bcd5463a2d79b55d`。包内隔离启动通过八页路由、设置搜索和返回及 Schannel TLS。校验了 ZIP 内 35 个文件的清单、构建产物一致性和双 EXE 的 7 个嵌入图标尺寸。预览包为 `release_qualified=false`。
+
+## U40 Daymark 配色导航与测速卡
+
+[本轮设计](design/u40-visual-interaction-design.md#daymark-配色导航与测速卡)将 Daymark 浅深色与双列折叠导航接入主窗，配置卡复用网站测速卡的表面、间距和按钮样式。保留配置识别、更新时间、单项刷新、候选比较和返回定位。
+
+`scripts/build.ps1 -Preset windows-mingw-open` 构建通过。Windows 原生 Qt FreeType 通过 6 条用例，核对鼠标切页、键盘焦点与激活、侧栏折叠、设置选中、浅深与高对比、配置卡长文字、刷新和返回。目检 1440 DIP 浅色和 840 DIP 深色、120% 字号样片。首轮复测发现设置按钮被全局样式压缩、普通配置过早转为单列，固定按钮尺寸并让两类卡片共用最小宽度后，最终原生复测通过。证据在本地 `build/u40-daymark-shell/`。
+
+串行 `scripts/test.ps1 -Preset windows-mingw-open` 定向运行 11 组。8 组通过，其中完整外观组通过。配置卡、外观偏好和网站测速组分别达到 20、45 和 30 秒的组合上限。拆分复测通过配置导入、排序、回滚，外观偏好全部 4 条用例，以及网站测速卡布局、详情和固定内核请求。网站测速组在原组合内曾出现内核请求超时，原生单独复测该场景通过。组合超时保留在记录中。
+
+本地便携预览为 `dist/Mlash-1.22.0-u40-daymark-shell-portable.zip`，SHA-256 为 `ca881261fdb9d7624e88fd0736d38f9f3928d061decdee12b4d0fbfc165943b3`。验证 35 个 ZIP 文件、清单哈希与构建产物，双 EXE 的 7 个嵌入图标尺寸一致。包内隔离冒烟通过八页路由、设置搜索和返回、Schannel TLS。预览包为 `release_qualified=false`。
+
+## U40 配置卡精简与文字完整性
+
+按[卡片设计](design/u40-visual-interaction-design.md#配置卡片文字完整性)保留紧凑结构。副标题显示公开 URL 或本地来源和最近成功更新时间。刷新紧邻更多菜单，有来源时可用。卡面保留必要状态和一个文字动作，订阅用量在来源维护查看。
+
+`scripts/build.ps1 -Preset windows-mingw-open` 构建通过。Windows 原生 Qt FreeType 后端通过 2 条用例。目检 1440 DIP 双列和 840 DIP、120% 字号的浅深色截图。自动检查长名称、长 URL 和时间完整排版，验证不暴露订阅路径或查询参数，刷新与菜单对齐，比较与返回保留当前配置。首版宽窗测试发现标题和来源仍重叠，改为根据文字与操作的实际需求计算高度后复测通过。最终 `scripts/test.ps1 -Preset windows-mingw-open` 的 8 组定向隔离回归全通过，耗时 52.71 秒。日志和截图位于本地 `build/u40-card-full-text/`。
+
+本地便携预览为 `dist/Mlash-1.22.0-u40-compact-cards-portable.zip`，SHA-256 为 `f1f3be6caff9341de0ab171f6044c5d2dd86e7c75c098d1fe2fa89dbc5d6c820`。ZIP 内 35 个文件通过 CRC、清单和构建产物校验。包内冒烟验证 8 个兼容路由、设置搜索和返回、Schannel TLS，双 EXE 的 7 个尺寸图标核对通过。预览包为 `release_qualified=false`。
+
+## U40 配置卡片精修
+
+沿用原生配置列表与业务入口。将卡片重排为识别区和操作区，分隔线、卡内对齐和语义状态统一。首轮 Windows 截图发现短来源仍被顶部工具压缩，元信息行延伸到工具下方后复测。840 DIP、120% 字号的样片中，原双列卡的网格单元高度由 204 降至 142 DIP。待应用状态、查看变化和应用更新位于同一行，短来源和时间完整。独立样片核对当前使用与更新失败同时显示，有候选时仍可查看和应用。节点和网站测试卡片复看现有布局，保留各自信息层级。样片与日志在本地 `build/u40-card-refinement/`。 [实施设计](design/u40-visual-interaction-design.md#配置卡片精修)
+
+`scripts/build.ps1 -Preset windows-mingw-open` 构建通过。`scripts/test.ps1 -Preset windows-mingw-open` 的 8 组定向回归全通过，耗时 54.33 秒。Windows Qt FreeType 后端另通过 4 条用例，覆盖配置卡标签和操作、页面宽窄与字阶、节点和网站测试卡片。没有在 200% 字号或讲述人下验收。
+
+本地便携预览为 `dist/Mlash-1.22.0-u40-card-refinement-portable.zip`，SHA-256 为 `218c07a8262a19a60d7b6f3cd9a2021b6d9e7f031dea0836ca9584b7199f3b4c`。复核 ZIP 内 35 文件、包内 EXE 与本轮构建一致、8 个兼容路由、设置搜索和返回、Schannel TLS、两份 EXE 的 7 个嵌入图标尺寸。预览包保留 `release_qualified=false`。
+
+## U40 独立盲评后精修
+
+[实施设计](design/u40-visual-interaction-design.md#独立盲评后精修)覆盖窄卡状态与动作换行、配置读取错误与重试、首次配置空态、批量预览与差异摘要、宽窗节点和详情，以及设置搜索路径。原生修整期间复看首轮截图，补齐紧凑卡片的动作行占位、收拢设置结果的进入箭头、在读取失败时禁用不可用的搜索。
+
+`scripts/build.ps1 -Preset windows-mingw-open` 构建通过。最终版 `scripts/test.ps1 -Preset windows-mingw-open` 定向回归 15 组全通过，耗时 77.23 秒。另使用 Windows Qt FreeType 后端执行 6 条原生测试，包括 840 DIP、120% 字号的浅深色卡片、读取失败重试、导入空态、批量计划、候选失效、设置搜索和宽窄切换。复看了最终截图，按钮标签完整，配置读取错误与重试同组，单项更新主动作紧邻预览，版本元信息位于变化明细下方。测试记录与最终截图位于本地 `build/u40-blind-polish/`。
+
+`scripts/package.ps1` 生成便携预览 `dist/Mlash-1.22.0-u40-ui-detail-portable.zip`，SHA-256 为 `ba94e5cd70239c1b507dc5b20789a67afbe29d80e0b93787ca601087bc508998`。ZIP 的 35 个文件通过完整性校验，包内 EXE 与本轮构建一致。包内 8 个兼容路由、设置搜索与返回、Schannel TLS，以及两份 EXE 各 7 个内嵌图标尺寸通过，已复看路由截图。验收使用隔离夹具，200% 应用字号、讲述人及真实代理/TUN 权限仍待验证。预览包保留 `release_qualified=false`。
+
+## U40 原生首轮精修
+
+以现有 Widgets 为底稿执行[原生实施设计](design/u40-visual-interaction-design.md#原生精修实施设计)。`scripts/build.ps1 -Preset windows-mingw-open` 构建通过。已安装的商业 Qt 套件构建期间报告许可服务连接失败，交付使用仓库已配置的公开 Qt 6.10.2 套件。
+
+`scripts/test.ps1 -Preset windows-mingw-open` 的 15 组定向回归最终通过。并行首轮及串行复现中，订阅卡片用例因离屏平台关闭高级导入后未恢复主窗激活而超时。详细输出定位到「选择配置」后的实际焦点断言。测试补齐离屏窗口激活后保留原焦点断言，串行复测通过。另使用 Windows Qt FreeType 后端执行 7 条原生用例，覆盖首次导入与使用、实际接管状态、混合来源批量、旧候选确认拒绝、回滚取消和窗口密度。复看 840×560 DIP 深色首页 100% 与 120%、配置集合、批量范围和版本差异原生样片。测试夹具的 840×560 DIP、100% 字号样片可见六条完整节点。证据见 `build/u40-native-polish/`。
+
+`scripts/package.ps1` 生成本地便携预览 `dist/Mlash-1.22.0-u40-qt-polish-portable.zip`，SHA-256 为 `638f33dd2fb39b4c1e6e6a33de14a787eab7425bc26d42be6485282473057ebc`。包内 35 个文件通过清单与完整性检查，主程序和服务的内嵌图标均匹配 7 个尺寸。用包内 EXE 实测 8 个兼容路由、设置搜索与返回、Schannel TLS，逐页复看截图。发布资格仍为 `release_qualified=false`。
+
+首轮未对 144 条末级任务逐条操作，未验证 200% 应用字号、跨屏、讲述人、真实代理及 TUN 权限或其他平台。
+
+## U40 当前 Widgets 实现复审
+
+通过 `scripts/ci_smoke.ps1` 以隔离目录运行 U39 便携包。包内 Mlash.exe 与 windows-mingw 构建的 EXE 摘要一致。包内 8 个兼容路由、设置搜索与返回均通过。复看浅色空态、840×560 DIP 有数据页面、深色诊断和原生配置、备份、TUN 等深层样片。现有外观探针记录 Windows Qt 后端及 DPR 1.5。截图、路由和测试输出见本地 `build/u40-native-review/`。[对照与精修判据](design/u40-visual-interaction-design.md#当前-widgets-实现复审)
+
+`scripts/test.ps1 -Preset windows-mingw` 定向选取 13 组。初次缺少 Qt/MinGW 运行库路径，补齐后在沙盒内有 7 组通过，另 5 组失败、1 组超时。失败记录涉及内核端口身份、回环请求和就绪，受限环境报过 Permission denied。使用同机隔离数据在允许本机回环与端口观测的环境重跑 6 组，TUN、工作流、订阅卡片、外观偏好、连接和外观测试均通过。另以 Windows Qt 平台插件重跑 16 条针对外观、内嵌工作区、批量更新、候选差异、DNS 草稿、连接快照、备份选择和 TUN 服务任务的用例，连接转规则首轮受限未取得采样，复测通过。
+
+本轮是现状复审与文档校正。16 条原生用例与路由冒烟仅覆盖代表性路径。144 条末级任务逐条操作、200% 应用字号、跨屏、讲述人、真实代理/TUN 权限和正式发布均未签收。
+
+## U40 深层页面与末级控件
+
+[深层设计](design/u40-deep-interaction-design.md)的 35 行组件落点与末级清单比对，144 条 ID 逐项覆盖且无重复。合成数据下，无头 Chrome 的七条交互场景通过，含批量停止与部分失败、确认期间候选失效、草稿跨视图保持、DNS 校验与清除、快照失效和列表回位、归档阻塞与重验、TUN 权限拒绝和重复清理。7 个场景在 1040、736、320 CSS px、两档字号与两种外观下共 84 个组合无页面级横向溢出。查看了浅色版本、深色规则失败和深色增强对比 TUN 样片。浏览器样板使用合成结果，Qt 原生交互、系统代理和权限行为待实施后验证。
+
+## U40 视觉与交互详细设计
+
+对照 [视觉与交互详细设计](design/u40-visual-interaction-design.md)检查四套主题的正文、次字、主操作、选中和状态文字色对，以及有效边界和焦点在各基础表面上的对比。按 sRGB 计算，92 组配对均达到相应的 4.5∶1 或 3∶1 门槛。
+
+以合成数据运行无头 Chrome，五个一级分区、11 条样板交互路径和 30 个响应式组合通过。检查包含导入校验和草稿保留、接管确认/取消/失败后重试、路由选项、节点展开和独立详情、候选应用确认、连接快照、备份阻塞与字段纠错。复核浅色连接、深色版本比较和窄宽增强对比样片。交互样板的运行结果属于设计验证，原生 Qt、实际系统缩放、讲述人、托盘图标和真实系统副作用待实施验收。
+
+## U40 界面优化方案
+
+最初方案核对了 T01–T12、30 个现有 CTest 入口以及打包和冒烟脚本参数。静态检查通过。
+
+全界面重设计修订按现行交互、功能契约、Controller 命令和可见控件清点功能。静态核对 35 个功能组与 144 条末级任务的编号覆盖、T01–T13 与 31 个现有 CTest 入口，以及源码中的旧编号 0–7。文档导航检查覆盖 152 份 Markdown，隐私检查覆盖 159 份文件，两项均无发现。UI token 扫描和差异空白检查通过。五分区原型走查、原生交互、软件构建、运行回归与打包待实施阶段验证。[修订方案](design/u40-ios-daymark-polish.md) · [末级任务](design/u40-leaf-design.md)
+
 ## D04 文档整理
 
 对照 CMake、变更记录及现行 Qt 界面入口核对版本、导入、备份、回滚和品牌资源。当前导航、规范和历史记录已重新组织，迁移后的四处锚点及现行配置导入锚点均可定位。

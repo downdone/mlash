@@ -97,15 +97,24 @@ private slots:
         QApplication::setActiveWindow(&window);
         auto* navigation=window.findChild<QListWidget*>("navigation");
         auto* settings=window.findChild<QToolButton*>("sidebarSettings");
+        auto* toggle=window.findChild<QToolButton*>("toggleSidebar");
+        auto* sidebar=window.findChild<QWidget*>("sidebar");
         auto* brand=window.findChild<QLabel*>("sidebarBrand");
-        QVERIFY(navigation && settings && brand);
+        QVERIFY(navigation && settings && brand && toggle && sidebar);
         for (const auto& theme : {"light","dark"}) {
             UiTheme::setPreferences(theme,120);
             QCOMPARE(brand->font().weight(),QFont::Bold);
             QCOMPARE(brand->font().variableAxisValue("wght"),700.0f);
             QCOMPARE(brand->font().pointSizeF(),19.2);
             const auto bounds=navigation->visualItemRect(navigation->item(0));
-            QTest::mouseClick(navigation->viewport(),Qt::LeftButton,{},bounds.center());
+            const auto second=navigation->visualItemRect(navigation->item(1));
+            const auto third=navigation->visualItemRect(navigation->item(2));
+            QCOMPARE(bounds.left(),second.left());
+            QCOMPARE(second.left(),third.left());
+            QCOMPARE(bounds.width(),third.width());
+            QVERIFY(bounds.bottom()<second.top() && second.bottom()<third.top());
+            QVERIFY(navigation->viewport()->rect().contains(third));
+            QTest::mouseClick(navigation->viewport(),Qt::LeftButton,{},QPoint(bounds.right()-5,bounds.center().y()));
             QTRY_VERIFY(!navigation->property("keyboardFocus").toBool());
             const auto includesFocus=[](const QImage& image) {
                 const QColor focus(UiTheme::Focus);
@@ -123,7 +132,31 @@ private slots:
             QTRY_VERIFY(includesFocus(navigation->viewport()->grab(bounds).toImage()));
             save(&window,QString("vi-%1-keyboard-focus").arg(theme));
         }
+        const auto route=window.currentRoute().view;
+        const auto toggleY=toggle->mapTo(sidebar,QPoint()).y();
+        const auto settingsY=settings->y();
+        toggle->click();
+        QCOMPARE(sidebar->width(),44);
+        QVERIFY(toggle->isVisible() && settings->isVisible() && navigation->isHidden());
+        QTRY_COMPARE(toggle->mapTo(sidebar,QPoint()).y(),toggleY);
+        QTRY_COMPARE(settings->y(),settingsY);
+        QCOMPARE(window.currentRoute().view,route);
+        toggle->click();
+        QCOMPARE(sidebar->width(),144);
+        QTRY_VERIFY(navigation->isVisible());
+        QCOMPARE(window.currentRoute().view,route);
+        navigation->setFocus();
+        QTest::keyClick(navigation,Qt::Key_Down);
+        QTRY_COMPARE(navigation->currentRow(),1);
+        QTest::keyClick(navigation,Qt::Key_Down);
+        QTRY_COMPARE(navigation->currentRow(),2);
+        QTest::keyClick(navigation,Qt::Key_Up);
+        QTRY_COMPARE(navigation->currentRow(),1);
+        QCOMPARE(window.currentRoute().view,route);
+        QTest::keyClick(navigation,Qt::Key_Return);
+        QTRY_COMPARE(window.currentRoute().view,int(ViewIds::Profiles));
         settings->click();
+        QCOMPARE(navigation->currentRow(),-1);
         auto* about=window.findChild<QPushButton*>("settingsAboutRow");
         QVERIFY(about);
         about->click();
@@ -165,6 +198,14 @@ private slots:
     void semanticContrastAndArtwork() {
         for (const auto scheme:{Qt::ColorScheme::Light,Qt::ColorScheme::Dark}) for (bool high:{false,true}) {
             UiTheme::applyAppearance(scheme,high);
+            const bool dark=scheme==Qt::ColorScheme::Dark;
+            QCOMPARE(QColor(UiTheme::Window),QColor(dark?"#1c1c1e":"#ffffff"));
+            QCOMPARE(QColor(UiTheme::Sidebar),QColor(dark?"#171719":"#f3f4f6"));
+            QCOMPARE(QColor(UiTheme::Surface),QColor(dark?"#252527":"#f6f6f8"));
+            if (!high) {
+                QCOMPARE(QColor(UiTheme::Brand),QColor(dark?"#83baff":"#0063cf"));
+                QCOMPARE(QColor(UiTheme::Selection),QColor(dark?"#263a52":"#eaf1fc"));
+            }
             for (const auto foreground:{UiTheme::Ink,UiTheme::Secondary,UiTheme::Muted,UiTheme::Brand,UiTheme::Success,UiTheme::Warning,UiTheme::Error}) for (const auto background:{UiTheme::Surface,UiTheme::Window,UiTheme::Sidebar}) QVERIFY2(contrast(foreground,background)>=4.5,qUtf8Printable(QString("%1 on %2: %3").arg(foreground,background).arg(contrast(foreground,background))));
             QVERIFY(contrast(UiTheme::OnPrimary,UiTheme::Primary)>=4.5); QVERIFY(contrast(UiTheme::Ink,UiTheme::Selection)>=4.5);
             QVERIFY(contrast(UiTheme::OnPrimary,UiTheme::PrimaryPressed)>=4.5);
@@ -389,7 +430,7 @@ private slots:
         // K5：控制卡不再随订阅出现/消失——没有订阅时三行显示「尚未连接 / 规则模式 / 尚未测试」，
         // 空态由这三行自己承担，不再整卡替换。
         QVERIFY(message->text().isEmpty()); QVERIFY(!details->isVisible()); QVERIFY(window.findChild<QFrame*>("homeControlCard")->isVisible());
-        QCOMPARE(window.findChild<QLabel*>("overviewTitle")->text(),QString("未连接"));
+        QCOMPARE(window.findChild<QLabel*>("homeTakeoverStatus")->text(),QString("未接管流量"));
         window.setPage(6); auto* draft=window.findChild<QLabel*>("settingsDraftHint"); auto* port=window.findChild<QSpinBox*>("mixedPort"); QVERIFY(draft->text().isEmpty());
         port->setValue(port->value()+1); QVERIFY(draft->text().contains("未保存的网络设置"));
         const auto geometry=window.centralWidget()->geometry();
@@ -425,7 +466,7 @@ private slots:
         clickNavigation(0); QCOMPARE(window.page(),homePage); QVERIFY(!settingsNav->isChecked()); window.setPage(0);
         navigation->setFocus(); navigation->setCurrentRow(1); QTest::keyClick(navigation,Qt::Key_Return); QCOMPARE(window.currentRoute().view,int(ViewIds::Profiles)); window.setPage(0);
         // 首页空态由节点区引导；连接页按缺失条件只给一处空态动作。
-        QVERIFY(!window.findChild<QPushButton*>("homeNextStep")); QCOMPARE(window.findChild<QLabel*>("overviewTitle")->text(),QString("未连接"));
+        QVERIFY(!window.findChild<QPushButton*>("homeNextStep")); QCOMPARE(window.findChild<QLabel*>("homeTakeoverStatus")->text(),QString("未接管流量"));
         // K5：抽屉与代理总开关按钮都已删除，首屏的代理入口就是控制区第一行的行尾开关。
         QVERIFY(!window.findChild<QPushButton*>("homeProxySwitch")); QVERIFY(window.findChild<QWidget*>("systemProxy")->isVisible());
         // No configuration: the contextual empty-state action is the sole
@@ -445,9 +486,10 @@ private slots:
         QVERIFY(!window.findChild<QPushButton*>("nodeNextStep"));
         window.setPage(4); QVERIFY(!window.findChild<QPushButton*>("connectionNextStep"));
         auto* connectionEmpty=window.findChild<QTableView*>("connectionsTable")->viewport()->findChild<QPushButton*>("emptyStateAction");
-        QVERIFY(connectionEmpty&&connectionEmpty->isVisible()); QCOMPARE(connectionEmpty->text(),QString("选择配置"));
+        QVERIFY(connectionEmpty&&connectionEmpty->isVisible()); QCOMPARE(connectionEmpty->text(),QString("导入配置"));
+        QVERIFY(connectionEmpty->property("primary").toBool());
         connectionEmpty->click(); QCOMPARE(window.page(),1);
-        window.setPage(7); auto* websiteNext=window.findChild<QPushButton*>("websiteNextStep"); QVERIFY(websiteNext->isVisible()); QCOMPARE(websiteNext->text(),QString("前往配置")); websiteNext->click(); QCOMPARE(window.page(),1);
+        window.setPage(7); auto* websiteNext=window.findChild<QPushButton*>("websiteNextStep"); QVERIFY(websiteNext->isVisible()); QCOMPARE(websiteNext->text(),QString("导入配置")); QVERIFY(websiteNext->property("primary").toBool()); websiteNext->click(); QCOMPARE(window.page(),1);
           // A running core can be unready while its API is being confirmed. Do not offer a second start.
           state.activeProfile="pending-profile"; state.core=CoreState::Running; state.ready=false; controller.stateChanged();
           window.setPage(7); QVERIFY(!websiteNext->isVisible()); QVERIFY(window.findChild<QLabel*>("websiteProgress")->text().contains("正在确认内核"));

@@ -74,7 +74,7 @@ public:
     QJsonObject nodePreferences(const QString& id={}) const;
     QString groupTestUrl(const QString& group) const;
     void updateProfilePolicy(const QString& id, bool automatic, int intervalHours, std::optional<DownloadPolicy> policy = {});
-    void activateProfile(const QString& id, bool lastGood = false);
+    void activateProfile(const QString& id, bool lastGood = false, const QString& expectedVersion = {});
     void renameProfile(const QString& id, const QString& name);
     void deleteProfile(const QString& id);
     void updateSettings(const Settings& settings);

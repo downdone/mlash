@@ -24,6 +24,7 @@
 #include <QTabBar>
 #include <QStackedWidget>
 #include <QStatusBar>
+#include <QStyleOption>
 #include <QScrollArea>
 #include <QScrollBar>
 #include <QContextMenuEvent>
@@ -133,7 +134,7 @@ private slots:
         QTRY_VERIFY(input->text().isEmpty());
         QVERIFY(input->isVisible());
         QCOMPARE(imported.size(),2);
-        QTRY_VERIFY(cards->viewport()->mapTo(&window,QPoint()).y()<=160);
+        QTRY_VERIFY(cards->viewport()->mapTo(&window,QPoint()).y()<=180);
         QCOMPARE(cards->model()->index(0,0).data(Qt::DisplayRole).toString(),QString("new"));
         QCOMPARE(cards->model()->index(0,0).data(ProfileRowModel::SourceLabel).toString(),QString("new.yaml"));
         const auto cardRect=cards->visualRect(cards->model()->index(0,0));
@@ -141,13 +142,23 @@ private slots:
         QVERIFY(qAbs(2*cardRect.width()-cards->viewport()->width())<=30);
         const auto shots=qEnvironmentVariable("MLASH_UI_SCREENSHOTS");
         if (!shots.isEmpty()) { QVERIFY(QDir().mkpath(shots)); QVERIFY(window.grab().save(shots+"/single-subscription-card.png")); }
+        // The offscreen backend does not reactivate the owner after closing the advanced window.
+        if (QGuiApplication::platformName()=="offscreen") QApplication::setActiveWindow(&window);
         window.setPage(0);
-        QTRY_VERIFY(setup->isVisible()); QCOMPARE(setup->text(),QString("前往配置"));
+        QTRY_VERIFY(setup->isVisible()); QCOMPARE(setup->text(),QString("选择配置"));
         setup->click(); QCOMPARE(window.currentRoute().view,int(ViewIds::Profiles));
         const auto index=cards->model()->index(0,0);
         QTRY_VERIFY(cards->visualRect(index).isValid());
         QSignalSpy finished(&controller,&AppController::operationFinished);
-        QTest::mouseClick(qobject_cast<ProfileCardWidget*>(cards->indexWidget(index))->button(ProfileCardWidget::Action::Use),Qt::LeftButton);
+        auto* more=qobject_cast<ProfileCardWidget*>(cards->indexWidget(index))->button(ProfileCardWidget::Action::Menu);
+        QTRY_VERIFY(more->hasFocus());
+        QTest::keyClick(more,Qt::Key_Space);
+        auto* profileMenu=window.findChild<QMenu*>("profileContextMenu");
+        QTRY_VERIFY(profileMenu->isVisible());
+        auto* use=profileMenu->findChild<QAction*>("profileUseAction");
+        QVERIFY(use && use->isEnabled());
+        profileMenu->hide();
+        use->trigger();
         QTRY_COMPARE_WITH_TIMEOUT(finished.size(),1,8000);
         QVERIFY2(finished.first()[0].toBool(),qUtf8Printable(finished.first()[1].toString()));
         QVERIFY(!controller.state().activeProfile.isEmpty());
@@ -188,59 +199,161 @@ private slots:
         QSignalSpy initialized(&controller, &AppController::initialized);
         controller.initialize(); QTRY_COMPARE(initialized.size(), 1);
         Profile remote = controller.profiles().first();
-        remote.id = newId(); remote.name = "远程示例 · "+QString(32,QChar(0x8ba2)); remote.sourceType = "url";
-        remote.source = "http://127.0.0.1:1/sub?token=private";
+        remote.id = newId(); remote.name = "远程示例 · 备用"; remote.sourceType = "url";
+        remote.source = "http://127.0.0.1:1/private-route?token=private";
+        remote.updated = "2026-11-18T08:09:00Z";
+        const auto localTime = QDateTime::fromString(remote.updated,Qt::ISODate).toLocalTime().toString("MM-dd HH:mm");
         remote.active=newId();
         MainWindow window(&controller); window.resize(1440, 650); window.show(); window.setPage(1);
         auto* list = window.findChild<QListView*>("profileList"); QVERIFY(list);
+        const auto shots = qEnvironmentVariable("MLASH_UI_SCREENSHOTS");
+        if (!shots.isEmpty()) {
+            auto& profiles=const_cast<QVector<Profile>&>(controller.profiles());
+            const auto original=profiles;
+            for (const auto& name:QStringList{"Office 网络","Home 备用","Test 实验"}) {
+                auto sample=remote;
+                sample.id=newId();
+                sample.name=name;
+                sample.candidate=sample.active;
+                sample.sourceType=name=="Home 备用"?"file":"url";
+                sample.source=sample.sourceType=="file"?"backup.yaml":"https://example.test/sub";
+                profiles.append(sample);
+            }
+            emit controller.profilesChanged();
+            UiTheme::setPreferences("light",100);
+            window.resize(1040,720);
+            QTRY_COMPARE(list->model()->rowCount(),4);
+            const auto tile=[list](int row) { return list->visualRect(list->model()->index(row,0)); };
+            QTRY_VERIFY(tile(0).isValid() && tile(0).top()==tile(1).top()
+                && tile(2).top()>tile(0).top() && tile(2).top()==tile(3).top());
+            QVERIFY(QDir().mkpath(shots));
+            QVERIFY(window.grab().save(shots+"/profile-reference.png"));
+            profiles=original;
+            emit controller.profilesChanged();
+            UiTheme::setPreferences(controller.settings().appearance,controller.settings().textScale);
+            window.resize(1440,650);
+        }
         QTRY_VERIFY(list->visualRect(list->model()->index(0,0)).width()>448);
         const auto firstWidth=list->visualRect(list->model()->index(0,0)).width();
         const_cast<QVector<Profile>&>(controller.profiles()).append(remote);
         emit controller.profilesChanged();
         QCOMPARE(list->model()->rowCount(), 2);
-        const auto shots = qEnvironmentVariable("MLASH_UI_SCREENSHOTS");
-        if (!shots.isEmpty()) { QVERIFY(QDir().mkpath(shots)); QVERIFY(window.grab().save(shots + "/subscription-list.png")); }
         const auto localIndex = list->model()->index(0, 0);
         const auto remoteIndex = list->model()->index(1, 0);
+        auto* card=qobject_cast<ProfileCardWidget*>(list->indexWidget(remoteIndex));
+        QVERIFY(card);
+        QVERIFY(card->property("summaryCard").toBool());
+        auto* titleLabel=card->findChild<QLabel*>("profileCardTitle");
+        auto* sourceLabel=card->findChild<QLabel*>("profileCardSource");
+        auto* timeLabel=card->findChild<QLabel*>("profileCardTime");
+        QVERIFY(titleLabel&&sourceLabel&&timeLabel);
+        QVERIFY(titleLabel->property("summaryTitle").toBool());
+        const auto cardRect=[card](const QWidget* widget) { return QRect(widget->mapTo(card,QPoint()),widget->size()); };
+        QTRY_COMPARE(titleLabel->x(),cardRect(sourceLabel).x());
+        QTRY_VERIFY(titleLabel->height()>=titleLabel->heightForWidth(titleLabel->width()));
+        QTRY_VERIFY(cardRect(sourceLabel).top()>titleLabel->geometry().bottom());
+        QTRY_COMPARE(cardRect(sourceLabel).top(),cardRect(timeLabel).top());
+        if (!shots.isEmpty()) { QVERIFY(QDir().mkpath(shots)); QVERIFY(window.grab().save(shots + "/subscription-list.png")); }
         QCOMPARE(localIndex.data(ProfileRowModel::SourceLabel).toString(), QString("本地快照"));
-        QCOMPARE(remoteIndex.data(ProfileRowModel::SourceLabel).toString(), QString("127.0.0.1"));
+        QCOMPARE(remoteIndex.data(ProfileRowModel::SourceLabel).toString(), QString("http://127.0.0.1:1"));
         QVERIFY(!remoteIndex.data(ProfileRowModel::SourceLabel).toString().contains("private"));
         QVERIFY(!localIndex.data(ProfileRowModel::CanRefresh).toBool());
         QVERIFY(remoteIndex.data(ProfileRowModel::CanRefresh).toBool());
         QCOMPARE(list->viewMode(), QListView::IconMode);
-        QCOMPARE(list->itemDelegate()->sizeHint({}, remoteIndex).height(), ProfileCardWidget::CellHeight);
+        QVERIFY(list->itemDelegate()->sizeHint({}, remoteIndex).height()>=ProfileCardWidget::CellHeight);
         QVERIFY(list->visualRect(localIndex).top() == list->visualRect(remoteIndex).top());
         QCOMPARE(list->visualRect(localIndex).width(),firstWidth);
         QCOMPARE(list->visualRect(remoteIndex).width(),firstWidth);
         window.resize(840, 650);
         QTRY_VERIFY(list->visualRect(localIndex).width()<firstWidth);
-        QTRY_COMPARE(list->visualRect(localIndex).top(),list->visualRect(remoteIndex).top());
-        auto* card=qobject_cast<ProfileCardWidget*>(list->indexWidget(remoteIndex));
-        QVERIFY(card);
+        QTRY_VERIFY2(list->visualRect(localIndex).top()==list->visualRect(remoteIndex).top(),
+            qPrintable(QString("window=%1, viewport=%2, cells=%3x%4 and %5x%6")
+                .arg(window.width()).arg(list->viewport()->width())
+                .arg(list->visualRect(localIndex).width()).arg(list->visualRect(localIndex).height())
+                .arg(list->visualRect(remoteIndex).width()).arg(list->visualRect(remoteIndex).height())));
+        ProfileRowModel idleModel;
+        auto idle=remote;
+        idle.candidate=idle.active;
+        idle.updateError.clear();
+        idleModel.setProfiles({idle});
+        card->setProfile(idleModel.index(0,0));
+        auto* idleStatus=card->findChild<QLabel*>("profileCardStatus");
+        QVERIFY(idleStatus && idleStatus->isVisible());
+        QCOMPARE(idleStatus->text(),QString("未启用"));
+        QVERIFY(!card->button(ProfileCardWidget::Action::ReviewUpdate)->isVisible());
+        card->setProfile(remoteIndex);
         UiTheme::setPreferences("light",120);
         QCoreApplication::processEvents();
-        const auto reviewButton=card->button(ProfileCardWidget::Action::Review);
-        const auto applyButton=card->button(ProfileCardWidget::Action::Apply);
-        auto* titleLabel=card->findChild<QLabel*>("profileCardTitle");
-        auto* sourceLabel=card->findChild<QLabel*>("profileCardSource");
-        auto* timestamp=card->findChild<QLabel*>("profileCardTime");
+        const auto reviewButton=card->button(ProfileCardWidget::Action::ReviewUpdate);
+        QCOMPARE(reviewButton->text(),QString("查看更新…"));
+        int visibleActions=0;
+        for (auto* action : card->findChildren<QPushButton*>())
+            if (action->isVisible()) ++visibleActions;
+        QCOMPARE(visibleActions,1);
+        QVERIFY(!card->findChild<QLabel*>("profileCardUsage"));
+        const auto checkActionText=[&] {
+            QStyleOptionButton option;
+            option.initFrom(reviewButton);
+            option.text=reviewButton->text();
+            const auto contents=reviewButton->style()->subElementRect(QStyle::SE_PushButtonContents,&option,reviewButton);
+            QVERIFY(contents.width()>=reviewButton->fontMetrics().horizontalAdvance(reviewButton->text()));
+        };
+        checkActionText();
         const auto surface=ProfileCardWidget::surfaceRect(card->rect());
         QVERIFY(card->rect().contains(reviewButton->geometry()));
-        QVERIFY(card->rect().contains(applyButton->geometry()));
-        QVERIFY(applyButton->x()-reviewButton->geometry().right()-1>=8);
-        QVERIFY(surface.right()-applyButton->geometry().right()>=ProfileCardWidget::HorizontalInset);
-        QVERIFY(surface.bottom()-applyButton->geometry().bottom()>=ProfileCardWidget::VerticalInset);
-        QVERIFY(sourceLabel->geometry().top()>titleLabel->geometry().bottom());
-        QVERIFY(reviewButton->geometry().top()>timestamp->geometry().bottom()+10);
-        QVERIFY(timestamp->x()-sourceLabel->geometry().right()-1>=12);
-        QVERIFY(sourceLabel->width()>0);
+        QVERIFY(surface.right()-reviewButton->geometry().right()>=ProfileCardWidget::HorizontalInset);
+        QVERIFY(surface.bottom()-reviewButton->geometry().bottom()>=ProfileCardWidget::VerticalInset);
+        QVERIFY(cardRect(sourceLabel).top()>titleLabel->geometry().bottom());
+        QVERIFY(reviewButton->geometry().top()>cardRect(timeLabel).bottom());
+        QCOMPARE(titleLabel->text(),remote.name);
+        QVERIFY(titleLabel->height()>=titleLabel->heightForWidth(titleLabel->width()));
+        QCOMPARE(sourceLabel->text(),QString("订阅链接"));
+        QCOMPARE(sourceLabel->toolTip(),QString("http://127.0.0.1:1"));
+        QCOMPARE(timeLabel->text(),localTime);
+        for (const auto* tag:{sourceLabel,timeLabel}) {
+            QVERIFY(card->rect().contains(cardRect(tag)));
+            QVERIFY2(tag->width()>=tag->sizeHint().width(),qPrintable(QString("%1 width %2, preferred %3, card %4")
+                .arg(tag->objectName()).arg(tag->width()).arg(tag->sizeHint().width()).arg(card->width())));
+        }
+        QVERIFY(qAbs(titleLabel->font().pointSizeF()-UiTheme::SectionPoints*1.2)<=0.1);
         QVERIFY(!titleLabel->geometry().intersects(card->button(ProfileCardWidget::Action::Refresh)->geometry()));
         list->setCurrentIndex(remoteIndex);
         QVERIFY(card->property("selected").toBool());
         if (!shots.isEmpty()) QVERIFY(window.grab().save(shots+"/subscription-grid-840.png"));
         UiTheme::setPreferences("dark",120);
         QCoreApplication::processEvents();
+        checkActionText();
         if (!shots.isEmpty()) QVERIFY(window.grab().save(shots+"/subscription-grid-dark-840.png"));
+        auto* localCard=qobject_cast<ProfileCardWidget*>(list->indexWidget(localIndex));
+        auto* localRefresh=localCard->button(ProfileCardWidget::Action::Refresh);
+        auto* localMenu=localCard->button(ProfileCardWidget::Action::Menu);
+        QVERIFY(localRefresh->isVisible() && !localRefresh->isEnabled());
+        QVERIFY(!localRefresh->accessibleDescription().isEmpty());
+        QVERIFY(localRefresh->geometry().right()<localMenu->geometry().left());
+        QCOMPARE(localRefresh->y(),localMenu->y());
+        auto* usageState=localCard->findChild<QLabel*>("profileCardStatus");
+        auto* updateState=localCard->findChild<QLabel*>("profileCardUpdate");
+        QVERIFY(usageState&&updateState);
+        Profile preview=controller.profiles().first();
+        preview.candidate=newId();
+        preview.updateError="fixture update failure";
+        ProfileRowModel previewModel;
+        previewModel.setProfiles({preview});
+        previewModel.setState(preview.id,true);
+        localCard->setProfile(previewModel.index(0,0));
+        QCOMPARE(usageState->text(),QString("当前使用"));
+        QCOMPARE(updateState->text(),QString("更新失败"));
+        QVERIFY(updateState->isVisible());
+        const auto* localTitle=localCard->findChild<QLabel*>("profileCardTitle");
+        QVERIFY(localTitle);
+        QTRY_COMPARE(usageState->parentWidget()->mapTo(localCard,QPoint()).x(),localTitle->x());
+        QCOMPARE(updateState->parentWidget()->mapTo(localCard,QPoint()).x(),localTitle->x());
+        QVERIFY(localCard->button(ProfileCardWidget::Action::ReviewUpdate)->isVisible());
+        localCard->setWritable(false);
+        QVERIFY(localCard->button(ProfileCardWidget::Action::ReviewUpdate)->isEnabled());
+        localCard->setWritable(true);
+        if (!shots.isEmpty()) QVERIFY(window.grab().save(shots+"/subscription-different-states.png"));
+        localCard->setProfile(localIndex);
         UiTheme::setPreferences(controller.settings().appearance,controller.settings().textScale);
         window.resize(1440, 650);
         QTRY_VERIFY(list->visualRect(localIndex).top() == list->visualRect(remoteIndex).top());
@@ -260,11 +373,17 @@ private slots:
         QVERIFY(!workspace->findChild<QLabel*>("taskContextSummary"));
         QVERIFY(workspace->editor("nodes"));
         QVERIFY(workspace->findChild<QTabBar*>("taskTabs")->isVisible());
-        QTRY_VERIFY(window.findChild<QPushButton*>("retryProxyEntries")->isVisible());
-        window.findChild<QPushButton*>("retryProxyEntries")->click();
-        QTRY_VERIFY(window.findChild<QPushButton*>("retryProxyEntries")->isVisible());
+        auto* retry=window.findChild<QPushButton*>("retryProxyEntries"); QVERIFY(retry);
+        QTRY_VERIFY(retry->isVisible());
+        auto* failure=window.findChild<QLabel*>("proxyReadFeedback"); QVERIFY(failure);
+        QVERIFY(failure->isVisible());
+        QVERIFY(failure->text().contains("配置内容读取失败"));
+        QCOMPARE(retry->parentWidget(),failure->parentWidget());
+        retry->click();
+        QTRY_VERIFY(retry->isVisible());
         auto* entrySearch=workspace->findChild<QLineEdit*>("proxyEntrySearch"); QVERIFY(entrySearch);
         auto* entryList=workspace->findChild<QListWidget*>("editableNodes"); QVERIFY(entryList);
+        QVERIFY(!entryList->isVisible());
         entrySearch->setText("没有这个节点");
         if (entryList->count()) QVERIFY(entryList->item(0)->isHidden());
         entrySearch->clear();
@@ -273,11 +392,15 @@ private slots:
         workspace->findChild<QPushButton*>("taskBack")->click();
         QTRY_VERIFY(list->isVisible());
         QCOMPARE(list->currentIndex().data(ProfileRowModel::ProfileId).toString(), remote.id);
-        auto* reviewControl=qobject_cast<ProfileCardWidget*>(list->indexWidget(remoteIndex))->button(ProfileCardWidget::Action::Review);
+        auto* reviewControl=qobject_cast<ProfileCardWidget*>(list->indexWidget(remoteIndex))->button(ProfileCardWidget::Action::ReviewUpdate);
         reviewControl->setFocus(Qt::TabFocusReason);
         QTest::keyClick(reviewControl,Qt::Key_Space);
         QTRY_VERIFY(workspace->context().endsWith(":candidate"));
         QVERIFY(workspace->editor("candidate"));
+        QCOMPARE(controller.state().activeProfile, currentId);
+        workspace->findChild<QPushButton*>("taskBack")->click();
+        QTest::mouseClick(reviewControl,Qt::LeftButton);
+        QTRY_VERIFY(workspace->context().endsWith(":candidate"));
         QCOMPARE(controller.state().activeProfile, currentId);
         workspace->findChild<QPushButton*>("taskBack")->click();
         QTest::mouseClick(qobject_cast<ProfileCardWidget*>(list->indexWidget(localIndex))->button(ProfileCardWidget::Action::Menu),Qt::LeftButton);
@@ -289,6 +412,40 @@ private slots:
         auto* sourceEditor = window.findChild<QDialog*>("profilePolicyDialog"); QVERIFY(sourceEditor);
         QVERIFY(sourceEditor->findChild<QLineEdit*>("profileEditName"));
         QCOMPARE(controller.state().activeProfile, currentId);
+        workspace->findChild<QPushButton*>("taskBack")->click();
+        QTRY_VERIFY(list->isVisible());
+        auto& longProfile=const_cast<Profile&>(controller.profiles().at(1));
+        longProfile.name=QString(56,QChar(0x8ba2))+QString(60,u'W')+QStringLiteral("终点");
+        const QString host=QString(58,u'w')+QStringLiteral(".")+QString(58,u'm')+QStringLiteral(".example.test");
+        longProfile.source="https://"+host+"/config?token=private";
+        longProfile.updated=remote.updated;
+        const auto longName=longProfile.name;
+        emit controller.profilesChanged();
+        window.resize(840,650);
+        for (const auto& mode : {QString("light"),QString("dark")}) {
+            UiTheme::setPreferences(mode,120);
+            const auto row=list->model()->index(1,0);
+            list->scrollTo(row);
+            QTRY_VERIFY(list->visualRect(row).width()>500);
+            QTRY_VERIFY(list->visualRect(row).height()>list->visualRect(list->model()->index(0,0)).height());
+            auto* fullCard=qobject_cast<ProfileCardWidget*>(list->indexWidget(row)); QVERIFY(fullCard);
+            auto* fullTitle=fullCard->findChild<QLabel*>("profileCardTitle");
+            auto* fullSource=fullCard->findChild<QLabel*>("profileCardSource");
+            auto* fullTime=fullCard->findChild<QLabel*>("profileCardTime");
+            QVERIFY(fullTitle&&fullSource&&fullTime);
+            QCOMPARE(fullTitle->text(),longName);
+            QCOMPARE(fullSource->text(),QString("订阅链接"));
+            QCOMPARE(fullSource->toolTip(),"https://"+host);
+            QCOMPARE(fullTime->text(),localTime);
+            QTRY_VERIFY(fullTitle->height()>=fullTitle->heightForWidth(fullTitle->width()));
+            QVERIFY(fullTitle->height()>fullTitle->fontMetrics().height());
+            QTRY_VERIFY(fullSource->mapTo(fullCard,QPoint()).y()>fullTitle->geometry().bottom());
+            const auto buttonRect=fullCard->button(ProfileCardWidget::Action::ReviewUpdate)->geometry();
+            QVERIFY(fullCard->rect().contains(buttonRect));
+            QVERIFY(buttonRect.top()>fullTime->mapTo(fullCard,QPoint()).y()+fullTime->height()-1);
+            if (!shots.isEmpty()) QVERIFY(window.grab().save(shots+"/subscription-full-text-"+mode+".png"));
+        }
+        UiTheme::setPreferences(controller.settings().appearance,controller.settings().textScale);
     }
     void subscriptionCardEditingAndReturnPreserveObject() {
         QTemporaryDir data; QVERIFY(seedDashboardFixture(data.path()));
@@ -396,8 +553,11 @@ private slots:
         menu->hide(); menu->actions().at(1)->trigger();
         auto* editor=window.findChild<QDialog*>("profilePolicyDialog"); QVERIFY(editor);
         auto* rollback=editor->findChild<QPushButton*>("rollbackProfile"); QVERIFY(rollback);
-        QTimer::singleShot(0,&window,[&window] { if (auto* prompt=window.findChild<QMessageBox*>()) prompt->button(QMessageBox::No)->click(); });
         rollback->click();
+        auto* prompt=editor->findChild<QMessageBox*>("profileVersionConfirmation"); QVERIFY(prompt);
+        QVERIFY(prompt->text().contains(profile.lastGood));
+        QCOMPARE(prompt->defaultButton(),prompt->button(QMessageBox::No));
+        prompt->button(QMessageBox::No)->click();
         QCOMPARE(finished.size(),0);
         QCOMPARE(controller.profiles().first().active,active);
         QVERIFY(editor->isVisible());
@@ -758,18 +918,26 @@ private slots:
         proxies.insert("日常选择",QJsonObject{{"type","Selector"},{"all",members},{"now",members.first()}});
         MainWindow window(&controller); window.resize(1040,720); window.show(); QTest::qWait(40);
         auto* sidebar=window.findChild<QWidget*>("sidebar"); auto* navigation=window.findChild<QListWidget*>("navigation");
-        QVERIFY(sidebar && navigation); QCOMPARE(sidebar->width(),216);
+        QVERIFY(sidebar && navigation); QCOMPARE(sidebar->width(),200);
         const auto firstNav=navigation->visualItemRect(navigation->item(0));
         const auto secondNav=navigation->visualItemRect(navigation->item(1));
-        QVERIFY(firstNav.height()>=40); QVERIFY(secondNav.top()-firstNav.bottom()-1>=2);
-        QVERIFY(secondNav.top()-firstNav.bottom()-1<10);
+        const auto thirdNav=navigation->visualItemRect(navigation->item(2));
+        QCOMPARE(firstNav.height(),38);
+        QCOMPARE(secondNav.x(),firstNav.x());
+        QCOMPARE(thirdNav.x(),firstNav.x());
+        QCOMPARE(secondNav.width(),firstNav.width());
+        QCOMPARE(thirdNav.width(),firstNav.width());
+        QVERIFY(firstNav.width()>=navigation->viewport()->width()-8);
+        QVERIFY(firstNav.bottom()<secondNav.top() && secondNav.bottom()<thirdNav.top());
+        QCOMPARE(secondNav.top()-firstNav.bottom(),thirdNav.top()-secondNav.bottom());
+        QVERIFY(navigation->viewport()->rect().contains(thirdNav));
         auto* brandHeader=window.findChild<QWidget*>("sidebarBrandHeader");
         auto* settingsNav=window.findChild<QToolButton*>("sidebarSettings");
         QVERIFY(brandHeader&&settingsNav);
         QVERIFY(!window.findChild<QLabel*>("sidebarVersion"));
         QVERIFY(brandHeader->y()<navigation->y());
         QVERIFY(settingsNav->y()>navigation->y()+firstNav.height()*3);
-        QCOMPARE(settingsNav->width(),navigation->width());
+        QCOMPARE(settingsNav->size(),QSize(32,32));
         auto& preferences=const_cast<Settings&>(controller.settings());
         const auto appearance=preferences.appearance;
         const auto textScale=preferences.textScale;
@@ -778,7 +946,7 @@ private slots:
             preferences.textScale=scale;
             UiTheme::setPreferences(theme,scale);
             window.navigate(Route{ViewIds::Home});
-            QTRY_COMPARE(settingsNav->height(),navigation->visualItemRect(navigation->item(0)).height());
+            QTRY_COMPARE(navigation->visualItemRect(navigation->item(0)).height(),38);
             QVERIFY(!settingsNav->isChecked());
             QTest::mouseClick(settingsNav,Qt::LeftButton,Qt::NoModifier,QPoint(8,settingsNav->height()-3));
             QVERIFY(settingsNav->isChecked());
@@ -1580,13 +1748,10 @@ private slots:
         recentMenu->popup(QCursor::pos()); QTRY_COMPARE(recentOpened.size(),1); QVERIFY(!recentMenu->isEmpty());
         QCOMPARE(finished.count(),settled); recentMenu->close(); QCoreApplication::processEvents();
         QVERIFY(!window.findChild<QAction*>("automaticAction")->isEnabled());
-        // K5：控制区第一行只报告「当前成员」；成员行（NodeRowModel::IsCurrent）是本轮的证据，
-        // 概览标题的成员名依赖 controller 的探测组上下文（setHomeProbeGroup 由外部入口设置），
-        // 没有上下文时按设计退化为「没有唯一当前节点」，因此这里不断言具体成员名。
         window.navigate(Route{0,-1,HomeAnchor::Nodes}); QCoreApplication::processEvents();
-        auto* overview=window.findChild<QLabel*>("overviewTitle"); QVERIFY(overview);
-        QVERIFY2(overview->text().contains("REJECT") || overview->text()==QString("尚未连接") || overview->text()==QString("未连接") || overview->text()==QString("代理未开启") || overview->text()==QString("已开启代理") || overview->text()==controller.homeNode(),
-                 qUtf8Printable("overview: "+overview->text()));
+        auto* currentNode=window.findChild<QLabel*>("homeCurrentNode"); QVERIFY(currentNode);
+        QCOMPARE(currentNode->text(),controller.state().ready?controller.homeNode():QString());
+        QVERIFY(!window.findChild<QLabel*>("homeTakeoverStatus")->text().isEmpty());
 
         // 六卡删除后，「当前成员」由控制区第一行与成员行勾选共同表达（H2/H3）。
         QVERIFY(!window.findChild<QLabel*>("homeStateLine"));
@@ -1625,7 +1790,13 @@ private slots:
         QCOMPARE(finished.count(),beforeImport+1);
         cardTask->findChild<QPushButton*>("taskBack")->click();
         QTRY_VERIFY(localProfiles->isVisible());
-        QTest::mouseClick(qobject_cast<ProfileCardWidget*>(localProfiles->indexWidget(secondProfileIndex))->button(ProfileCardWidget::Action::Use),Qt::LeftButton);
+        QTest::mouseClick(qobject_cast<ProfileCardWidget*>(localProfiles->indexWidget(secondProfileIndex))->button(ProfileCardWidget::Action::Menu),Qt::LeftButton);
+        auto* useMenu=window.findChild<QMenu*>("profileContextMenu");
+        QTRY_VERIFY(useMenu->isVisible());
+        auto* useAction=useMenu->findChild<QAction*>("profileUseAction");
+        QVERIFY(useAction && useAction->isEnabled());
+        useMenu->hide();
+        useAction->trigger();
         QTRY_COMPARE_WITH_TIMEOUT(finished.count(), beforeImport+2, 15000); QVERIFY2(finished.last()[0].toBool(), qUtf8Printable(finished.last()[1].toString()));
         QTRY_VERIFY_WITH_TIMEOUT(listModel()->rowCount() >= 6, 10000); QCOMPARE(controller.settings().activeProfile, sources->currentData().toString());
         // K1/K6：旧入口 5 是「数据 › 日志」，回显仍是数据页；用 currentRoute 而不是 page() 断言。
@@ -1931,17 +2102,39 @@ private slots:
         auto* quick=window.findChild<QWidget*>("profileQuickImport");
         auto* input=window.findChild<QLineEdit*>("profileImportInput");
         QVERIFY(quick&&quick->isVisible()&&input&&input->isVisible());
+        auto* browse=quick->findChild<QToolButton*>("profileBrowseImport");
+        auto* submit=quick->findChild<QPushButton*>("profileQuickSubmit");
+        auto* entry=quick->findChild<QWidget*>("profileImportField");
+        QVERIFY(browse&&submit&&entry);
+        QCOMPARE(add->text(),QString("高级"));
+        QVERIFY(!add->icon().isNull());
+        QCOMPARE(input->parentWidget(),entry);
+        QCOMPARE(browse->parentWidget(),entry);
+        QVERIFY(!browse->accessibleName().isEmpty());
+        QVERIFY(browse->focusPolicy()&Qt::TabFocus);
         QVERIFY(quick->y()<profiles->y());
         window.resize(840,560);
-        QCoreApplication::processEvents();
-        QVERIFY(quick->rect().contains(add->geometry()));
         const auto shots=qEnvironmentVariable("MLASH_UI_SCREENSHOTS");
-        if (!shots.isEmpty()) { QVERIFY(QDir().mkpath(shots)); QVERIFY(window.grab().save(shots+"/quick-import.png")); }
-        UiTheme::setPreferences("dark",120);
-        QCoreApplication::processEvents();
-        QVERIFY(quick->rect().contains(input->geometry()));
-        QVERIFY(quick->rect().contains(add->geometry()));
-        if (!shots.isEmpty()) QVERIFY(window.grab().save(shots+"/quick-import-dark.png"));
+        for (const auto& theme:{QString("light"),QString("dark")}) {
+            UiTheme::setPreferences(theme,120);
+            QCoreApplication::processEvents();
+            QVERIFY(quick->height()<=54);
+            QVERIFY(qAbs(submit->height()-entry->height())<=2);
+            QVERIFY(qAbs(add->height()-entry->height())<=2);
+            for (auto* control:QList<QWidget*>{input,browse,submit,add}) {
+                QVERIFY(control->isVisible());
+                QVERIFY(quick->rect().contains(QRect(control->mapTo(quick,QPoint()),control->size())));
+            }
+            QStyleOptionFrame field;
+            field.initFrom(input);
+            field.lineWidth=input->style()->pixelMetric(QStyle::PM_DefaultFrameWidth,&field,input);
+            const auto textArea=input->style()->subElementRect(QStyle::SE_LineEditContents,&field,input);
+            QVERIFY(textArea.width()>=input->fontMetrics().horizontalAdvance(input->placeholderText())+4);
+            const auto panel=quick->grab();
+            const auto pixels=panel.toImage();
+            QCOMPARE(pixels.pixelColor(qRound(6*panel.devicePixelRatio()),pixels.height()/2),QColor(UiTheme::Selection));
+            if (!shots.isEmpty()) { QVERIFY(QDir().mkpath(shots)); QVERIFY(window.grab().save(shots+"/quick-import-"+theme+".png")); }
+        }
         UiTheme::setPreferences(controller.settings().appearance,controller.settings().textScale);
         add->click();
         QPointer<ImportDialog> dialog=window.findChild<ImportDialog*>();

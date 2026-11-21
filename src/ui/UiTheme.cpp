@@ -103,9 +103,9 @@ QString styleSheet() {
     sheet.replace("@ValuePoints",points(ValuePoints));
     sheet.replace("@TitlePoints",points(TitlePoints));
     sheet.replace("@PanelBorder",high?QString("1px solid ")+Border:QStringLiteral("none"));
+    sheet.replace("@SummaryBorder",high?QString(Border):QStringLiteral("transparent"));
     sheet.replace("@ControlMinimum",QString::number(ControlHeight-8)+"px");
-    // The stylesheet sizes the content box. The navigation token includes both borders.
-    sheet.replace("@SidebarItemContentHeight",QString::number(SidebarItemHeight-2)+"px");
+    sheet.replace("@NavButtonInnerHeight",QString::number(SidebarItemHeight-2)+"px");
     // Qt's QPushButton style adds its vertical padding to min-height.
     sheet.replace("@HomeControlRowMinimum",QString::number(RowHeight+2)+"px");
     sheet.replace("@SettingRowHeight",QString::number(SettingRowHeight)+"px");
@@ -128,6 +128,7 @@ QString styleSheet() {
     sheet.replace("@Border",Border);
     sheet.replace("@Brand",Brand);
     sheet.replace("@Selection",Selection);
+    sheet.replace("@ProfileActiveFill",design::ShadowrocketStyle::scheduleFill(dark));
     sheet.replace("@Success",Success);
     sheet.replace("@Error",Error);
     sheet.replace("@Warning",Warning);

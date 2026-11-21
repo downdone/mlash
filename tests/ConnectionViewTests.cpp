@@ -243,7 +243,7 @@ private slots:
         window.setPage(4); QCoreApplication::processEvents();
         auto* connectionsEmpty=window.findChild<QTableView*>("connectionsTable"); QVERIFY(connectionsEmpty);
         auto* emptyLabel=connectionsEmpty->viewport()->findChild<QLabel*>("emptyState"); QVERIFY(emptyLabel);
-        QTRY_VERIFY(emptyLabel->isVisible()); QVERIFY(emptyLabel->text().contains("选择配置"));
+        QTRY_VERIFY(emptyLabel->isVisible()); QCOMPARE(emptyLabel->text(),QString("还没有配置"));
         QSignalSpy exited(&c,&AppController::exitReady); c.requestExit(); QTRY_COMPARE(exited.size(),1);
     }
 };

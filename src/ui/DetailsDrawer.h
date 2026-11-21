@@ -21,7 +21,7 @@ public:
         header->addWidget(close, 0, Qt::AlignTop);
         outer->addLayout(header); outer->addSpacing(10);
         auto* scroll=new QScrollArea; scroll->setWidgetResizable(true); scroll->setFrameShape(QFrame::NoFrame); scroll->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
-        auto* body=new QWidget; body_=new QVBoxLayout(body); body_->setContentsMargins(0,0,0,0); body_->setSpacing(0); body_->addStretch(1); scroll->setWidget(body); outer->addWidget(scroll,1);
+        auto* body=new QWidget; body->setMaximumWidth(540); body_=new QVBoxLayout(body); body_->setContentsMargins(0,0,0,0); body_->setSpacing(0); body_->addStretch(1); scroll->setWidget(body); outer->addWidget(scroll,1);
         actions_ = new QHBoxLayout; actions_->setSpacing(8); actions_->addStretch(1); outer->addSpacing(22); outer->addLayout(actions_);
         hide(); host_->installEventFilter(this);
     }
@@ -29,9 +29,9 @@ public:
     QLabel* addKeyValue(const QString& key, const QString& value) {
         auto* row = new QWidget; row->setObjectName("drawerKeyValue");
         auto* layout = new QHBoxLayout(row); layout->setContentsMargins(0, 6, 0, 6); layout->setSpacing(10);
-        auto* keyLabel = new QLabel(key); keyLabel->setObjectName("drawerKey"); layout->addWidget(keyLabel);
+        auto* keyLabel = new QLabel(key); keyLabel->setObjectName("drawerKey"); keyLabel->setMinimumWidth(110); layout->addWidget(keyLabel);
         auto* valueLabel = new QLabel(value.isEmpty() ? QStringLiteral("—") : value); valueLabel->setObjectName("drawerValue");
-        valueLabel->setTextFormat(Qt::PlainText); valueLabel->setWordWrap(true); valueLabel->setAlignment(Qt::AlignRight | Qt::AlignVCenter); layout->addWidget(valueLabel, 1);
+        valueLabel->setTextFormat(Qt::PlainText); valueLabel->setWordWrap(true); valueLabel->setAlignment(Qt::AlignLeft | Qt::AlignVCenter); layout->addWidget(valueLabel, 1);
         body_->insertWidget(qMax(0,body_->count()-1),row); return valueLabel;
     }
     void addHint(const QString& text) { auto* hint = new QLabel(text); hint->setObjectName("drawerHint"); hint->setProperty("secondary", true); hint->setWordWrap(true); hint->setTextFormat(Qt::PlainText); body_->insertWidget(qMax(0,body_->count()-1),hint); }

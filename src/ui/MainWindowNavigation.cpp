@@ -75,6 +75,10 @@ void MainWindow::syncSectionNavigation(const Route& route) {
     // 三个工作区入口与底部设置共用同一路由；规则深链归属配置。
     const int row = route.view == ViewIds::Rules ? ViewIds::Profiles : route.view;
     { const QSignalBlocker block(navigation_);
+      for (int i=0;i<navigation_->count();++i) {
+          auto* item=navigation_->item(i);
+          item->setData(ActiveNavigationRole,item->data(Qt::UserRole).toInt()==row);
+      }
       if (row == ViewIds::Settings) {
           navigation_->clearSelection();
           navigation_->setCurrentRow(-1);

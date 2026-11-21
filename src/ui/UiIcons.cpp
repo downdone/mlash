@@ -45,6 +45,11 @@ QIcon icon(Glyph glyph,const QString& color) {
         case Glyph::Chart: path.moveTo(2,12); path.lineTo(6,12); path.lineTo(9,3); path.lineTo(13,21); path.lineTo(16,9); path.lineTo(18,12); path.lineTo(22,12); break;
         case Glyph::Import: p.drawLine(12,3,12,15); path.moveTo(7,10); path.lineTo(12,15); path.lineTo(17,10); path.moveTo(4,16); path.lineTo(4,21); path.lineTo(20,21); path.lineTo(20,16); break;
         case Glyph::List: p.drawLine(4,6,20,6); p.drawLine(4,12,20,12); p.drawLine(4,18,14,18); break;
+        case Glyph::Sidebar: p.drawRoundedRect(QRectF(3,5,18,14),2,2); p.drawLine(9,5,9,19); break;
+        case Glyph::Link:
+            path.moveTo(11,7); path.lineTo(15,3); path.cubicTo(19,-1,25,5,21,9); path.lineTo(17,13);
+            path.moveTo(7,11); path.lineTo(3,15); path.cubicTo(-1,19,5,25,9,21); path.lineTo(13,17);
+            path.moveTo(8,16); path.lineTo(16,8); break;
         // K 版：原型 ICON 词典里首页与标题行用到的形状（坐标直接取自原型的 24×24 视框）。
         case Glyph::Route: p.drawEllipse(QRectF(4,16,4,4)); p.drawEllipse(QRectF(16,4,4,4)); path.moveTo(6,16); path.lineTo(6,11); path.arcTo(QRectF(6,6,10,10),180,-90); path.lineTo(16,6); path.moveTo(11,15); path.lineTo(15,19); path.lineTo(19,15); break;
         case Glyph::Rocket: path.moveTo(4,16); path.cubicTo(4,10,10,4,20,3); path.cubicTo(20,13,13,19,7,19); p.drawPath(path); path=QPainterPath(); path.moveTo(4,16); path.lineTo(2,22); path.lineTo(8,20); p.drawPath(path); path=QPainterPath(); path.moveTo(10,8); path.lineTo(16,14); p.drawPath(path); p.drawEllipse(QPointF(15,9),1.6,1.6); break;

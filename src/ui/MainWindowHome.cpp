@@ -5,6 +5,7 @@
 #include "HomeMetricsView.h"
 #include "NodePresentation.h"
 #include "ProxySwitch.h"
+#include "StatusSentence.h"
 #include "UiIcons.h"
 #include "UiTheme.h"
 #include "ViewIds.h"
@@ -39,19 +40,29 @@ QWidget* MainWindow::homePage() {
     auto* currentRow = new QWidget; currentRow->setObjectName("homeControlRow"); currentRow->setProperty("first", true); currentRow->setFixedHeight(UiTheme::RowHeight);
     auto* currentLayout = new QHBoxLayout(currentRow); currentLayout->setContentsMargins(0, 3, 0, 3); currentLayout->setSpacing(10);
     statusDot_ = new QLabel; statusDot_->setObjectName("statusDot"); statusDot_->setFixedSize(0,0); statusDot_->hide(); auto* currentIcon=new QLabel; currentIcon->setPixmap(UiIcons::icon(UiIcons::Glyph::Rocket,UiTheme::Brand).pixmap(22,22)); currentIcon->setFixedSize(22,22); currentLayout->addWidget(currentIcon,0,Qt::AlignVCenter);
-    overviewTitle_ = new ElidedLabel("尚未连接"); overviewTitle_->setObjectName("overviewTitle"); overviewTitle_->setTextFormat(Qt::PlainText);
-    overviewTitle_->setSizePolicy(QSizePolicy::Ignored,QSizePolicy::Preferred);
+    auto* proxyTitle = new QLabel("代理", currentRow);
+    proxyTitle->setObjectName("homeControlTitle");
+    homeCurrentNode_ = new ElidedLabel(currentRow);
+    homeCurrentNode_->setObjectName("homeCurrentNode");
+    homeCurrentNode_->setProperty("secondary", true);
+    homeCurrentNode_->setSizePolicy(QSizePolicy::Ignored, QSizePolicy::Preferred);
+    homeTakeoverStatus_ = new QLabel(currentRow);
+    homeTakeoverStatus_->setTextFormat(Qt::PlainText);
+    homeTakeoverStatus_->setObjectName("homeTakeoverStatus");
+    homeTakeoverStatus_->setProperty("secondary", true);
     connect(UiTheme::notifier(),&UiTheme::AppearanceNotifier::changed,currentIcon,[currentIcon] { currentIcon->setPixmap(UiIcons::icon(UiIcons::Glyph::Rocket,UiTheme::Brand).pixmap(22,22)); });
-    currentLayout->addWidget(overviewTitle_, 1, Qt::AlignVCenter);
+    currentLayout->addWidget(proxyTitle);
+    currentLayout->addWidget(homeCurrentNode_, 1);
+    currentLayout->addWidget(homeTakeoverStatus_);
     // 行尾开关就是代理总开关（ADR 0048 的 setProxyEnabled）；原来的「开启代理」按钮移入
     // 「更多运行信息」，两处同源同命令，只是首屏只留一个入口（原型 01/02）。
-    proxyEnabled_ = new ProxySwitch(""); proxyEnabled_->setObjectName("systemProxy"); proxyEnabled_->setAccessibleName("代理总开关 · 系统代理");
+    proxyEnabled_ = new ProxySwitch(""); proxyEnabled_->setObjectName("systemProxy"); proxyEnabled_->setAccessibleName("代理总开关");
     currentLayout->addWidget(proxyEnabled_, 0, Qt::AlignVCenter);
     summary->addWidget(currentRow);
     connect(proxyEnabled_, &QCheckBox::clicked, this, [this](bool enabled) {
         const auto& state = controller_->state();
         // 这个开关是代理总开关：打开时若内核未运行，setProxyEnabled 内部会先启动内核（ADR 0048）。
-        if (enabled && state.activeProfile.isEmpty()) { proxyEnabled_->setChecked(false); if (controller_->profiles().isEmpty()) addUrl(); else setPage(1); return; }
+        if (enabled && state.activeProfile.isEmpty()) { proxyEnabled_->setChecked(false); openProfileSetup(); return; }
         bool allow = false;
         if (enabled && state.proxy == ProxyState::External) {
             allow = QMessageBox::question(this, "接管系统代理", "系统已有代理或 PAC。允许暂时接管，并在退出时恢复？") == QMessageBox::Yes;
@@ -107,9 +118,9 @@ QWidget* MainWindow::homePage() {
     connect(controller_, &AppController::homeGroupTestsChanged, this, &MainWindow::updateHome);
     // RowHeight 是视觉下限；开关和图标按钮含内边距后可能更高。
     // 按三个实际控件的上界统一行高，避免 Qt 单独撑开首行。
-    const auto syncControlRowHeight=[this,currentRow,connectivityRow] {
+    const auto syncControlRowHeight=[this,currentRow,connectivityRow,proxyTitle] {
         const int height=std::max({UiTheme::RowHeight,proxyEnabled_->sizeHint().height()+6,
-            homeConnectivityButton_->sizeHint().height()+6,overviewTitle_->sizeHint().height()+6});
+            homeConnectivityButton_->sizeHint().height()+6,proxyTitle->sizeHint().height()+6});
         currentRow->setFixedHeight(height);
         homeRouteRow_->setFixedHeight(height);
         connectivityRow->setFixedHeight(height);
@@ -130,7 +141,7 @@ QWidget* MainWindow::homePage() {
     auto* emptyTitle=new QLabel; emptyTitle->setObjectName("homeSetupTitle"); emptyTitle->setAlignment(Qt::AlignCenter); emptyLayout->addWidget(emptyTitle);
     auto* emptyText=new QLabel; emptyText->setObjectName("homeSetupHint"); emptyText->setAlignment(Qt::AlignCenter); emptyText->setWordWrap(true); emptyText->setProperty("secondary",true); emptyLayout->addWidget(emptyText);
     auto* import=new QPushButton; import->setObjectName("homeSetupAction"); import->setProperty("primary",true); emptyLayout->addWidget(import,0,Qt::AlignHCenter);
-    connect(import,&QPushButton::clicked,this,[this] { if (controller_->profiles().isEmpty()) addUrl(); else navigate(Route{ViewIds::Profiles}); });
+    connect(import,&QPushButton::clicked,this,&MainWindow::openProfileSetup);
     layout->addWidget(empty);
     // 列表底部一行轻量摘要（原型 01 的 inline-stat / 设计文档「只留一行」裁决）。
     auto* stat = new QWidget; stat->setObjectName("homeInlineStat");
@@ -167,10 +178,11 @@ void MainWindow::updateHome() {
     const bool hasActive=!current.activeProfile.isEmpty();
     if (auto* empty=findChild<QWidget*>("prototypeHomeEmpty")) {
         const bool noProfiles=controller_->profiles().isEmpty();
-        empty->findChild<QLabel*>("homeSetupTitle")->setText(noProfiles?"还没有配置":"还未使用配置");
+        const auto copy=profileSetupCopy(!noProfiles);
+        empty->findChild<QLabel*>("homeSetupTitle")->setText(copy.title);
         empty->findChild<QLabel*>("homeSetupHint")->setText(noProfiles?"导入订阅链接或本地配置文件即可开始。":"在配置卡片上点「使用」，然后回到首页开启代理。");
         auto* action=empty->findChild<QPushButton*>("homeSetupAction");
-        action->setText(noProfiles?"导入配置":"前往配置");
+        action->setText(copy.action);
         action->setEnabled(!current.busy && !current.exiting && (!noProfiles || !current.readOnly));
         empty->setVisible(!hasActive);
         nodeSection_->setVisible(hasActive);
@@ -178,13 +190,11 @@ void MainWindow::updateHome() {
     // 控制卡在任何状态下都保持三行；技术状态和测试进度不额外占行。
     findChild<QWidget*>("homeControlCard")->setVisible(true);
     findChild<QWidget*>("homeInlineStat")->hide();
-    // 名称只读；实现状态由 Controller 和全局状态栏维护。
-    if (overviewTitle_) {
-        const auto node = controller_->homeNode();
-        const bool connected=current.proxy==ProxyState::Owned || current.tunObserved;
-        const QString status=connected?"已开启代理":hasActive?"代理未开启":"未连接";
-        overviewTitle_->setText(node.isEmpty() || !current.ready ? status : node);
-    }
+    const auto node = controller_->homeNode();
+    homeCurrentNode_->setText(current.ready && !node.isEmpty() ? node : QString());
+    const auto takeover = takeoverText(statusFacts(current, controller_->settings(), {}));
+    homeTakeoverStatus_->setText(takeover);
+    proxyEnabled_->setAccessibleDescription(takeover);
     // 控制区第 2 行：当前路由方式。
     if (homeRouteValue_) homeRouteValue_->setText(current.mode=="global"?"全局模式":current.mode=="direct"?"直连模式":"规则模式");
     homeRouteRow_->setEnabled(hasActive && current.ready && !current.busy && !current.exiting && !current.readOnly);

@@ -134,10 +134,13 @@ QWidget* MainWindow::trafficPanel() {
     auto* missing=new QLabel; missing->setObjectName("trafficNextReason"); missing->setWordWrap(true);
     auto* next=new QPushButton; next->setObjectName("trafficNextStep"); next->setProperty("primary",true);
     auto* empty=new QFrame; empty->setObjectName("panel"); auto* emptyLayout=new QVBoxLayout(empty);
-    emptyLayout->addWidget(missing); emptyLayout->addWidget(next,0,Qt::AlignLeft);
+    emptyLayout->setContentsMargins(16,20,16,20);
+    missing->setAlignment(Qt::AlignHCenter);
+    emptyLayout->addWidget(missing); emptyLayout->addWidget(next,0,Qt::AlignHCenter);
     layout->addWidget(empty);
     connect(next,&QPushButton::clicked,this,[this] {
-        navigate(Route{controller_->state().activeProfile.isEmpty()?ViewIds::Profiles:ViewIds::Home});
+        if (controller_->state().activeProfile.isEmpty()) openProfileSetup();
+        else navigate(Route{ViewIds::Home});
     });
     const auto refresh=[this,metrics,empty,missing,next] {
         const auto& state=controller_->state();
@@ -146,10 +149,11 @@ QWidget* MainWindow::trafficPanel() {
         const bool sampled=!controller_->homeMetrics()->snapshot().isEmpty();
         metrics->setVisible(sampled);
         empty->setVisible(!sampled);
-        missing->setText(!hasProfile?"使用配置后即可查看流量。":waiting?"正在等待连接…":
+        const auto copy=profileSetupCopy(!controller_->profiles().isEmpty());
+        missing->setText(!hasProfile?copy.title:waiting?"正在等待连接…":
             !state.ready?"前往首页开启代理后查看流量。":
             controller_->homeMetrics()->error().isEmpty()?"正在采集流量…":"暂时无法读取流量，正在等待下次采集。");
-        next->setText(hasProfile?"前往首页":"前往配置");
+        next->setText(hasProfile?"前往首页":copy.action);
         next->setVisible(!sampled && (!hasProfile || (!waiting && !state.ready)));
     };
     connect(controller_,&AppController::stateChanged,panel,refresh);

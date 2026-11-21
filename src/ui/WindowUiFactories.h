@@ -3,15 +3,25 @@
 #include "ChevronToolButton.h"
 
 namespace mlash::WindowParts {
+struct ProfileSetupCopy {
+    QString title;
+    QString action;
+};
+inline ProfileSetupCopy profileSetupCopy(bool hasProfiles) {
+    return hasProfiles ? ProfileSetupCopy{"还未使用配置","选择配置"}
+                       : ProfileSetupCopy{"还没有配置","导入配置"};
+}
 inline QPushButton* button(const QString& text, QLayout* layout) { auto* b = new QPushButton(text); layout->addWidget(b); return b; }
 inline QToolButton* actionButton(QAction* action, QLayout* layout, const QString& name) {
     auto* control = new ChevronToolButton; control->setObjectName(name); control->setToolButtonStyle(Qt::ToolButtonTextOnly); control->setDefaultAction(action); layout->addWidget(control); return control;
 }
 // 空态（R7/U19）：说明与操作是同一个视觉单元，随视口居中，避免按钮贴底。
-inline QLabel* emptyState(QAbstractItemView* table, const QString& text) {
+inline QLabel* emptyState(QAbstractItemView* table, const QString& text, bool nearTop=false) {
     auto* label = new QLabel(text, table->viewport()); label->setObjectName("emptyState"); label->setWordWrap(true); label->setAlignment(Qt::AlignCenter); label->setSizePolicy(QSizePolicy::Preferred, QSizePolicy::Maximum); label->setAttribute(Qt::WA_TransparentForMouseEvents); label->setTextFormat(Qt::PlainText);
     auto* action = new QPushButton(table->viewport()); action->setObjectName("emptyStateAction"); action->setProperty("quiet", true); action->setFocusPolicy(Qt::StrongFocus); action->hide();
-    auto* layout = new QVBoxLayout(table->viewport()); layout->setContentsMargins(0,0,0,0); layout->setSpacing(8); layout->addStretch(1); layout->addWidget(label, 0, Qt::AlignHCenter); layout->addWidget(action, 0, Qt::AlignHCenter); layout->addStretch(1); label->hide();
+    auto* layout = new QVBoxLayout(table->viewport()); layout->setContentsMargins(0,nearTop?28:0,0,0); layout->setSpacing(8);
+    if (!nearTop) layout->addStretch(1);
+    layout->addWidget(label, 0, Qt::AlignHCenter); layout->addWidget(action, 0, Qt::AlignHCenter); layout->addStretch(1); label->hide();
     return label;
 }
 // 空态动作按钮；调用方按当前原因设置文案与处理函数。文案为空即整块隐藏。

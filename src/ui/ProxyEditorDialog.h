@@ -22,7 +22,8 @@ private:
     QListWidget* list() const;
     AppController* controller_; QString id_,editVersion_; QJsonObject saved_,draft_,source_,sourceExpected_;
     bool loaded_=false,saving_=false,analyzing_=false;
-    QTabWidget* tabs_; QListWidget *nodes_,*groups_; QLabel* hint_; QLineEdit* search_;
+    QTabWidget* tabs_; QListWidget *nodes_,*groups_; QLabel *hint_,*readFeedback_; QLineEdit* search_;
+    QWidget* readStatus_;
     QPushButton *save_,*add_,*edit_,*retry_; QAction *remove_,*restore_,*reset_,*import_;
 };
 }

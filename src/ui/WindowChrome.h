@@ -6,6 +6,7 @@
 
 namespace mlash::WindowParts {
 enum class NavKind { Home, Config, Data, Settings };
+inline constexpr int ActiveNavigationRole = Qt::UserRole + 1;
 // 分区归属按视图常量判断（ViewIds.h）。数据页的四个页签共用同一个视图，因此都归「数据」。
 inline NavKind navKindOfView(int view) {
     switch (view) {
@@ -16,17 +17,10 @@ inline NavKind navKindOfView(int view) {
     default: return NavKind::Home;
     }
 }
-// 唯一图标入口（6.2c）：导航与页面共用 UiIcons，不再各画一套描边。
-// The selected row uses a quiet surface; its icon carries the accent instead of
-// turning the entire navigation row into a primary action.
-inline QIcon navigationIcon(NavKind kind) {
-    const auto glyph = kind == NavKind::Home ? UiIcons::Glyph::Home
+inline UiIcons::Glyph navigationGlyph(NavKind kind) {
+    return kind == NavKind::Home ? UiIcons::Glyph::Home
         : kind == NavKind::Config ? UiIcons::Glyph::Folder
         : kind == NavKind::Data ? UiIcons::Glyph::Chart : UiIcons::Glyph::Settings;
-    auto icon=UiIcons::icon(glyph,UiTheme::Secondary);
-    const auto selected=UiIcons::icon(glyph,UiTheme::Brand);
-    for (const int size:{24,48}) icon.addPixmap(selected.pixmap(size,size),QIcon::Selected,QIcon::Off);
-    return icon;
 }
 // K1：顶栏文案的旁表。MainWindow.h 不能反向包含本文件（本文件包含它），
 // 因此顶栏控件登记在 WindowParts 自己的表里，updateTopbar() 统一写。

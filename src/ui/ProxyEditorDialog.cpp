@@ -90,11 +90,23 @@ ProxyEditorDialog::ProxyEditorDialog(AppController* controller,const QString& id
     edit_=new QPushButton("编辑"); edit_->setObjectName("editProxyEntry"); row->addWidget(edit_);
     auto* more=new QToolButton; more->setObjectName("proxyEntryMore"); more->setText("更多"); more->setPopupMode(QToolButton::InstantPopup); auto* menu=new QMenu(more); more->setMenu(menu); row->addWidget(more);
     import_=menu->addAction("导入节点链接…"); import_->setObjectName("importNodeLinks"); remove_=menu->addAction("移除所选…"); remove_->setObjectName("removeProxyEntry"); restore_=menu->addAction("还原所选"); restore_->setObjectName("restoreProxyEntry"); menu->addSeparator(); reset_=menu->addAction("全部沿用订阅"); reset_->setObjectName("resetProxyEdits");
-    layout->addLayout(row); layout->addWidget(tabs_);
-    hint_=new QLabel("正在读取来源节点…"); hint_->setObjectName("proxyEditorHint"); hint_->setTextFormat(Qt::PlainText); hint_->setWordWrap(true); layout->addWidget(hint_);
+    layout->addLayout(row);
+    readStatus_=new QFrame(this);
+    readStatus_->setObjectName("proxyReadStatus");
+    auto* readLayout=new QHBoxLayout(readStatus_);
+    readLayout->setContentsMargins(12,8,12,8);
+    readFeedback_=new QLabel;
+    readFeedback_->setObjectName("proxyReadFeedback");
+    readFeedback_->setTextFormat(Qt::PlainText);
+    readFeedback_->setWordWrap(true);
+    readLayout->addWidget(readFeedback_,1);
     retry_=new QPushButton("重新读取");
     retry_->setObjectName("retryProxyEntries");
-    layout->addWidget(retry_,0,Qt::AlignLeft);
+    retry_->setAutoDefault(false);
+    readLayout->addWidget(retry_,0,Qt::AlignVCenter);
+    layout->addWidget(readStatus_);
+    layout->addWidget(tabs_);
+    hint_=new QLabel("正在读取来源节点…"); hint_->setObjectName("proxyEditorHint"); hint_->setTextFormat(Qt::PlainText); hint_->setWordWrap(true); layout->addWidget(hint_);
     connect(retry_,&QPushButton::clicked,this,&ProxyEditorDialog::loadEntries);
     auto* actions=new QDialogButtonBox(QDialogButtonBox::Save|QDialogButtonBox::Cancel); actions->button(QDialogButtonBox::Cancel)->setText("取消"); save_=actions->button(QDialogButtonBox::Save); save_->setText("保存并校验"); save_->setObjectName("saveProxyEdits"); actions->button(QDialogButtonBox::Cancel)->setText("取消"); layout->addWidget(actions); layout->addStretch(1);
     connect(actions,&QDialogButtonBox::rejected,this,&QDialog::reject); connect(actions,&QDialogButtonBox::accepted,this,[this] { if (!sourceCurrent()) { updateActions(); return; } saving_=true; updateActions(); controller_->updateProxyEdits(id_,draft_,saved_,sourceExpected_); });
@@ -109,16 +121,17 @@ ProxyEditorDialog::ProxyEditorDialog(AppController* controller,const QString& id
     DialogDraftGuard::protect(this,[this] { return draft_!=saved_; },[this] { return saving_||analyzing_; });
 }
 void ProxyEditorDialog::loadEntries() {
+    const bool restoreFocus=retry_->hasFocus();
+    loaded_=false;
+    readStatus_->show();
+    readFeedback_->setText("正在读取配置中的节点与策略组…");
     retry_->hide();
+    tabs_->hide();
+    search_->setEnabled(false);
     hint_->clear();
     hint_->hide();
-    for (auto* view:{nodes_,groups_}) {
-        view->setProperty("emptyHint","正在读取配置…");
-        view->setToolTip({});
-        view->viewport()->update();
-    }
     const QPointer<ProxyEditorDialog> guard(this);
-    controller_->inspectProxyEntries(id_,[guard](Result result) {
+    controller_->inspectProxyEntries(id_,[guard,restoreFocus](Result result) {
         if (!guard) return;
         guard->loaded_=result.ok;
         if (result.ok) {
@@ -126,14 +139,16 @@ void ProxyEditorDialog::loadEntries() {
             guard->nodes_->setProperty("emptyHint","此配置没有节点。可新增或导入链接。");
             guard->groups_->setProperty("emptyHint","此配置没有策略组。可新增策略组。");
             guard->refresh();
+            guard->readStatus_->hide();
+            guard->tabs_->show();
+            guard->search_->setEnabled(true);
+            if (restoreFocus && guard->isVisible() && guard->window()->isActiveWindow())
+                guard->search_->setFocus(Qt::OtherFocusReason);
         } else {
-            const auto message=QString("读取失败，原配置未改变。\n%1").arg(result.error.left(200));
-            for (auto* view:{guard->nodes_,guard->groups_}) {
-                view->setProperty("emptyHint",message);
-                view->setToolTip(result.error);
-                view->viewport()->update();
-            }
+            guard->readFeedback_->setText(QString("配置内容读取失败\n%1").arg(result.error.left(200)));
             guard->retry_->show();
+            if (restoreFocus && guard->isVisible() && guard->window()->isActiveWindow())
+                guard->retry_->setFocus(Qt::OtherFocusReason);
         }
         guard->updateActions();
     });

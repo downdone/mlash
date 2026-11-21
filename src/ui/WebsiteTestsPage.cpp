@@ -33,6 +33,7 @@
 #include <QMessageBox>
 #include <QScrollBar>
 #include <QStyle>
+#include "WindowUiFactories.h"
 
 namespace mlash {
 WebsiteTestsPage::WebsiteTestsPage(AppController* controller,QWidget* parent):QWidget(parent),controller_(controller) {
@@ -43,11 +44,27 @@ WebsiteTestsPage::WebsiteTestsPage(AppController* controller,QWidget* parent):QW
     clear_=new QPushButton("清空结果"); clear_->setObjectName("clearWebsiteTests"); row->addWidget(clear_); controlLayout->addLayout(row);
     layout->addWidget(controls);
     auto* scroll=new QScrollArea; scroll->setObjectName("websiteScroll"); scroll->setWidgetResizable(true); scroll->setFrameShape(QFrame::NoFrame); scroll->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
-    cards_=new QWidget; cards_->setObjectName("websiteSurface"); cards_->setAttribute(Qt::WA_StyledBackground); grid_=new QGridLayout(cards_); grid_->setContentsMargins(0,0,0,0); grid_->setSpacing(8); scroll->setWidget(cards_);
-    auto* summary=new QHBoxLayout; progress_=new ElidedLabel; progress_->setObjectName("websiteProgress"); progress_->setAccessibleName("测试进度或未能开始的原因"); progress_->setProperty("secondary",true); progress_->setSizePolicy(QSizePolicy::Ignored,QSizePolicy::Preferred); summary->addWidget(progress_,1); auto* next=new QPushButton; next->setObjectName("websiteNextStep"); summary->addWidget(next); connect(next,&QPushButton::clicked,this,[this] { const auto& state=controller_->state(); if (state.activeProfile.isEmpty()) emit pageRequested(1); else if (state.core==CoreState::Stopped || state.core==CoreState::Failed) controller_->startCore(); }); lastTestIcon_=new QLabel; lastTestIcon_->setFixedSize(16,16); summary->addWidget(lastTestIcon_); lastTest_=new QLabel; lastTest_->setObjectName("lastWebsiteTest"); lastTest_->setProperty("secondary",true); summary->addWidget(lastTest_);
+    cards_=new QWidget; cards_->setObjectName("websiteSurface"); cards_->setAttribute(Qt::WA_StyledBackground); grid_=new QGridLayout(cards_); grid_->setContentsMargins(0,0,0,0); grid_->setSpacing(SummaryCardStyle::GridGap); scroll->setWidget(cards_);
+    auto* summary=new QHBoxLayout; progress_=new ElidedLabel; progress_->setObjectName("websiteProgress"); progress_->setAccessibleName("测试进度或未能开始的原因"); progress_->setProperty("secondary",true); progress_->setSizePolicy(QSizePolicy::Ignored,QSizePolicy::Preferred); summary->addWidget(progress_,1); lastTestIcon_=new QLabel; lastTestIcon_->setFixedSize(16,16); summary->addWidget(lastTestIcon_); lastTest_=new QLabel; lastTest_->setObjectName("lastWebsiteTest"); lastTest_->setProperty("secondary",true); summary->addWidget(lastTest_);
     auto* diagnostic=new QPushButton("出口诊断…"); diagnostic->setObjectName("websiteDiagnostics"); diagnostic->setProperty("quiet",true); summary->addWidget(diagnostic); connect(diagnostic,&QPushButton::clicked,this,&WebsiteTestsPage::diagnosticsRequested);
     auto* edit=new QPushButton("编辑目标"); edit->setObjectName("editWebsiteTargets"); edit->setProperty("quiet",true); summary->addWidget(edit); connect(edit,&QPushButton::clicked,this,[this] { presentTaskDialog(new WebsiteTargetsDialog(controller_,this)); });
-    layout->addLayout(summary); layout->addWidget(scroll,1);
+    layout->addLayout(summary);
+    auto* setup=new QWidget; setup->setObjectName("websiteSetup");
+    auto* setupLayout=new QVBoxLayout(setup);
+    setupLayout->setContentsMargins(16,20,16,20);
+    auto* setupReason=new QLabel;
+    setupReason->setObjectName("websiteSetupReason");
+    setupReason->setAlignment(Qt::AlignHCenter); setupReason->setWordWrap(true);
+    setupLayout->addWidget(setupReason);
+    auto* next=new QPushButton;
+    next->setObjectName("websiteNextStep"); next->setProperty("primary",true);
+    setupLayout->addWidget(next,0,Qt::AlignHCenter);
+    connect(next,&QPushButton::clicked,this,[this] {
+        const auto& state=controller_->state();
+        if (state.activeProfile.isEmpty()) emit pageRequested(1);
+        else if (state.core==CoreState::Stopped || state.core==CoreState::Failed) controller_->startCore();
+    });
+    layout->addWidget(setup); layout->addWidget(scroll,1);
     auto* emptySpace=new QWidget;
     layout->addWidget(emptySpace,1);
     const auto updateSurface=[this,controls,scroll,emptySpace,diagnostic] {
@@ -68,6 +85,7 @@ WebsiteTestsPage::WebsiteTestsPage(AppController* controller,QWidget* parent):QW
     connect(clear_,&QPushButton::clicked,controller_,&AppController::clearWebsiteTests);
     connect(nodes_,&QComboBox::activated,this,[this] { userPicked_=true; controller_->selectWebsiteTestNode(nodes_->currentData().toString()); updateResults(); });
     connect(controller_,&AppController::stateChanged,this,&WebsiteTestsPage::updateNodes); connect(controller_,&AppController::proxiesChanged,this,&WebsiteTestsPage::updateNodes);
+    connect(controller_,&AppController::profilesChanged,this,&WebsiteTestsPage::updateResults);
     connect(controller_->websiteTests(),&WebsiteTests::changed,this,&WebsiteTestsPage::updateResults);
     connect(UiTheme::notifier(),&UiTheme::AppearanceNotifier::changed,this,[this] { clear_->setIcon(UiIcons::icon(UiIcons::Glyph::Clear)); updateResults(); reflow(); });
     start_->setIcon(UiIcons::icon(UiIcons::Glyph::Play,UiTheme::OnPrimary)); clear_->setIcon(UiIcons::icon(UiIcons::Glyph::Clear)); updateNodes(); reflow();
@@ -76,11 +94,11 @@ void WebsiteTestsPage::rebuildCards() {
     if (resultDetails_) resultDetails_->close();
     for (const auto& card : cardWidgets_) { grid_->removeWidget(card.box); delete card.box; } cardWidgets_.clear(); columns_=0;
     for (const auto& target:controller_->websiteTests()->targets()) {
-        auto* box=new QFrame(cards_); box->setObjectName("websiteCard"); box->setProperty("targetId",target.id); box->setMinimumHeight(92); box->setSizePolicy(QSizePolicy::Ignored,QSizePolicy::Preferred);
-        auto* content=new QVBoxLayout(box); content->setContentsMargins(SummaryCardStyle::Inset,SummaryCardStyle::TopInset,SummaryCardStyle::Inset,SummaryCardStyle::TopInset); content->setSpacing(4); auto* top=new QHBoxLayout; top->setSpacing(SummaryCardStyle::MarkGap);
-        auto* mark=new QLabel; mark->setObjectName("websiteMark"); mark->setFixedSize(SummaryCardStyle::MarkSize,SummaryCardStyle::MarkSize); mark->setAlignment(Qt::AlignCenter); mark->setPixmap(UiIcons::service(target.id).pixmap(24,24)); mark->setAccessibleName(target.name+" 图标"); top->addWidget(mark);
-        auto* names=new QVBoxLayout; names->setSpacing(1); auto* name=new ElidedLabel(target.name); name->setObjectName("websiteName"); name->setTextFormat(Qt::PlainText); name->setSizePolicy(QSizePolicy::Ignored,QSizePolicy::Preferred); name->setToolTip(target.name); auto* host=new ElidedLabel(QUrl(target.url).host()); host->setObjectName("secondaryText"); host->setSizePolicy(QSizePolicy::Ignored,QSizePolicy::Preferred); host->setToolTip(target.url); names->addWidget(name); names->addWidget(host); name->setToolTip(target.name+"\n"+target.url); top->addLayout(names,1);
-        auto* details=new QToolButton; details->setObjectName("websiteResultDetails"); details->setProperty("quiet",true); details->setProperty("targetId",target.id); details->setFixedSize(28,28); details->setIcon(UiIcons::icon(UiIcons::Glyph::Info)); details->setAccessibleName("查看 "+target.name+" 测试详情"); details->setToolTip("查看测试详情"); top->addWidget(details,0,Qt::AlignTop); content->addLayout(top); connect(details,&QToolButton::clicked,this,[this,id=target.id] { showResult(id); });
+        auto* box=new QFrame(cards_); box->setObjectName("websiteCard"); box->setProperty("summaryCard",true); box->setProperty("targetId",target.id); box->setMinimumHeight(SummaryCardStyle::MinimumHeight); box->setSizePolicy(QSizePolicy::Ignored,QSizePolicy::Preferred);
+        auto* content=new QVBoxLayout(box); content->setContentsMargins(SummaryCardStyle::Inset,SummaryCardStyle::TopInset,SummaryCardStyle::Inset,SummaryCardStyle::TopInset); content->setSpacing(SummaryCardStyle::RowGap); auto* top=new QHBoxLayout; top->setSpacing(SummaryCardStyle::MarkGap);
+        auto* mark=new QLabel; mark->setObjectName("websiteMark"); mark->setProperty("summaryMark",true); mark->setFixedSize(SummaryCardStyle::MarkSize,SummaryCardStyle::MarkSize); mark->setAlignment(Qt::AlignCenter); mark->setPixmap(UiIcons::service(target.id).pixmap(24,24)); mark->setAccessibleName(target.name+" 图标"); top->addWidget(mark);
+        auto* names=new QVBoxLayout; names->setSpacing(SummaryCardStyle::IdentityGap); auto* name=new ElidedLabel(target.name); name->setObjectName("websiteName"); name->setProperty("summaryTitle",true); name->setTextFormat(Qt::PlainText); name->setSizePolicy(QSizePolicy::Ignored,QSizePolicy::Preferred); auto* host=new ElidedLabel(QUrl(target.url).host()); host->setObjectName("secondaryText"); host->setSizePolicy(QSizePolicy::Ignored,QSizePolicy::Preferred); host->setToolTip(target.url); names->addWidget(name); names->addWidget(host); name->setToolTip(target.name+"\n"+target.url); top->addLayout(names,1);
+        auto* details=new QToolButton; details->setObjectName("websiteResultDetails"); details->setProperty("quiet",true); details->setProperty("targetId",target.id); details->setFixedSize(SummaryCardStyle::DetailSize,SummaryCardStyle::DetailSize); details->setIcon(UiIcons::icon(UiIcons::Glyph::Info)); details->setAccessibleName("查看 "+target.name+" 测试详情"); details->setToolTip("查看测试详情"); top->addWidget(details,0,Qt::AlignTop); content->addLayout(top); connect(details,&QToolButton::clicked,this,[this,id=target.id] { showResult(id); });
         auto* status=new QHBoxLayout; auto* value=new QLabel("—"); value->setObjectName("websiteDelay"); auto* state=new QLabel("未测试"); state->setObjectName("secondaryText"); status->setSpacing(6); status->addWidget(value); auto* dot=new QLabel; dot->setObjectName("websiteStatusDot"); dot->setFixedSize(8,8); status->addWidget(dot); status->addWidget(state,1);
         auto* test=new QPushButton("测试"); test->setObjectName("testWebsite"); test->setProperty("quiet",true); test->setProperty("targetId",target.id); test->setAccessibleName("测试 "+target.name); status->addWidget(test); content->addLayout(status);
         cardWidgets_.append({target.id,box,value,state,dot,test,details});
@@ -132,10 +150,14 @@ void WebsiteTestsPage::updateResults() {
     start_->setMinimumWidth(start_->fontMetrics().horizontalAdvance("开始测试")+48);
     if (start_->property("primary").toBool()==running) { start_->setProperty("primary",!running); start_->style()->unpolish(start_); start_->style()->polish(start_); }
     const bool canStartCore=state.core==CoreState::Stopped || state.core==CoreState::Failed;
-    auto* next=findChild<QPushButton*>("websiteNextStep"); next->setVisible(!state.ready && (state.activeProfile.isEmpty() || canStartCore));
-    next->setText(state.activeProfile.isEmpty()?"前往配置":"启动内核");
+    const auto copy=WindowParts::profileSetupCopy(!controller_->profiles().isEmpty());
+    const bool setupVisible=!state.ready && (state.activeProfile.isEmpty() || canStartCore);
+    findChild<QWidget*>("websiteSetup")->setVisible(setupVisible);
+    findChild<QLabel*>("websiteSetupReason")->setText(state.activeProfile.isEmpty()?copy.title:QString("请先启动内核"));
+    auto* next=findChild<QPushButton*>("websiteNextStep");
+    next->setText(state.activeProfile.isEmpty()?copy.action:QString("启动内核"));
     next->setEnabled(!state.busy&&!state.exiting&&!state.readOnly);
-    const QString reason=!state.ready?(state.activeProfile.isEmpty()?"请先选择配置":state.core==CoreState::Starting?"正在启动内核…":state.core==CoreState::Running?"正在确认内核…":state.core==CoreState::Stopping?"正在停止内核…":"请先启动内核"):nodes_->currentIndex()<0?"请选择节点":state.readOnly?"只读模式":state.busy?"等待当前操作完成":QString();
+    const QString reason=setupVisible?QString():!state.ready?(state.core==CoreState::Starting?"正在启动内核…":state.core==CoreState::Running?"正在确认内核…":state.core==CoreState::Stopping?"正在停止内核…":"请先启动内核"):nodes_->currentIndex()<0?"请选择节点":state.readOnly?"只读模式":state.busy?"等待当前操作完成":QString();
     if (resultDetails_&&!resultDetails_->property("evidenceNode").toString().isEmpty()&&resultDetails_->property("evidenceNode").toString()!=tests->node()) resultDetails_->close();
     int completed=0,responded=0,cancelled=0; QDateTime last;
     for (const auto& card:cardWidgets_) {
@@ -170,9 +192,9 @@ bool WebsiteTestsPage::eventFilter(QObject* watched,QEvent* event) {
 }
 void WebsiteTestsPage::reflow() {
     auto* scroll=findChild<QScrollArea*>("websiteScroll"); const int available=scroll?scroll->viewport()->width():width();
-    const int cardWidth=qMax(236,fontMetrics().horizontalAdvance("9999 ms 已响应 重测")+80);
-    const int columns=qBound(1,(available+8)/(cardWidth+8),3); if (columns==columns_) return; columns_=columns;
-    cards_->setProperty("columns",columns); grid_->setSpacing(8);
+    const int cardWidth=qMax(SummaryCardStyle::MinimumWidth,fontMetrics().horizontalAdvance("9999 ms 已响应 重测")+80);
+    const int columns=qBound(1,(available+SummaryCardStyle::GridGap)/(cardWidth+SummaryCardStyle::GridGap),3); if (columns==columns_) return; columns_=columns;
+    cards_->setProperty("columns",columns); grid_->setSpacing(SummaryCardStyle::GridGap);
     for (const auto& card:cardWidgets_) grid_->removeWidget(card.box);
     for (int c=0;c<4;++c) grid_->setColumnStretch(c,c<columns?1:0);
     for (int i=0;i<cardWidgets_.size();++i) grid_->addWidget(cardWidgets_[i].box,i/columns,i%columns);

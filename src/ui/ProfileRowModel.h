@@ -27,7 +27,7 @@ public:
         const auto* profile = this->profile(index.row());
         if (!profile) return {};
         const bool active = !activeId_.isEmpty() && profile->id == activeId_;
-        const bool pending = !profile->active.isEmpty() && profile->candidate != profile->active;
+        const bool pending = !profile->active.isEmpty() && !profile->candidate.isEmpty() && profile->candidate != profile->active;
         const auto stamp = QDateTime::fromString(profile->updated, Qt::ISODate).toLocalTime();
         const auto when = stamp.isValid() ? stamp.toString("MM-dd HH:mm") : QStringLiteral("尚未获取");
         switch (role) {
@@ -35,9 +35,18 @@ public:
         case ProfileId: return profile->id;
         case Kind: return profile->sourceType == QStringLiteral("url") ? QStringLiteral("remote") : QStringLiteral("local");
         case IsCurrent: return active;
-        case SourceLabel: return profile->sourceType == "url" ? QUrl(profile->source).host() :
-            (profile->source.isEmpty() ? QStringLiteral("本地快照") : QFileInfo(profile->source).fileName());
-        case UpdatedLabel: return when;
+        case SourceLabel: {
+            if (profile->sourceType != "url")
+                return profile->source.isEmpty() ? QStringLiteral("本地快照") : QFileInfo(profile->source).fileName();
+            const QUrl source(profile->source);
+            if (source.host().isEmpty()) return QStringLiteral("远程订阅");
+            QUrl publicUrl;
+            publicUrl.setScheme(source.scheme());
+            publicUrl.setHost(source.host());
+            publicUrl.setPort(source.port());
+            return publicUrl.toDisplayString();
+        }
+        case UpdatedLabel: return stamp.isValid() ? when : QString();
         case CanRefresh: return !profile->source.isEmpty();
         case HasCandidate: return pending;
         case UpdateError: return profile->updateError;

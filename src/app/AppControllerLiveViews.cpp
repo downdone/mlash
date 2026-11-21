@@ -80,12 +80,16 @@ void AppController::prepareActivation(Profile profile, const QString& version, S
             }, settings.corePath);
         });
 }
-void AppController::activateProfile(const QString& id, bool lastGood) {
+void AppController::activateProfile(const QString& id, bool lastGood, const QString& expectedVersion) {
     const OperationScope operation(this, OperationId::ProfileActivate);
     const int i = profileIndex(id);
-    if (i < 0) { emit operationFinished(false, "订阅不存在"); return; }
+    if (i < 0) { reportOperation(false, "订阅不存在"); return; }
     const auto version = lastGood ? profiles_[i].lastGood : profiles_[i].candidate;
-    if (version.isEmpty()) { emit operationFinished(false, "没有可回滚版本"); return; }
+    if (!expectedVersion.isEmpty() && (version != expectedVersion || version == profiles_[i].active)) {
+        reportOperation(false, "目标版本已变化或已经使用，请重新确认");
+        return;
+    }
+    if (version.isEmpty()) { reportOperation(false, lastGood ? "没有可回滚版本" : "没有可使用版本"); return; }
     if (!begin(lastGood ? "正在回滚订阅" : "正在激活订阅")) return;
     proxyRestoreAllowed_ = true;
     prepareActivation(profiles_[i], version, settings_);

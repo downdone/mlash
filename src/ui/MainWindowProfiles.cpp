@@ -31,18 +31,49 @@
 #include <QSet>
 #include <QStyledItemDelegate>
 #include <QTimer>
+#include <algorithm>
 
 namespace mlash {
 using namespace WindowParts;
 namespace {
+class ProfileImportInput final : public QLineEdit {
+public:
+    using QLineEdit::QLineEdit;
+protected:
+    void resizeEvent(QResizeEvent* event) override {
+        QLineEdit::resizeEvent(event);
+        updatePrompt();
+    }
+    void changeEvent(QEvent* event) override {
+        QLineEdit::changeEvent(event);
+        if (event->type()==QEvent::FontChange) updatePrompt();
+    }
+private:
+    void updatePrompt() {
+        const auto full=QStringLiteral("粘贴订阅 URL，或拖拽 / 选择 YAML 文件");
+        setPlaceholderText(width()>=fontMetrics().horizontalAdvance(full)+36
+            ? full : QStringLiteral("订阅 URL 或 YAML 文件"));
+    }
+};
+
 class ProfileCardCell final : public QStyledItemDelegate {
 public:
     using QStyledItemDelegate::QStyledItemDelegate;
-    QSize sizeHint(const QStyleOptionViewItem& option,const QModelIndex&) const override {
-        const auto* list=qobject_cast<const QListView*>(option.widget);
-        return list ? list->gridSize() : QSize(320,ProfileCardWidget::CellHeight);
+    bool setColumnSizes(int width,QList<int> heights) {
+        if (width_==width && heights_==heights) return false;
+        width_=width;
+        heights_=std::move(heights);
+        return true;
+    }
+    QSize sizeHint(const QStyleOptionViewItem&,const QModelIndex& index) const override {
+        const auto* list=qobject_cast<const QListView*>(parent());
+        if (list && list->gridSize().isValid()) return list->gridSize();
+        return {width_,heights_.value(index.row(),ProfileCardWidget::CellHeight)};
     }
     void paint(QPainter*,const QStyleOptionViewItem&,const QModelIndex&) const override {}
+private:
+    int width_=320;
+    QList<int> heights_;
 };
 }
 
@@ -53,30 +84,65 @@ QWidget* MainWindow::profilesPage() {
     auto* page = new QWidget;
     page->setObjectName("profilesSurface");
     auto* layout = new QVBoxLayout(page);
-    layout->setContentsMargins(20, 18, 20, 18);
+    layout->setContentsMargins(8,12,8,18);
     layout->setSpacing(10);
 
     auto* quick = new QWidget(page);
     quick->setObjectName("profileQuickImport");
+    quick->setAttribute(Qt::WA_StyledBackground);
     auto* quickRow = new QHBoxLayout(quick);
-    quickRow->setContentsMargins(0,0,0,0);
+    quickRow->setContentsMargins(12,8,12,8);
     quickRow->setSpacing(8);
-    quickImport_ = new QLineEdit(quick);
+    auto* field = new QWidget(quick);
+    field->setObjectName("profileImportField");
+    field->setAttribute(Qt::WA_StyledBackground);
+    auto* fieldRow = new QHBoxLayout(field);
+    fieldRow->setContentsMargins(9,0,6,0);
+    fieldRow->setSpacing(6);
+    auto* link = new QLabel(field);
+    link->setObjectName("profileImportLink");
+    link->setFixedSize(18,18);
+    fieldRow->addWidget(link);
+    quickImport_ = new ProfileImportInput(field);
     quickImport_->setObjectName("profileImportInput");
     quickImport_->setAccessibleName("订阅地址或 YAML 文件路径");
-    quickImport_->setPlaceholderText("粘贴订阅 URL 或 YAML 文件路径");
+    quickImport_->setPlaceholderText("订阅 URL 或 YAML 文件");
     quickImport_->setMaxLength(4096);
     quickImport_->setClearButtonEnabled(true);
-    quickRow->addWidget(quickImport_,1);
-    auto* browse = new QPushButton("选文件…",quick);
+    quickImport_->setAcceptDrops(false);
+    fieldRow->addWidget(quickImport_,1);
+    auto* browse = new QToolButton(field);
     browse->setObjectName("profileBrowseImport");
-    quickRow->addWidget(browse);
+    browse->setToolTip("选择 YAML 文件");
+    browse->setAccessibleName(browse->toolTip());
+    browse->setIconSize(QSize(16,16));
+    browse->setFocusPolicy(Qt::StrongFocus);
+    browse->setProperty("quiet",true);
+    fieldRow->addWidget(browse);
+    quickRow->addWidget(field,1);
     auto* submit = new QPushButton("导入",quick);
     submit->setObjectName("profileQuickSubmit");
     submit->setProperty("primary",true);
     quickRow->addWidget(submit);
-    auto* advanced = new QPushButton("高级新增…",quick);
+    auto* advanced = new QPushButton("高级",quick);
     advanced->setObjectName("importSubscription");
+    advanced->setAccessibleName("高级新增配置");
+    advanced->setLayoutDirection(Qt::RightToLeft);
+    advanced->setIconSize(QSize(14,14));
+    const auto updateIcons=[link,browse,advanced] {
+        link->setPixmap(UiIcons::icon(UiIcons::Glyph::Link,UiTheme::Brand).pixmap(18,18));
+        browse->setIcon(UiIcons::icon(UiIcons::Glyph::Folder,UiTheme::Secondary));
+        advanced->setIcon(UiIcons::icon(UiIcons::Glyph::ChevronRight,UiTheme::Secondary));
+    };
+    updateIcons();
+    connect(UiTheme::notifier(),&UiTheme::AppearanceNotifier::changed,field,updateIcons);
+    connect(qApp,&QApplication::focusChanged,field,[field,input=quickImport_](QWidget* previous,QWidget* next) {
+        if (previous!=input && next!=input) return;
+        field->setProperty("editing",next==input);
+        field->style()->unpolish(field);
+        field->style()->polish(field);
+        field->update();
+    });
     quickRow->addWidget(advanced);
     layout->addWidget(quick);
     auto* submitHint = new ElidedLabel;
@@ -86,8 +152,9 @@ QWidget* MainWindow::profilesPage() {
     submitHint->setAccessibleName("订阅操作结果");
     submitHint->hide();
     layout->addWidget(submitHint);
+    layout->addSpacing(8);
 
-    connect(browse,&QPushButton::clicked,this,[this] {
+    connect(browse,&QToolButton::clicked,this,[this] {
         const auto path=QFileDialog::getOpenFileName(this,"选择配置文件",{},"YAML (*.yaml *.yml)");
         if (!path.isEmpty()) quickImport_->setText(QDir::toNativeSeparators(path));
     });
@@ -159,8 +226,8 @@ QWidget* MainWindow::profilesPage() {
     batch->hide();
     listTools->addWidget(batch);
     layout->addLayout(listTools);
-    connect(batch, &QPushButton::clicked, this, [this] { showProfileBatch(false); });
-    mutations_ += {batch};
+    connect(batch, &QPushButton::clicked, this, &MainWindow::showProfileBatch);
+    connect(controller_, &AppController::profileBatchChanged, this, &MainWindow::updateProfileBatchAction);
 
     profileRowsModel_ = new ProfileRowModel(this);
     profileRowsModel_->setObjectName("profileRows");
@@ -186,10 +253,11 @@ QWidget* MainWindow::profilesPage() {
     profiles_->installEventFilter(this);
     profiles_->viewport()->installEventFilter(this);
     profiles_->setAccessibleName("订阅卡片");
-    profiles_->setAccessibleDescription("方向键选择卡片，回车打开配置内容，菜单键可使用此配置，F5 检查更新；Ctrl+Shift+V 查看变化，Ctrl+Shift+A 应用更新");
+    profiles_->setAccessibleDescription("方向键选择卡片，回车打开配置内容，菜单键打开操作，F5 检查更新，Ctrl+Shift+V 或 Ctrl+Shift+A 查看待应用更新");
     layout->addWidget(profiles_, 1);
-    emptyState(profiles_, "还没有配置");
+    emptyState(profiles_, profileSetupCopy(false).title, true);
     wireProfileList(profiles_);
+    connect(UiTheme::notifier(),&UiTheme::AppearanceNotifier::changed,this,&MainWindow::updateProfileGrid);
     updateProfileGrid();
     return page;
 }
@@ -198,13 +266,46 @@ void MainWindow::updateProfileGrid() {
     if (!profiles_) return;
     // Reserve scrollbar space in both states so the column width does not
     // change when adding a card makes the list start scrolling.
-    constexpr int minimumCardWidth=288;
     const int scrollbar=profiles_->style()->pixelMetric(QStyle::PM_ScrollBarExtent,nullptr,profiles_);
     const int available=qMax(1,profiles_->maximumViewportSize().width()-scrollbar-2);
-    const int columns=available>=2*(minimumCardWidth+8)?2:1;
-    const int width=available/columns;
-    const QSize size(width,ProfileCardWidget::CellHeight);
+    QList<ProfileCardWidget*> cards;
+    for (int row=0;row<profiles_->model()->rowCount();++row) {
+        auto* card=qobject_cast<ProfileCardWidget*>(profiles_->indexWidget(profiles_->model()->index(row,0)));
+        if (card) cards.append(card);
+    }
+    const auto computeExtra=[&cards](int width) {
+        int extra=0;
+        for (auto* card:cards) extra=qMax(extra,card->extraTextHeight(width));
+        return extra;
+    };
+    const int minimumCellWidth=288;
+    int width=available>=2*minimumCellWidth?available/2:available;
+    // Prefer a full-width column when wrapping would make every card tall.
+    if (width!=available && (computeExtra(width)>72 ||
+        std::any_of(cards.cbegin(),cards.cend(),[width](const auto* card) {
+            return width<card->minimumWidthForMetadata();
+        }))) width=available;
+    const bool single=width==available;
+    const int base=ProfileCardWidget::cellHeightForWidth(width);
+    int height=base;
+    QList<int> columnHeights;
+    for (auto* card:cards) {
+        const int cardHeight=qMax(base,card->fitText(width));
+        height=qMax(height,cardHeight);
+        if (single) columnHeights.append(cardHeight);
+    }
+    const auto mode=single?QListView::ListMode:QListView::IconMode;
+    if (profiles_->viewMode()!=mode) {
+        profiles_->setViewMode(mode);
+        profiles_->setFlow(single?QListView::TopToBottom:QListView::LeftToRight);
+        profiles_->setWrapping(!single);
+        profiles_->setUniformItemSizes(!single);
+    }
+    const QSize size=single?QSize():QSize(width,height);
     if (profiles_->gridSize() != size) profiles_->setGridSize(size);
+    auto* delegate=static_cast<ProfileCardCell*>(profiles_->itemDelegate());
+    if (delegate->setColumnSizes(width,std::move(columnHeights)) && single)
+        QMetaObject::invokeMethod(profiles_,&QListView::doItemsLayout,Qt::QueuedConnection);
 }
 
 QString MainWindow::profileAt(const QModelIndex& index) {
@@ -228,12 +329,35 @@ void MainWindow::selectProfile(const QString& id) {
         return;
     }
 }
+void MainWindow::openProfileSetup() {
+    if (controller_->profiles().isEmpty()) {
+        addUrl();
+        return;
+    }
+    navigate(Route{ViewIds::Profiles});
+    if (!profiles_->isVisible() || profiles_->model()->rowCount()==0) return;
+    auto index = profiles_->currentIndex();
+    if (!index.isValid()) index = profiles_->model()->index(0,0);
+    selectProfile(profileAt(index));
+    auto* card = qobject_cast<ProfileCardWidget*>(profiles_->indexWidget(index));
+    if (card) {
+        const auto action = index.data(ProfileRowModel::HasCandidate).toBool()
+            ? ProfileCardWidget::Action::ReviewUpdate : ProfileCardWidget::Action::Menu;
+        auto* button = card->button(action);
+        if (button->isVisible() && button->isEnabled()) {
+            button->setFocus(Qt::ShortcutFocusReason);
+            return;
+        }
+    }
+    profiles_->setFocus(Qt::ShortcutFocusReason);
+}
 void MainWindow::showProfileMenu(const QString& id, const QPoint& globalPoint) {
     if (id.isEmpty()) return;
-    bool remote = false, refreshable = false;
+    bool remote = false;
+    bool pending = false;
     for (const auto& profile : controller_->profiles()) if (profile.id == id) {
         remote = profile.sourceType == "url";
-        refreshable = !profile.source.isEmpty();
+        pending = !profile.active.isEmpty() && !profile.candidate.isEmpty() && profile.active!=profile.candidate;
         break;
     }
     auto* menu = profileContextMenu_;
@@ -245,10 +369,14 @@ void MainWindow::showProfileMenu(const QString& id, const QPoint& globalPoint) {
     connect(content, &QAction::triggered, this, [this, id] { showProfileDetails(id); });
     auto* edit = menu->addAction(remote ? "编辑来源与更新" : "管理本地文件");
     connect(edit, &QAction::triggered, this, [this, id] { openProfileTask(id, "source"); });
-    if (id!=controller_->state().activeProfile) {
-        auto* use=menu->addAction("使用此配置");
-        use->setEnabled(!controller_->state().busy && !controller_->state().readOnly);
-        connect(use,&QAction::triggered,this,[this,id] { controller_->activateProfile(id); });
+    if (pending || id!=controller_->state().activeProfile) {
+        auto* use=menu->addAction(pending ? "查看更新…" : "使用此配置");
+        use->setObjectName("profileUseAction");
+        use->setEnabled(pending || (!controller_->state().busy && !controller_->state().readOnly && !controller_->state().exiting));
+        connect(use,&QAction::triggered,this,[this,id,pending] {
+            if (pending) openProfileTask(id,"candidate");
+            else controller_->activateProfile(id);
+        });
     }
     if (remote) {
         auto* share = menu->addAction("分享配置…");
@@ -257,7 +385,6 @@ void MainWindow::showProfileMenu(const QString& id, const QPoint& globalPoint) {
             shareProfileScheme();
         });
     }
-    Q_UNUSED(refreshable);
     menu->addSeparator();
     auto* remove = menu->addAction("删除配置…");
     remove->setObjectName("deleteProfile");
@@ -297,17 +424,11 @@ void MainWindow::wireProfileList(QListView* list) {
                     showProfileMenu(id,button->mapToGlobal(QPoint(0,button->height())));
                     break;
                 }
-                case Action::Review:
+                case Action::ReviewUpdate:
                     if (index.data(ProfileRowModel::HasCandidate).toBool()) openProfileTask(id,"candidate");
                     break;
                 case Action::Refresh:
                     if (writable() && index.data(ProfileRowModel::CanRefresh).toBool()) controller_->updateProfile(id);
-                    break;
-                case Action::Apply:
-                    if (writable() && index.data(ProfileRowModel::HasCandidate).toBool()) controller_->activateProfile(id);
-                    break;
-                case Action::Use:
-                    if (writable() && !index.data(ProfileRowModel::IsCurrent).toBool()) controller_->activateProfile(id);
                     break;
                 }
             });
@@ -373,21 +494,15 @@ void MainWindow::wireProfileList(QListView* list) {
         const auto index = list->currentIndex();
         if (index.isValid() && index.data(ProfileRowModel::CanRefresh).toBool()) controller_->updateProfile(profileAt(index));
     });
-    auto* review = new QShortcut(QKeySequence(Qt::CTRL | Qt::SHIFT | Qt::Key_V), list);
-    review->setContext(Qt::WidgetWithChildrenShortcut);
-    connect(review, &QShortcut::activated, this, [this, list] {
-        const auto index = list->currentIndex();
-        if (index.isValid() && index.data(ProfileRowModel::HasCandidate).toBool())
-            openProfileTask(profileAt(index), "candidate");
-    });
-    auto* applyCandidate = new QShortcut(QKeySequence(Qt::CTRL | Qt::SHIFT | Qt::Key_A), list);
-    applyCandidate->setContext(Qt::WidgetWithChildrenShortcut);
-    connect(applyCandidate, &QShortcut::activated, this, [this, list] {
-        const auto index = list->currentIndex();
-        if (index.isValid() && index.data(ProfileRowModel::HasCandidate).toBool() &&
-            !controller_->state().busy && !controller_->state().readOnly)
-            controller_->activateProfile(profileAt(index));
-    });
+    for (const auto key : {Qt::Key_V,Qt::Key_A}) {
+        auto* review = new QShortcut(QKeySequence(Qt::CTRL | Qt::SHIFT | key),list);
+        review->setContext(Qt::WidgetWithChildrenShortcut);
+        connect(review,&QShortcut::activated,this,[this,list] {
+            const auto index = list->currentIndex();
+            if (index.isValid() && index.data(ProfileRowModel::HasCandidate).toBool())
+                openProfileTask(profileAt(index),"candidate");
+        });
+    }
 }
 void MainWindow::openProfileTask(const QString& id, const QString& task) {
     Profile profile;
@@ -484,13 +599,8 @@ void MainWindow::updateProfiles() {
     }
     if (auto* count=findChild<QLabel*>("profileCollectionCount"))
         count->setText(QString("%1 个").arg(controller_->profiles().size()));
-    if (auto* batch = findChild<QPushButton*>("batchProfiles")) {
-        int refreshable = 0;
-        for (const auto& profile : controller_->profiles()) if (!profile.source.isEmpty()) ++refreshable;
-        batch->setVisible(refreshable > 1);
-        batch->setEnabled(refreshable > 1 && !controller_->state().busy && !controller_->state().readOnly);
-    }
     if (!selected.isEmpty()) selectProfile(selected);
+    updateProfileBatchAction();
     if (profiles_) {
         if (auto* label = profiles_->findChild<QLabel*>("emptyState"))
             label->setVisible(profiles_->model()->rowCount() == 0);
@@ -603,23 +713,105 @@ void MainWindow::dropEvent(QDropEvent* event) {
     importPayload(mime->hasUrls()?urls.first().toString():mime->text()); event->acceptProposedAction();
 }
 
-void MainWindow::showProfileBatch(bool start) {
+MainWindow::ProfileBatchScope MainWindow::profileBatchScope() const {
+    const auto selection = selectedProfileIds();
+    const QSet<QString> selected(selection.cbegin(), selection.cend());
+    ProfileBatchScope scope;
+    scope.selected = selected.size() > 1;
+    for (const auto& profile : controller_->profiles()) {
+        if (scope.selected && !selected.contains(profile.id)) continue;
+        if (profile.source.isEmpty()) ++scope.skipped;
+        else scope.ids.append(profile.id);
+    }
+    return scope;
+}
+
+void MainWindow::updateProfileBatchAction() {
+    auto* button = findChild<QPushButton*>("batchProfiles");
+    if (!button) return;
+    const auto scope = profileBatchScope();
+    const auto& state = controller_->state();
+    const bool active = controller_->profileBatch().value("active").toBool();
+    button->setVisible(active || scope.selected || scope.ids.size() > 1);
+    button->setEnabled(!state.exiting && (active || (!state.busy && !state.readOnly && !scope.ids.isEmpty())));
+    button->setText(active ? QString("查看更新进度…") : scope.selected
+        ? scope.ids.isEmpty() ? QString("更新所选…") : QString("更新所选 %1 项…").arg(scope.ids.size())
+        : QString("更新全部…"));
+    const auto hint = active ? QString("查看进行中的批量更新，可停止后续项。")
+        : scope.ids.isEmpty() ? QString("所选配置没有可更新的来源。")
+        : QString("可更新 %1 项。").arg(scope.ids.size())
+            + (scope.skipped ? QString("跳过 %1 项无来源快照。").arg(scope.skipped) : QString());
+    button->setToolTip(hint);
+    button->setAccessibleDescription(hint);
+}
+
+void MainWindow::showProfileBatch() {
     if (auto* existing=findChild<QDialog*>("profileBatchDialog")) { existing->show(); existing->raise(); return; }
-    QStringList ids; const auto selected=selectedProfileIds();
-    if (selected.size()>1) ids=selected; else for (const auto& p:controller_->profiles()) ids.append(p.id);
-    const auto before=ids.size(); ids.removeIf([this](const QString& id) { for (const auto& profile:controller_->profiles()) if (profile.id==id) return profile.source.isEmpty(); return true; }); const auto local=before-ids.size();
+    const auto scope = profileBatchScope();
+    const auto openedStatus = controller_->profileBatch();
+    const bool monitoring = openedStatus.value("active").toBool();
+    if (scope.ids.isEmpty() && !monitoring) return;
+    const auto ids = scope.ids;
+    const auto scopeIds = QJsonArray::fromStringList(ids);
+    const QSet<QString> scopedIds(ids.cbegin(), ids.cend());
+    QJsonArray plan;
+    for (const auto& profile : controller_->profiles()) {
+        if (scopedIds.contains(profile.id)) plan.append(QJsonObject{{"name",profile.name}});
+    }
     auto* dialog=new TaskDialog(this); dialog->setAttribute(Qt::WA_DeleteOnClose); dialog->setObjectName("profileBatchDialog"); dialog->setWindowTitle("批量更新订阅"); dialog->resize(600,400); auto* box=new QVBoxLayout(dialog);
-    auto* hint=new QLabel; hint->setWordWrap(true); hint->setTextFormat(Qt::PlainText); box->addWidget(hint);
-    auto* table=new QTableWidget(0,3); table->setObjectName("profileBatchResults"); table->setHorizontalHeaderLabels({"订阅","结果","说明"}); table->horizontalHeader()->setSectionResizeMode(2,QHeaderView::Stretch); table->verticalHeader()->hide(); table->setEditTriggers(QAbstractItemView::NoEditTriggers); box->addWidget(table,1);
-    auto* note=new QLabel("只更新候选，不切换运行版本。取消会停止后续队列，当前已开始的保存安全完成。关闭窗口不终止任务。"+(local?QString(" 本地快照 %1 项无外部来源，已略过。").arg(local):QString())); note->setWordWrap(true); box->addWidget(note);
-    auto* actions=new QHBoxLayout; auto* run=button(QString("更新 %1 项").arg(ids.size()),actions); run->setObjectName("startProfileBatch"); auto* cancel=button("停止后续更新",actions); cancel->setObjectName("cancelProfileBatch"); actions->addStretch(); auto* close=button("关闭",actions); box->addLayout(actions);
-    const auto refresh=[this,table,hint,run,cancel,ids] {
-        const auto status=controller_->profileBatch(); const bool active=status.value("active").toBool(); const auto rows=status.value("results").toArray(); table->setRowCount(rows.size());
-        for (int row=0;row<rows.size();++row) { const auto value=rows[row].toObject(); const QStringList fields{value.value("name").toString(),value.value("ok").toBool()?QString("已检查"):QString("失败"),value.value("message").toString()}; for (int col=0;col<3;++col) table->setItem(row,col,new QTableWidgetItem(fields[col])); }
-        hint->setText(active?QString("正在逐项更新 · %1 / %2 完成%3").arg(rows.size()).arg(status.value("total").toInt()).arg(status.value("cancel_requested").toBool()?" · 等待当前项结束":""):status.isEmpty()?QString("准备更新 %1 项").arg(ids.size()):QString("已结束 · %1 项完成 · %2 项跳过").arg(rows.size()).arg(status.value("skipped").toInt()));
-        run->setEnabled(!controller_->state().busy&&!controller_->state().readOnly&&!ids.isEmpty()); cancel->setEnabled(active&&!status.value("cancel_requested").toBool());
+    auto* hint=new QLabel; hint->setObjectName("profileBatchStatus"); hint->setWordWrap(true); hint->setTextFormat(Qt::PlainText); box->addWidget(hint);
+    auto* table=new QTableWidget(0,3); table->setObjectName("profileBatchResults"); table->setHorizontalHeaderLabels({"配置","状态","说明"}); table->horizontalHeader()->setSectionResizeMode(2,QHeaderView::Stretch); table->verticalHeader()->hide(); table->setEditTriggers(QAbstractItemView::NoEditTriggers); box->addWidget(table);
+    table->setShowGrid(false);
+    table->horizontalHeader()->setDefaultAlignment(Qt::AlignLeft|Qt::AlignVCenter);
+    auto* note=new QLabel("更新结果保存为候选。停止后续更新会等待当前项完成；关闭工作区后队列继续。");
+    note->setObjectName("profileBatchNote"); note->setWordWrap(true); note->setProperty("secondary",true); box->addWidget(note);
+    auto* actions=new QHBoxLayout; auto* run=button(QString("更新 %1 项").arg(ids.size()),actions); run->setObjectName("startProfileBatch"); run->setProperty("primary",true); run->setVisible(!monitoring); auto* cancel=button("停止后续更新",actions); cancel->setObjectName("cancelProfileBatch"); actions->addStretch(); auto* close=button("关闭",actions); box->addLayout(actions);
+    box->addStretch(1);
+    const auto refresh=[this,table,hint,run,cancel,scope,scopeIds,plan,monitoring] {
+        const auto status=controller_->profileBatch();
+        const auto& state=controller_->state();
+        const auto previousIds=status.value("ids").toArray();
+        const bool sameScope=std::is_permutation(previousIds.cbegin(),previousIds.cend(),scopeIds.cbegin(),scopeIds.cend());
+        const bool active=status.value("active").toBool();
+        const bool showResults=monitoring || sameScope;
+        const auto rows=showResults?status.value("results").toArray():plan;
+        table->setRowCount(rows.size());
+        const int rowHeight=qMax(UiTheme::TableRow,table->fontMetrics().height()+8);
+        const int planned=showResults?status.value("total").toInt():plan.size();
+        table->verticalHeader()->setDefaultSectionSize(rowHeight);
+        table->setFixedHeight(table->horizontalHeader()->sizeHint().height()+rowHeight*qBound(1,planned,6)+2*table->frameWidth());
+        for (int row=0;row<rows.size();++row) {
+            const auto entry=rows[row].toObject();
+            const auto stateText=showResults ? (entry.value("ok").toBool()?QString("已检查"):QString("失败")) : QString("待更新");
+            const QStringList cells{entry.value("name").toString(),stateText,entry.value("message").toString()};
+            for (int column=0;column<cells.size();++column) {
+                auto* cell=new QTableWidgetItem(cells[column]);
+                if (column==2 && !cells[column].isEmpty())
+                    cell->setToolTip("<qt>"+cells[column].toHtmlEscaped()+"</qt>");
+                table->setItem(row,column,cell);
+            }
+        }
+        const auto selectionText=scope.selected?QString("所选配置"):QString("全部配置");
+        const auto target=QString("%1 · %2 项可更新").arg(selectionText).arg(scope.ids.size())
+            +(scope.skipped?QString(" · 跳过 %1 项无来源快照").arg(scope.skipped):QString());
+        QString progress;
+        if (active && showResults)
+            progress=QString("正在更新 · %1 / %2 项完成").arg(rows.size()).arg(status.value("total").toInt())
+                +(status.value("cancel_requested").toBool()?" · 等待当前项结束":"");
+        else if (showResults)
+            progress=QString("已结束 · %1 项处理 · %2 项未开始").arg(rows.size()).arg(status.value("skipped").toInt());
+        hint->setText(monitoring?progress:target+(progress.isEmpty()?QString():"\n"+progress));
+        run->setEnabled(!monitoring&&!active&&!state.busy&&!state.readOnly&&!state.exiting);
+        cancel->setEnabled(active&&showResults&&!status.value("cancel_requested").toBool());
     };
-    connect(controller_,&AppController::profileBatchChanged,dialog,refresh); connect(controller_,&AppController::stateChanged,dialog,refresh); connect(run,&QPushButton::clicked,dialog,[this,ids] { controller_->updateProfilesBatch(ids); }); connect(cancel,&QPushButton::clicked,controller_,&AppController::cancelProfileBatch); connect(close,&QPushButton::clicked,dialog,&QDialog::close); presentTask(dialog); refresh(); if (start&&run->isEnabled()) run->click();
+    connect(controller_,&AppController::profileBatchChanged,dialog,refresh);
+    connect(controller_,&AppController::stateChanged,dialog,refresh);
+    connect(UiTheme::notifier(),&UiTheme::AppearanceNotifier::changed,dialog,refresh);
+    connect(run,&QPushButton::clicked,dialog,[this,ids] { controller_->updateProfilesBatch(ids); });
+    connect(cancel,&QPushButton::clicked,controller_,&AppController::cancelProfileBatch);
+    connect(close,&QPushButton::clicked,dialog,&QDialog::close);
+    presentTask(dialog);
+    refresh();
 }
 
 void MainWindow::presentImport(ImportDialog* dialog) {
@@ -746,24 +938,40 @@ void MainWindow::editProfilePolicy() {
     auto* buttons = new QDialogButtonBox(QDialogButtonBox::Save | QDialogButtonBox::Cancel); buttons->button(QDialogButtonBox::Save)->setText("保存"); buttons->button(QDialogButtonBox::Cancel)->setText("取消"); outer->addWidget(buttons);
     connect(buttons, &QDialogButtonBox::rejected, dialog, &QDialog::reject);
     auto saving=std::make_shared<bool>(false);
-    DialogDraftGuard::protect(dialog,[automatic,hours,download,profile,name,source] { return name->text()!=profile.name || source->text()!=profile.source || automatic->isChecked()!=profile.autoUpdate || (hours && hours->value()!=profile.updateIntervalHours) || download->policy().toJson()!=profile.download.toJson(); },[saving] { return *saving; });
+    auto rolling=std::make_shared<bool>(false);
+    const auto dirty=[automatic,hours,download,profile,name,source] {
+        return name->text()!=profile.name || source->text()!=profile.source ||
+            automatic->isChecked()!=profile.autoUpdate ||
+            (hours && hours->value()!=profile.updateIntervalHours) || download->policy().toJson()!=profile.download.toJson();
+    };
+    DialogDraftGuard::protect(dialog,dirty,[saving,rolling] { return *saving || *rolling; });
     if (rollback) {
-        auto rolling=std::make_shared<bool>(false);
-        connect(rollback,&QPushButton::clicked,dialog,[this,dialog,rollback,rolling,id,profile,name,source,automatic,hours,download] {
-            const bool dirty=name->text()!=profile.name || source->text()!=profile.source ||
-                automatic->isChecked()!=profile.autoUpdate ||
-                (hours && hours->value()!=profile.updateIntervalHours) ||
-                download->policy().toJson()!=profile.download.toJson();
-            const QString message=dirty
-                ? "未保存的来源修改将被放弃。确定回滚此配置到上次良好版本？"
-                : "确定回滚此配置到上次良好版本？";
-            if (QMessageBox::question(dialog,"回滚配置",message,QMessageBox::Yes|QMessageBox::No,QMessageBox::No)!=QMessageBox::Yes) return;
-            *rolling=true; rollback->setEnabled(false); controller_->activateProfile(id,true);
+        connect(rollback,&QPushButton::clicked,dialog,[this,dialog,rollback,rolling,id,profile,dirty,note,buttons] {
+            const auto& state=controller_->state();
+            if (state.busy || state.readOnly || state.exiting) return;
+            confirmProfileVersion(dialog,"回滚配置",profile,profile.lastGood,dirty(),
+                [this,rollback,rolling,id,profile,note,buttons] {
+                    const auto& state=controller_->state();
+                    if (state.busy || state.readOnly || state.exiting) {
+                        note->setText("当前不能提交回滚，请稍后重试。");
+                        return;
+                    }
+                    *rolling=true;
+                    rollback->setEnabled(false);
+                    buttons->setEnabled(false);
+                    note->setText("正在校验并回滚目标版本…");
+                    controller_->activateProfile(id,true,profile.lastGood);
+                });
         });
-        connect(controller_,&AppController::operationFinished,dialog,[dialog,rollback,rolling,note](bool ok,const QString& error) {
-            if (!*rolling) return;
+        connect(controller_,&AppController::operationFinished,dialog,[this,dialog,rollback,rolling,note,buttons](bool ok,const QString& error,OperationId operation) {
+            if (!*rolling || operation!=OperationId::ProfileActivate) return;
             *rolling=false;
-            if (ok) dialog->accept(); else { rollback->setEnabled(true); note->setText("回滚失败，运行版本未变 · "+error); }
+            if (ok) dialog->accept();
+            else {
+                rollback->setEnabled(true);
+                buttons->setEnabled(true);
+                note->setText("回滚失败 · "+error+"\n"+runningProfileVersion(*controller_));
+            }
         });
     }
     connect(controller_,&AppController::operationFinished,dialog,[dialog,buttons,note,saving](bool ok,const QString& error) { if (!*saving) return; *saving=false; buttons->setEnabled(true); if (ok) dialog->accept(); else note->setText("保存失败，修改已保留 · "+error); });

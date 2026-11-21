@@ -111,12 +111,12 @@ void AppController::updateProfile(const QString& id) {
 void AppController::updateProfilesBatch(const QStringList& ids) {
     const OperationScope operation(this, OperationId::ProfileBatch);
     // 批量本身是跨页操作（结果进状态栏），逐项结果另外汇总进订阅页的聚合提示。
-    profileBatch_ = {{"total", 0}, {"results", QJsonArray{}}};
     QStringList unique;
     for (const auto& id:ids) { if (profileIndex(id)<0 || unique.size()>=256) { emit operationFinished(false,"批量更新包含无效订阅或超过 256 项"); return; } if (!unique.contains(id)) unique.append(id); }
     if (unique.isEmpty() || !begin("正在批量更新订阅候选")) return;
     profileBatchActive_=true; profileBatchCancelled_=false; profileBatchQueue_=unique;
-    profileBatch_={{"active",true},{"cancel_requested",false},{"total",unique.size()},{"results",QJsonArray{}}}; emit profileBatchChanged();
+    profileBatch_={{"active",true},{"cancel_requested",false},{"ids",QJsonArray::fromStringList(unique)},
+                   {"total",unique.size()},{"results",QJsonArray{}}}; emit profileBatchChanged();
     QTimer::singleShot(0,this,&AppController::runProfileBatch);
 }
 

@@ -14,8 +14,9 @@ public:
         const int textHeight=QFontMetrics(option.font).height()+QFontMetrics(UiTheme::rowCaptionFont(option.font)).height();
         return {10, qMax(UiTheme::NodeRowHeight,textHeight+3)};
     }
-    static QRect infoRect(const QRect& row) { return {row.right()-38,row.center().y()-14,28,28}; }
-    static QRect delayRect(const QRect& row) { return {row.right()-108,row.top()+3,62,row.height()-6}; }
+    static QRect contentRect(QRect row) { row.setWidth(qMin(row.width(),850)); return row; }
+    static QRect infoRect(const QRect& row) { return {contentRect(row).right()-38,row.center().y()-14,28,28}; }
+    static QRect delayRect(const QRect& row) { return {contentRect(row).right()-108,row.top()+3,62,row.height()-6}; }
     void paint(QPainter* p, const QStyleOptionViewItem& option, const QModelIndex& index) const override {
         p->save(); p->setRenderHint(QPainter::Antialiasing);
         const QRect rect=option.rect;
@@ -39,13 +40,16 @@ public:
         }
         p->setFont(small); p->setPen(color);
         p->drawText(delayRect(rect).adjusted(3,0,-3,0),Qt::AlignRight|Qt::AlignVCenter,latency.isEmpty()?QStringLiteral("—"):latency);
-        if (current) UiIcons::icon(UiIcons::Glyph::Check,UiTheme::Brand).paint(p,QRect(rect.right()-133,rect.center().y()-8,16,16));
         // The independent details action must be discoverable without hover.
         UiIcons::icon(UiIcons::Glyph::Info,UiTheme::Secondary).paint(p,infoRect(rect).adjusted(4,4,-4,-4));
         const int left=rect.left()+46, width=qMax(0,delayRect(rect).left()-left-(current?30:8));
         auto title=option.font; title.setBold(current); p->setFont(title); p->setPen(QColor(UiTheme::Ink));
         const int line=QFontMetrics(title).height(),caption=QFontMetrics(small).height(); const int top=rect.center().y()-(line+caption+1)/2;
-        p->drawText(QRect(left,top,width,line),Qt::AlignLeft|Qt::AlignVCenter,QFontMetrics(title).elidedText(name,Qt::ElideRight,width));
+        const QFontMetrics titleMetrics(title);
+        const auto visibleName=titleMetrics.elidedText(name,Qt::ElideRight,width);
+        p->drawText(QRect(left,top,width,line),Qt::AlignLeft|Qt::AlignVCenter,visibleName);
+        if (current) UiIcons::icon(UiIcons::Glyph::Check,UiTheme::Brand).paint(p,
+            QRect(left+titleMetrics.horizontalAdvance(visibleName)+8,top+(line-16)/2,16,16));
         p->setFont(small); p->setPen(QColor(UiTheme::Secondary));
         const auto sub=index.data(NodeRowModel::IsAutoGroup).toBool()?QString("自动选路 · 不可手动切换"):index.data(NodeRowModel::Subtitle).toString();
         p->drawText(QRect(left,top+line+1,width,QFontMetrics(small).height()),Qt::AlignLeft|Qt::AlignVCenter,QFontMetrics(small).elidedText(sub,Qt::ElideRight,width));
@@ -54,7 +58,7 @@ public:
     }
 private:
     static void paintHeader(QPainter* p,const QStyleOptionViewItem& option,const QModelIndex& index) {
-        const auto rect=option.rect; p->fillRect(rect,QColor(UiTheme::Surface)); UiHairline::bottom(p,rect,46,QColor(UiTheme::Separator));
+        const auto rect=contentRect(option.rect); p->fillRect(option.rect,QColor(UiTheme::Surface)); UiHairline::bottom(p,option.rect,46,QColor(UiTheme::Separator));
         UiIcons::icon(index.data(NodeRowModel::GroupCollapsed).toBool()?UiIcons::Glyph::ChevronRight:UiIcons::Glyph::ChevronDown,UiTheme::Brand).paint(p,QRect(rect.left()+12,rect.center().y()-10,20,20));
         auto title=option.font; title.setBold(true); auto small=UiTheme::rowCaptionFont(option.font); const int line=QFontMetrics(title).height(),left=rect.left()+46,width=qMax(0,rect.width()-175),top=rect.center().y()-(line+QFontMetrics(small).height()+1)/2;
         p->setFont(title); p->setPen(QColor(UiTheme::Ink)); p->drawText(QRect(left,top,width,line),Qt::AlignVCenter,QFontMetrics(title).elidedText(index.data(NodeRowModel::SourceName).toString().isEmpty()?index.data().toString():index.data(NodeRowModel::SourceName).toString(),Qt::ElideRight,width));

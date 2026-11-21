@@ -65,7 +65,7 @@ private:
 
 inline QVBoxLayout* group(QVBoxLayout* page,const QString& title={}) {
     if (!title.isEmpty()) { page->addSpacing(2); auto* label=new QLabel(title); label->setObjectName("prototypeSection"); label->setProperty("secondary",true); page->addWidget(label); }
-    auto* frame=new QFrame; frame->setObjectName("prototypeGroup"); auto* rows=new QVBoxLayout(frame);
+    auto* frame=new QFrame; frame->setObjectName("prototypeGroup"); frame->setProperty("settingSection",title); auto* rows=new QVBoxLayout(frame);
     rows->setContentsMargins(0,0,0,0); rows->setSpacing(0); page->addWidget(frame); return rows;
 }
 inline ActionRow* row(QVBoxLayout* rows,const QString& name,const QString& title,UiIcons::Glyph glyph,const QString& value={},const QString& subtitle={}) {
