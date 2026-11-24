@@ -1,5 +1,29 @@
 # 验证报告
 
+## L4 长文件拆分：配置页三分
+
+2026-11-24。`src/ui/MainWindowProfiles.cpp` 原 1049 行，按职责拆成三个翻译单元，`files_over_600_lines` 从 3 降到 2。
+
+| 文件 | 行数 | 职责 |
+|---|---|---|
+| `MainWindowProfiles.cpp` | 555 | 页面骨架、卡片网格、选择、模型刷新 |
+| `MainWindowProfileImport.cpp` | 231 | 快速导入、拖放、高级新增窗口 |
+| `MainWindowProfileActions.cpp` | 325 | 对象菜单、任务页、详情与分享、兼容性/来源/策略 |
+| `ImportSource.{h,cpp}` | 28 | 提取出的输入分类（`classifyImport` / `isNodeImport`），原先只存在于匿名命名空间里，拆分后必须共享 |
+
+过程中修正两处自造错误：拆出的文件带入了原文件的命名空间闭合括号（多一个 `}`）；两个导入判定函数原在匿名命名空间，拆走后新文件不可见——改为独立模块而不是复制。
+
+实测：
+
+```text
+cmake --build build/windows-mingw --target Mlash mlash_ui_tests   [exit=0]
+mlash_ui_tests subscriptionCardEditingAndReturnPreserveObject quickImportCreatesProfileAndOffersAdvancedWindow \
+                fileProfileOffersSourceSyncAndReplacement subscriptionCardReturnRestoresGridPosition
+  Totals: 6 passed, 0 failed
+```
+
+指标口径调整：`controller_header_dependents` 从债务指标改为快照。它数的是"包含控制器头的 TU 个数"，把一个文件拆成三个 TU 必然增加该值，却与重建成本无关；真正的成本指标是 `controller_header_closure`（每个 TU 拉进多少项目头）与 `controller_direct_includes`。
+
 ## 提交基线与新克隆复核
 
 2026-11-24。提交拆成五片，其中**第一片单独承载此前未提交的 UI 工作**，后四片是本次整改。原分支 `feature/daymark-ui-alignment` 未改动，整改在新分支 `feature/showroom-overhaul` 上。
