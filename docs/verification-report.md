@@ -1,5 +1,20 @@
 # 验证报告
 
+## 最终回归与推送基线
+
+2026-11-24。整改完成后的完整回归：
+
+```text
+cmake --build build/windows-mingw        [exit=0]（含 Go helper，经本机代理拉取模块）
+ctest                                    100% tests passed, 0 tests failed out of 78
+                                         总耗时 593.53 秒
+                                         64 - system_test_guard 按门禁跳过（不运行真实 OS 写入）
+```
+
+超时预算调整（如实记录）：`subscription_cards_ui` 曾以 20 秒为上限，单独运行需 14.8 秒，全套负载下超时。是预算过紧而非功能回归，已把 7 个 UI 组合用例的上限统一为 100 秒（与既有 `appearance_tests` 一致）；超时只防挂死，不构成正确性断言。
+
+`remote_backup_tests` 现为 8 passed / 1 skipped / 0 failed：跳过项是依赖"运行时注入私有 CA"的用例，Schannel 后端不支持该语义，跳过原因写在用例里。
+
 ## L4 长文件拆分：配置页三分
 
 2026-11-24。`src/ui/MainWindowProfiles.cpp` 原 1049 行，按职责拆成三个翻译单元，`files_over_600_lines` 从 3 降到 2。
