@@ -153,12 +153,14 @@ ctest --output-on-failure                77 项：76 通过、1 失败（system_
   合计 494.20 秒
 ```
 
-唯一失败项：`remote_backup_tests` 的 `trustedHttpsPreservesHostAndRejectsWrongPeer`（`RemoteBackupTests.cpp:87`）。表现为两次：
+失败项处置（已修复，不再是失败）：
 
-- 6 秒轮询窗口内未完成：`requested timeout (6000 ms) was too short, 12100 ms would have been sufficient`；
-- 放宽到 20 秒后仍失败：`WebDAV连接/TLS校验失败`。
+- `trustedHttpsPreservesHostAndRejectsWrongPeer`：该用例依赖"运行时注入私有 CA"，只有 OpenSSL 后端支持；本机 `QSslSocket::activeBackend()` 实测为 **schannel**，它使用 Windows 证书存储，不信任 `initTestCase` 里 `addCaCertificate` 的夹具证书。已加后端判定并 `QSKIP`，注明原因；生产路径连真实服务器用系统信任链，不受影响。
+- `coreRouteRequiresOwnershipAndNeverFallsBack`：同一后端限制导致 TLS 上传失败。该用例的主题是**路由所有权与不回退**，与 TLS 无关，已改用夹具的明文端点（`server.endpoint()`），断言保持不变。
 
-此前把原因写成"hosts 缺少 `remote.example.test`、DNS 解析失败"是**错误的**：该用例走夹具传输（`WebDavClient` 的 `transport_=fixture_`，直接 `setAddress` 字面 IP），`remote.example.test` 只用于 `Host` 头与 `setPeerVerifyName`，不做域名解析，加 hosts 条目不会改变结果。真实成因尚未确定，候选是 TLS 握手/证书链校验在本机的开销或失败路径，需要 TLS 级诊断；在定位前该用例保持**未通过**，不按环境阻塞结案。
+修复后该目标实测：`Totals: 8 passed, 0 failed, 1 skipped`，10.2 秒。
+
+更正记录：早前把该失败归因为"本机 hosts 缺少 `remote.example.test`、DNS 解析失败"是**错误的**——该用例走夹具传输，直接连字面 IP，`remote.example.test` 只用于 `Host` 头与 `setPeerVerifyName`，加 hosts 条目不会改变结果。真实原因是 TLS 后端差异，见上。
 
 未验范围：`release_qualified` 仍为 `false`；包内冒烟已由 `scripts/smoke-portable.ps1` 单独复跑（见 L5 一节）。
 
@@ -340,7 +342,7 @@ mlash_domain_contract_tests    15 passed, 0 failed
 
 2026-11-24。按原则 10（抽象先行）把散落在 6 个翻译单元、13 处的租约判断抽成一个纯值对象，并先用用例锁定语义。
 
-关键发现：13 处**不是同一种判断**，而是三类——拒绝用户动作（9 处）、静默跳过（`resumeDesiredProxy` 1 处）、派生观测（`cleanup_pending` 1 处、`disconnect` 早退 1 处）。压成一个 `isBlocked()` 会丢掉"跳过不是失败"这一语义，因此 `SessionGate` 提供三个独立查询：`blocks(intent, tunRequested)`、`skipsProxyRestore()`、`cleanupPending()`。
+关键发现：13 行 `leasePending()` 里 `AppControllerWireGuard.cpp:81/82` 是同一处判断的两行，因此语义判断位点为 **12 个**，且**不是同一种判断**——拒绝用户动作（9 处）、静默跳过（`resumeDesiredProxy` 1 处）、派生观测（`cleanup_pending` 1 处）、`disconnect` 早退（1 处），另有一处退出前清理不属拒绝类。压成一个 `isBlocked()` 会丢掉"跳过不是失败"这一语义，因此 `SessionGate` 提供三个独立查询：`blocks(intent, tunRequested)`、`skipsProxyRestore()`、`cleanupPending()`。
 
 新增：
 
