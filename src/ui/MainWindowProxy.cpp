@@ -24,8 +24,7 @@
 
 namespace mlash {
 using namespace WindowParts;
-// 节点区（原索引 2 的「节点页」）。ADR 0048 把它并入首页：本函数只返回节点区控件，
-// 由 homePage() 放进同一个滚动视图，不再占据 QStackedWidget 的独立索引。
+// 策略组与节点视图服务于运行页和独立节点页，浏览状态随组件保留。
 QWidget* MainWindow::nodeSection() {
     auto* page = new QWidget; page->setObjectName("nodeSection"); auto* layout = new QVBoxLayout(page);
     layout->setContentsMargins(0, 0, 0, 0); layout->setSpacing(4);
@@ -103,12 +102,31 @@ QWidget* MainWindow::nodeSection() {
     static_cast<NodeCardView*>(nodeCards_)->gridChanged=[this] { if (memberView()==1) updateNodeCount(); };
     nodeViews_=new QStackedWidget; nodeViews_->setObjectName("nodeViews"); nodeViews_->addWidget(nodeList_); nodeViews_->addWidget(nodeCards_);
     layout->addWidget(nodeViews_, 1);
-    nodeEmpty_ = emptyState(nodeList_, "添加并使用订阅后，选择策略组查看节点");
-    nodeCardsEmpty_=emptyState(nodeCards_,"添加并使用订阅后，选择策略组查看节点");
+    auto* emptySpace=new QWidget;
+    emptySpace->setObjectName("homeNodeEmptySpace");
+    layout->addWidget(emptySpace,1);
+    emptySpace->hide();
+    nodeEmpty_ = emptyState(nodeList_, "添加并使用订阅后，选择策略组查看节点",true);
+    nodeCardsEmpty_=emptyState(nodeCards_,"添加并使用订阅后，选择策略组查看节点",true);
+    for (auto* label:{nodeEmpty_,nodeCardsEmpty_}) {
+        label->setAlignment(Qt::AlignLeft|Qt::AlignVCenter);
+        auto* viewport=label->parentWidget();
+        viewport->layout()->setAlignment(label,Qt::AlignTop);
+        viewport->layout()->setContentsMargins(14,12,14,0);
+        auto* action=viewport->findChild<QPushButton*>("emptyStateAction");
+        action->setProperty("quiet",false);
+        viewport->layout()->setAlignment(action,Qt::AlignLeft);
+    }
 
     // 「更多」溢出菜单（ui-layered-design.md:622）：恢复自动 / 最近选择 / 筛选 / 排序 /
     // 显示方式 / 节点选项 / 返回上级 / 定位当前。节点区本身不再有按钮条。
-    auto* more = new QMenu(tools); sortMenu->setTitle("排序方式"); more->addMenu(sortMenu); testMenu->setTitle("测速操作"); more->addMenu(testMenu);
+    auto* more=new QMenu(tools);
+    auto* takeover=more->addAction("系统接管");
+    takeover->setObjectName("systemTakeoverInMenu");
+    takeover->setCheckable(true);
+    takeover->setVisible(false);
+    more->addSeparator();
+    sortMenu->setTitle("排序方式"); more->addMenu(sortMenu); testMenu->setTitle("测速操作"); more->addMenu(testMenu);
     automaticAction_ = more->addAction("恢复自动选择"); automaticAction_->setObjectName("automaticAction"); automaticAction_->setEnabled(false);
     recentNodes_ = new QAction("最近选择…", more); recentNodes_->setObjectName("recentNodes"); recentMenu_ = new QMenu(more); recentNodes_->setMenu(recentMenu_); more->addAction(recentNodes_);
     connect(recentMenu_, &QMenu::aboutToShow, this, &MainWindow::rebuildRecentMenu);

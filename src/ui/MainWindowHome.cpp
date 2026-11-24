@@ -5,6 +5,7 @@
 #include "HomeMetricsView.h"
 #include "NodePresentation.h"
 #include "ProxySwitch.h"
+#include "ProxyNodesPage.h"
 #include "StatusSentence.h"
 #include "UiIcons.h"
 #include "UiTheme.h"
@@ -13,6 +14,7 @@
 #include "WidgetStyle.h"
 #include <QtWidgets>
 #include <algorithm>
+#include <tuple>
 
 namespace mlash {
 using namespace WindowParts;
@@ -27,20 +29,36 @@ void syncHomeChoices(QComboBox* combo, const QJsonArray& choices) {
         else combo->addItem(NodePresentation::icon(name,key=="group"),name,name);
     }
 }
+bool hasTunnelSection(const AppController& controller,const QJsonObject& observation) {
+    return !controller.wireGuardProfiles().isEmpty()||observation.value("active").toBool()||
+        observation.value("cleanup_pending").toBool()||!observation.value("phase").toString().isEmpty();
+}
 }
 
 QWidget* MainWindow::homePage() {
     auto* page = new QWidget; auto* layout = new QVBoxLayout(page); layout->setContentsMargins(0, 0, 0, 0); layout->setSpacing(4);
     // 控制区（H1 / ADR 0048）：一张卡片、三行——当前代理 / 路由方式 / 连通性。
     // 行尾动作即主控件，标题行不再单独占位（原型 01）。
-    auto* control = panel(); control->setObjectName("homeControlCard"); control->setSizePolicy(QSizePolicy::Preferred,QSizePolicy::Maximum);
+    auto* control = panel(); control->setObjectName("homeControlCard");
     auto* summary = new QVBoxLayout(control); summary->setContentsMargins(12, 0, 12, 0); summary->setSpacing(0);
+    summary->setVerticalSizeConstraint(QLayout::SetFixedSize);
+    proxyRunFields_=new QWidget;
+    auto* fields=new QVBoxLayout(proxyRunFields_);
+    fields->setContentsMargins(0,0,0,0);
+    fields->setSpacing(0);
+    summary->addWidget(proxyRunFields_);
+    auto* legacyTakeover=new QWidget;
+    legacyTakeover->setObjectName("legacyTakeoverControls");
+    auto* takeoverFields=new QVBoxLayout(legacyTakeover);
+    takeoverFields->setContentsMargins(0,0,0,0);
+    takeoverFields->setSpacing(0);
+    fields->addWidget(legacyTakeover);
 
     // 每行只表达一个任务；固定同一行高，状态变化不推动后续内容。
     auto* currentRow = new QWidget; currentRow->setObjectName("homeControlRow"); currentRow->setProperty("first", true); currentRow->setFixedHeight(UiTheme::RowHeight);
     auto* currentLayout = new QHBoxLayout(currentRow); currentLayout->setContentsMargins(0, 3, 0, 3); currentLayout->setSpacing(10);
     statusDot_ = new QLabel; statusDot_->setObjectName("statusDot"); statusDot_->setFixedSize(0,0); statusDot_->hide(); auto* currentIcon=new QLabel; currentIcon->setPixmap(UiIcons::icon(UiIcons::Glyph::Rocket,UiTheme::Brand).pixmap(22,22)); currentIcon->setFixedSize(22,22); currentLayout->addWidget(currentIcon,0,Qt::AlignVCenter);
-    auto* proxyTitle = new QLabel("代理", currentRow);
+    auto* proxyTitle = new QLabel("系统接管", currentRow);
     proxyTitle->setObjectName("homeControlTitle");
     homeCurrentNode_ = new ElidedLabel(currentRow);
     homeCurrentNode_->setObjectName("homeCurrentNode");
@@ -56,10 +74,10 @@ QWidget* MainWindow::homePage() {
     currentLayout->addWidget(homeTakeoverStatus_);
     // 行尾开关就是代理总开关（ADR 0048 的 setProxyEnabled）；原来的「开启代理」按钮移入
     // 「更多运行信息」，两处同源同命令，只是首屏只留一个入口（原型 01/02）。
-    proxyEnabled_ = new ProxySwitch(""); proxyEnabled_->setObjectName("systemProxy"); proxyEnabled_->setAccessibleName("代理总开关");
+    proxyEnabled_ = new ProxySwitch(""); proxyEnabled_->setObjectName("systemProxy"); proxyEnabled_->setAccessibleName("代理系统接管");
     currentLayout->addWidget(proxyEnabled_, 0, Qt::AlignVCenter);
-    summary->addWidget(currentRow);
-    connect(proxyEnabled_, &QCheckBox::clicked, this, [this](bool enabled) {
+    takeoverFields->addWidget(currentRow);
+    const auto toggleTakeover=[this](bool enabled) {
         const auto& state = controller_->state();
         // 这个开关是代理总开关：打开时若内核未运行，setProxyEnabled 内部会先启动内核（ADR 0048）。
         if (enabled && state.activeProfile.isEmpty()) { proxyEnabled_->setChecked(false); openProfileSetup(); return; }
@@ -69,13 +87,14 @@ QWidget* MainWindow::homePage() {
             if (!allow) { updateState(); return; }
         }
         controller_->setProxyEnabled(enabled, allow); updateState();
-    });
+    };
+    connect(proxyEnabled_,&QCheckBox::clicked,this,toggleTakeover);
 
     // ② 路由方式：整行可点，行下方弹出浮层菜单（原型 03）；当前项带勾。
     homeRouteRow_ = new DashboardCardButton; homeRouteRow_->setObjectName("homeRouteRow"); homeRouteRow_->setProperty("controlRow", true); homeRouteRow_->setFixedHeight(UiTheme::RowHeight);
     auto* routeLayout = new QHBoxLayout(homeRouteRow_); routeLayout->setContentsMargins(0, 3, 0, 3); routeLayout->setSpacing(10);
     auto* routeIcon=new QLabel; routeIcon->setFixedSize(22,22); routeIcon->setPixmap(UiIcons::icon(UiIcons::Glyph::Route,UiTheme::Brand).pixmap(22,22)); routeLayout->addWidget(routeIcon);
-    auto* routeTitle = new QLabel("全局路由"); routeTitle->setObjectName("homeControlTitle"); routeTitle->setTextFormat(Qt::PlainText);
+    auto* routeTitle = new QLabel("代理路由"); routeTitle->setObjectName("homeControlTitle"); routeTitle->setTextFormat(Qt::PlainText);
     connect(UiTheme::notifier(),&UiTheme::AppearanceNotifier::changed,routeIcon,[routeIcon] { routeIcon->setPixmap(UiIcons::icon(UiIcons::Glyph::Route,UiTheme::Brand).pixmap(22,22)); });
     homeRouteRow_->setToolTip("控制代理请求的分流行为");
     routeLayout->addWidget(routeTitle, 1, Qt::AlignVCenter);
@@ -98,16 +117,16 @@ QWidget* MainWindow::homePage() {
         connect(menu,&QMenu::aboutToHide,menu,&QObject::deleteLater);
         WidgetStyle::popupMenu(menu,homeRouteRow_->mapToGlobal(QPoint(homeRouteRow_->width(),homeRouteRow_->height())),true);
     });
-    auto* firstSeparator=new QFrame; firstSeparator->setObjectName("homeControlSeparator"); firstSeparator->setFixedHeight(1); summary->addWidget(firstSeparator);
-    summary->addWidget(homeRouteRow_);
-    auto* secondSeparator=new QFrame; secondSeparator->setObjectName("homeControlSeparator"); secondSeparator->setFixedHeight(1); summary->addWidget(secondSeparator);
+    auto* firstSeparator=new QFrame; firstSeparator->setObjectName("homeControlSeparator"); firstSeparator->setFixedHeight(1); takeoverFields->addWidget(firstSeparator);
+    fields->addWidget(homeRouteRow_);
+    auto* secondSeparator=new QFrame; secondSeparator->setObjectName("homeControlSeparator"); secondSeparator->setFixedHeight(1); fields->addWidget(secondSeparator);
 
     // ③ 连通性测试：只读测当前浏览策略组的所有可测成员。
     auto* connectivityRow = new QWidget; connectivityRow->setObjectName("homeControlRow"); connectivityRow->setFixedHeight(UiTheme::RowHeight);
     auto* connectivityLayout = new QHBoxLayout(connectivityRow); connectivityLayout->setContentsMargins(0, 3, 0, 3); connectivityLayout->setSpacing(10);
     auto* probeIcon=new QLabel; probeIcon->setFixedSize(22,22); probeIcon->setPixmap(UiIcons::icon(UiIcons::Glyph::Gauge,UiTheme::Brand).pixmap(22,22)); connectivityLayout->addWidget(probeIcon);
     connect(UiTheme::notifier(),&UiTheme::AppearanceNotifier::changed,probeIcon,[probeIcon] { probeIcon->setPixmap(UiIcons::icon(UiIcons::Glyph::Gauge,UiTheme::Brand).pixmap(22,22)); });
-    auto* connectivityLabel = new QLabel("连通性测试"); connectivityLabel->setObjectName("homeControlTitle"); connectivityLabel->setTextFormat(Qt::PlainText);
+    auto* connectivityLabel = new QLabel("节点连通性"); connectivityLabel->setObjectName("homeControlTitle"); connectivityLabel->setTextFormat(Qt::PlainText);
     connectivityLayout->addWidget(connectivityLabel, 1, Qt::AlignVCenter);
     homeConnectivityButton_ = new QPushButton("开始测试", this); homeConnectivityButton_->setObjectName("homeConnectivityTest"); homeConnectivityButton_->setProperty("quiet", true); homeConnectivityButton_->setAutoDefault(false); connectivityLayout->addWidget(homeConnectivityButton_, 0, Qt::AlignVCenter);
     connect(homeConnectivityButton_, &QPushButton::clicked, this, [this] {
@@ -127,19 +146,18 @@ QWidget* MainWindow::homePage() {
     };
     syncControlRowHeight();
     connect(UiTheme::notifier(),&UiTheme::AppearanceNotifier::changed,currentRow,syncControlRowHeight);
-    summary->addWidget(connectivityRow);
-    auto* dual=new QWidget(control);
-    auto* dualLayout=new QVBoxLayout(dual);
-    dualLayout->setContentsMargins(0,0,0,0);
-    dualLayout->setSpacing(0);
-    auto addLink=[dualLayout](const QString& name,UiIcons::Glyph glyph) {
-        auto* separator=new QFrame;
-        separator->setObjectName("homeControlSeparator");
-        separator->setFixedHeight(1);
-        dualLayout->addWidget(separator);
+    fields->addWidget(connectivityRow);
+    auto* tunnelCard=panel();
+    legacyTunnelHome_=tunnelCard;
+    tunnelCard->setSizePolicy(QSizePolicy::Preferred,QSizePolicy::Maximum);
+    auto* tunnelLayout=new QVBoxLayout(tunnelCard);
+    tunnelLayout->setContentsMargins(12,0,12,0);
+    tunnelLayout->setSpacing(0);
+    auto addLink=[this](const QString& name,UiIcons::Glyph glyph,const QString& key) {
         auto* row=new QWidget;
+        row->setObjectName(key);
         auto* line=new QHBoxLayout(row);
-        line->setContentsMargins(0,3,0,3);
+        line->setContentsMargins(0,7,0,7);
         line->setSpacing(10);
         row->setMinimumHeight(UiTheme::RowHeight);
         auto* icon=new QLabel;
@@ -148,61 +166,56 @@ QWidget* MainWindow::homePage() {
         updateIcon();
         connect(UiTheme::notifier(),&UiTheme::AppearanceNotifier::changed,icon,updateIcon);
         line->addWidget(icon);
+        auto* details=new QVBoxLayout;
+        details->setSpacing(2);
+        auto* title=new QLabel(name);
+        title->setObjectName("sectionTitle");
+        details->addWidget(title);
         auto* text=new ElidedLabel;
-        text->setText(name);
-        text->setObjectName("homeControlTitle");
-        text->setMinimumWidth(0);
+        text->setObjectName("engineStatus");
+        text->setProperty("secondary",true);
+        details->addWidget(text);
         auto* action=new QPushButton;
-        action->setProperty("quiet",true);
-        line->addWidget(text,1); line->addWidget(action);
-        dualLayout->addWidget(row);
-        return qMakePair(text,action);
+        action->setProperty("engineAction",true);
+        action->setAutoDefault(false);
+        line->addLayout(details,1);
+        line->addWidget(action);
+        return std::tuple{row,line,text,action};
     };
-    auto [localLabel,localAction]=addLink("Mihomo 本地代理",UiIcons::Glyph::Globe);
-    auto [tunnelLabel,tunnelAction]=addLink("WireGuard 隧道",UiIcons::Glyph::Link);
+    auto [localRow,localLine,localLabel,localAction]=addLink("本地代理",UiIcons::Glyph::Globe,"mihomoHomeSection");
+    auto [tunnelRow,tunnelLine,tunnelLabel,tunnelAction]=addLink("WireGuard 分流隧道",UiIcons::Glyph::Link,"wireGuardHomeSection");
+    localRow->setSizePolicy(QSizePolicy::Preferred,QSizePolicy::Fixed);
+    Q_UNUSED(tunnelLine);
+    localProxyHome_=localRow;
+    auto* localSeparator=new QFrame;
+    localProxyDivider_=localSeparator;
+    localSeparator->setObjectName("homeControlSeparator");
+    localSeparator->setFixedHeight(1);
+    summary->insertWidget(0,localRow);
+    summary->insertWidget(1,localSeparator);
+    tunnelLayout->addWidget(tunnelRow);
     tunnelAction->setObjectName("wireGuardHomeToggle");
     localAction->setObjectName("mihomoLocalHomeToggle");
-    connect(tunnelAction,&QPushButton::clicked,dual,[this,tunnelAction] {
-        const auto seen=controller_->wireGuardObservation();
-        if (seen.value("active").toBool()||seen.value("cleanup_pending").toBool()) {
-            controller_->disconnectWireGuard();
-            return;
-        }
-        if (seen.value("error").toString().contains("服务")) { openWireGuardService(); return; }
-        const auto profiles=controller_->wireGuardProfiles();
-        if (profiles.isEmpty()) { addUrl(); return; }
-        if (profiles.size()==1) {
-            const auto& profile=profiles.first();
-            if (profile.summary.value("full_v4").toBool()||profile.summary.value("full_v6").toBool())
-                showWireGuardProfile(profile.id);
-            else controller_->connectWireGuard(profile.id,profile.candidate);
-            return;
-        }
-        auto* menu=new QMenu(tunnelAction);
-        menu->setObjectName("wireGuardHomeChoices");
-        for (const auto& profile:profiles) {
-            auto* entry=menu->addAction(profile.name);
-            const bool full=profile.summary.value("full_v4").toBool()||profile.summary.value("full_v6").toBool();
-            if (full) entry->setText(profile.name+" · 查看配置");
-            connect(entry,&QAction::triggered,this,[this,id=profile.id,version=profile.candidate,full] {
-                if (full) showWireGuardProfile(id);
-                else controller_->connectWireGuard(id,version);
-            });
-        }
-        connect(menu,&QMenu::aboutToHide,menu,&QObject::deleteLater);
-        WidgetStyle::popupMenu(menu,tunnelAction->mapToGlobal(QPoint(0,tunnelAction->height())));
+    auto* localToggle=new ProxySwitch("");
+    localToggle->setObjectName("proxyWorkspaceToggle");
+    localToggle->setAccessibleName("本地代理");
+    localLine->addWidget(localToggle);
+    connect(tunnelAction,&QPushButton::clicked,tunnelCard,[this,tunnelAction] { invokeTunnelAction(tunnelAction); });
+    connect(localToggle,&QCheckBox::clicked,localAction,[this,localToggle,localAction] {
+        const auto& state=controller_->state();
+        localToggle->setChecked(state.ready&&!state.tunObserved);
+        localAction->click();
     });
-    connect(localAction,&QPushButton::clicked,dual,[this] {
+    connect(localAction,&QPushButton::clicked,localRow,[this] {
         if (controller_->state().activeProfile.isEmpty()) { openProfileSetup(); return; }
         if (controller_->state().ready) controller_->stopCore();
         else controller_->startCore(false);
     });
-    const auto updateLinks=[this,dual,tunnelLabel,tunnelAction,localLabel,localAction] {
+    const auto updateLinks=[this,tunnelLabel,tunnelAction,localLabel,localAction,localToggle] {
         const auto obs=controller_->wireGuardObservation();
         const bool on=obs.value("active").toBool(), cleanup=obs.value("cleanup_pending").toBool();
         const auto phase=obs.value("phase").toString();
         const auto error=obs.value("error").toString(),block=obs.value("connect_block").toString();
-        dual->setVisible(!controller_->wireGuardProfiles().isEmpty()||on||cleanup);
         const auto& state=controller_->state();
         const auto& profiles=controller_->wireGuardProfiles();
         const auto active=std::find_if(profiles.cbegin(),profiles.cend(),[&](const auto& profile) {
@@ -211,33 +224,64 @@ QWidget* MainWindow::homePage() {
         const QString tunnelState=phase=="connecting"?"正在连接":phase=="disconnecting"?"正在清理":
             cleanup?"待清理":on&&active!=profiles.cend()?active->name+" · 已连接":on?"已连接":
             !error.isEmpty()?error:!block.isEmpty()?block:"未连接";
-        tunnelLabel->setText("WireGuard 隧道 · "+tunnelState);
+        tunnelLabel->setText(tunnelState);
         tunnelLabel->setToolTip(tunnelLabel->text());
         const bool serviceIssue=error.contains("服务");
         tunnelAction->setText(on?"断开":cleanup?"重试清理":serviceIssue?"权限服务…":profiles.size()==1?"连接":"选择配置");
         tunnelAction->setEnabled(!state.busy&&!state.exiting&&phase.isEmpty()&&
             (on||cleanup||serviceIssue||(!state.readOnly&&block.isEmpty())));
-        localLabel->setText(state.tunObserved?"Mihomo · TUN 正在接管":state.ready?QString("Mihomo 本地代理 · 127.0.0.1:%1").arg(controller_->settings().mixedPort)
-                                      :QString("Mihomo 本地代理 · 未启动"));
-        localAction->setText(state.ready?"停止":state.activeProfile.isEmpty()?"选择配置":"启动");
+        const bool starting=state.core==CoreState::Starting||(state.core==CoreState::Running&&!state.ready);
+        const bool stopping=state.core==CoreState::Stopping;
+        const bool failed=state.core==CoreState::Failed;
+        const bool requiresTun=controller_->settings().tunEnabled;
+        const bool scoped=route_.area==WorkspaceArea::Proxy;
+        const QString localStatus=starting?"正在启动":stopping?"正在停止":state.tunObserved?"TUN 正在接管":
+            state.ready?"运行中":failed?"启动或运行失败":requiresTun?"通过系统接管启动":"未启动";
+        if (scoped) {
+            const bool needsExplanation=starting||stopping||state.tunObserved||failed||
+                (requiresTun&&!state.ready&&!state.activeProfile.isEmpty());
+            localLabel->setText(localStatus);
+            localLabel->setVisible(needsExplanation);
+        } else {
+            auto details=localStatus;
+            if (state.ready&&!state.tunObserved&&!starting&&!stopping)
+                details+=QString(" · 127.0.0.1:%1").arg(controller_->settings().mixedPort);
+            const auto profileName=activeProfileName();
+            if (!profileName.isEmpty()) details.prepend(profileName+" · ");
+            localLabel->setText(details);
+            localLabel->show();
+        }
+        localAction->setText(state.ready?"停止":state.activeProfile.isEmpty()?
+            profileSetupCopy(!controller_->profiles().isEmpty()).action:failed?"重试启动":"启动");
         localLabel->setToolTip(localLabel->text());
-        localAction->setEnabled(!state.busy&&!state.exiting&&!state.readOnly&&
-            !controller_->settings().tunEnabled&&!state.tunObserved);
+        localAction->setEnabled(!state.busy&&!state.exiting&&!state.readOnly&&!starting&&!stopping&&
+            (state.activeProfile.isEmpty()||(!requiresTun&&!state.tunObserved)));
+        localToggle->setChecked(state.ready&&!state.tunObserved);
+        localToggle->setEnabled(localAction->isEnabled());
+        localToggle->setAccessibleDescription(localStatus);
+        localToggle->setToolTip(localStatus);
     };
-    connect(controller_,&AppController::stateChanged,dual,updateLinks);
-    connect(controller_,&AppController::profilesChanged,dual,updateLinks);
-    connect(controller_,&AppController::wireGuardChanged,dual,updateLinks);
+    connect(controller_,&AppController::stateChanged,tunnelCard,updateLinks);
+    connect(controller_,&AppController::profilesChanged,tunnelCard,updateLinks);
+    connect(controller_,&AppController::wireGuardChanged,tunnelCard,updateLinks);
+    connect(this,&MainWindow::displayRouteChanged,tunnelCard,updateLinks);
     updateLinks();
-    summary->addWidget(dual);
     layout->addWidget(control);
+    layout->addWidget(tunnelCard);
     // 对象内结果（P4.1）：挂到「更多运行信息」抽屉之前的位置无法保证可见，改挂在控制区之后——
     // 「请先激活订阅」这类结论恰恰出现在控制区被隐藏的时候，所以它按原设计留在面板外。
     homeControlHint_ = new ElidedLabel; homeControlHint_->setObjectName("homeControlHint");
     homeControlHint_->setAccessibleName("代理开关与切换结果"); homeControlHint_->setSizePolicy(QSizePolicy::Ignored, QSizePolicy::Preferred);
     homeControlHint_->hide(); layout->addWidget(homeControlHint_);
 
-    // 节点区（原型 01）：标题行 + 策略组上下文，全部来自 nodeSection()。
-    nodeSection_ = nodeSection(); layout->addWidget(nodeSection_,1);
+    // 运行页下方提供同一份策略组和节点视图，切页时节点页接管它。
+    homeNodeHost_=new QWidget;
+    auto* nodeLayout=new QVBoxLayout(homeNodeHost_);
+    nodeLayout->setContentsMargins(0,0,0,0);
+    nodeSection_=nodeSection();
+    nodeLayout->addWidget(nodeSection_);
+    layout->addWidget(homeNodeHost_,1);
+    connect(nodeSection_->findChild<QAction*>("systemTakeoverInMenu"),&QAction::triggered,this,toggleTakeover);
     auto* empty=new QWidget; empty->setObjectName("prototypeHomeEmpty"); empty->setMaximumHeight(130); auto* emptyLayout=new QVBoxLayout(empty); emptyLayout->setContentsMargins(16,20,16,20);
     auto* emptyTitle=new QLabel; emptyTitle->setObjectName("homeSetupTitle"); emptyTitle->setAlignment(Qt::AlignCenter); emptyLayout->addWidget(emptyTitle);
     auto* emptyText=new QLabel; emptyText->setObjectName("homeSetupHint"); emptyText->setAlignment(Qt::AlignCenter); emptyText->setWordWrap(true); emptyText->setProperty("secondary",true); emptyLayout->addWidget(emptyText);
@@ -251,11 +295,8 @@ QWidget* MainWindow::homePage() {
     auto* statLink = new QToolButton(stat); statLink->setObjectName("homeStatDetails"); statLink->setText("数据详情 ›"); statLink->setProperty("quiet", true); statLayout->addWidget(statLink);
     connect(statLink, &QToolButton::clicked, this, [this] { navigate(Route{ViewIds::Data, kNoCategory, HomeAnchor::Control, int(ViewIds::DataTab::Connections)}); });
     layout->addWidget(stat);
+    layout->addStretch();
 
-    // K5（原型 01）：首页只有 控制卡 → 节点标题 → 节点列表 → inline-stat → 提示 五段。
-    // 内核启停、代理总开关、指标曲线与出口摘要不再出现在首页：前两者在托盘与设置里已有，
-    // 流量指标移到「数据 › 流量」。滚动提示保留为列表底部一行。
-    homeSelection_=new ElidedLabel; homeSelection_->setObjectName("homeSelectionHint"); homeSelection_->setProperty("secondary",true); homeSelection_->setSizePolicy(QSizePolicy::Ignored,QSizePolicy::Preferred); layout->addWidget(homeSelection_);
     auto* scroll=new QScrollArea; scroll->setObjectName("homeScroll"); homeScroll_=scroll; scroll->setWidgetResizable(true); scroll->setFrameShape(QFrame::NoFrame); scroll->setWidget(page); auto* surface=new QWidget;
     auto* outer=new QVBoxLayout(surface); outer->setContentsMargins(0,0,0,0); outer->addWidget(scroll); return surface;
 }
@@ -271,12 +312,31 @@ void MainWindow::updateHomeOutbound(bool capture) {
     QString text,tooltip="不会自动查询公网；通过右侧出口诊断选择传输路径并显式检测。隐藏界面或运行上下文变化清空摘要。";
     if (!homeOutboundSnapshot_.isEmpty()) { const auto& value=homeOutboundSnapshot_; const auto time=QDateTime::fromString(value.value("measured_utc").toString(),Qt::ISODateWithMs).toLocalTime(); const auto path=value.value("route")=="core"?QString("经内核 · %1模式").arg(value.value("mode").toString("未知")):QString("直连"); text=QString("上次出口：%1 · %2 · %3 · %4 · %5").arg(value.value("ip").toString(),value.value("country").toString("地区未知"),value.value("asn").toString("ASN未知"),path,time.isValid()?time.toString("HH:mm:ss"):QString("时间未知")); tooltip=text+"\n地区："+value.value("region").toString("未知")+"\n采样："+(time.isValid()?time.toString("yyyy-MM-dd HH:mm:ss t"):QString("未知"))+"\n打开界面期间的上次检测快照；经内核按当时模式/规则分流，不代表指定叶子出口。"; }
     else if (diagnostics->busy()) text="诊断进行中 · 暂无出口快照";
-    homeOutboundSummary_->setText(text); homeOutboundSummary_->setToolTip(tooltip); homeOutboundSummary_->setVisible(!text.isEmpty());
+    homeOutboundSummary_->setText(text); homeOutboundSummary_->setToolTip(tooltip);
+    homeOutboundSummary_->setVisible(!text.isEmpty()&&route_.area!=WorkspaceArea::Tunnel);
 }
 
 void MainWindow::updateHome() {
     const auto& current=controller_->state();
     const bool hasActive=!current.activeProfile.isEmpty();
+    const bool scoped=route_.area==WorkspaceArea::Proxy;
+    const bool dual=hasTunnelSection(*controller_,controller_->wireGuardObservation());
+    if (route_.view==ViewIds::Home) {
+        const bool showNodesPage=scoped&&route_.anchor==HomeAnchor::Nodes;
+        const bool noProfiles=controller_->profiles().isEmpty();
+        if (showNodesPage) proxyNodesPage_->attachNodes(nodeSection_);
+        else if (nodeSection_->parentWidget()!=homeNodeHost_) homeNodeHost_->layout()->addWidget(nodeSection_);
+        nodeSection_->setVisible(hasActive);
+        homeNodeHost_->setVisible(hasActive&&!showNodesPage);
+        proxyNodesPage_->setAvailability(hasActive,!noProfiles,!current.busy&&!current.exiting&&(!noProfiles||!current.readOnly));
+        proxyPages_->setCurrentIndex(showNodesPage?1:0);
+        legacyTunnelHome_->setVisible(!scoped&&dual);
+        localProxyHome_->setVisible(scoped||dual);
+        localProxyDivider_->setVisible(scoped||dual);
+        proxyRunFields_->findChild<QWidget*>("legacyTakeoverControls")->setVisible(!scoped);
+        if (auto* toggle=localProxyHome_->findChild<QCheckBox*>("proxyWorkspaceToggle")) toggle->setVisible(scoped&&hasActive);
+        if (auto* button=localProxyHome_->findChild<QPushButton*>("mihomoLocalHomeToggle")) button->setVisible(!scoped||!hasActive);
+    }
     if (auto* empty=findChild<QWidget*>("prototypeHomeEmpty")) {
         const bool noProfiles=controller_->profiles().isEmpty();
         const auto copy=profileSetupCopy(!noProfiles);
@@ -285,8 +345,7 @@ void MainWindow::updateHome() {
         auto* action=empty->findChild<QPushButton*>("homeSetupAction");
         action->setText(copy.action);
         action->setEnabled(!current.busy && !current.exiting && (!noProfiles || !current.readOnly));
-        empty->setVisible(!hasActive);
-        nodeSection_->setVisible(hasActive);
+        empty->setVisible(!hasActive&&!scoped&&!dual);
     }
     // 控制卡在任何状态下都保持三行；技术状态和测试进度不额外占行。
     findChild<QWidget*>("homeControlCard")->setVisible(true);
@@ -296,6 +355,17 @@ void MainWindow::updateHome() {
     const auto takeover = takeoverText(statusFacts(current, controller_->settings(), {}));
     homeTakeoverStatus_->setText(takeover);
     proxyEnabled_->setAccessibleDescription(takeover);
+    if (auto* action=nodeSection_->findChild<QAction*>("systemTakeoverInMenu")) {
+        action->setVisible(scoped);
+        action->setText("系统接管 · "+takeover);
+        action->setChecked(proxyEnabled_->isChecked());
+        action->setEnabled(proxyEnabled_->isEnabled());
+        action->setToolTip(proxyEnabled_->toolTip());
+    }
+    if (auto* tool=nodeSection_->findChild<QToolButton*>("nodeToolsButton")) {
+        tool->setAccessibleName(scoped?"更多代理操作":"更多节点操作");
+        tool->setToolTip(tool->accessibleName());
+    }
     // 控制区第 2 行：当前路由方式。
     if (homeRouteValue_) homeRouteValue_->setText(current.mode=="global"?"全局模式":current.mode=="direct"?"直连模式":"规则模式");
     homeRouteRow_->setEnabled(hasActive && current.ready && !current.busy && !current.exiting && !current.readOnly);
@@ -324,11 +394,6 @@ void MainWindow::updateHome() {
         homeInlineStat_->setText(parts.join(" · "));
         homeInlineStat_->setToolTip(homeInlineStat_->text());
     }
-    // 列表底部提示行：只在内核未就绪时给一句下一步，就绪后为空。
-    const auto& state = controller_->state();
-    const auto text = controller_->profiles().isEmpty() || state.ready ? QString()
-        : state.activeProfile.isEmpty() ? QString("使用配置后即可浏览节点。") : QString("连接后即可浏览节点。");
-    homeSelection_->setToolTip(state.ready ? QString() : text); homeSelection_->setText(text);
 }
 
 }

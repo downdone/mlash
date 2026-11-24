@@ -82,3 +82,4 @@ ADR 保留决策发生时的背景和取舍；较新的已接受决策可以替�
 | 0056 | [ADR 0056：独立设计 token 与 Shadowrocket 风格特化](0056-independent-ui-design-system.md) |
 | 0057 | [ADR 0057：订阅优先的统一列表与对象菜单](0057-subscription-first-unified-list.md) |
 | 0059 | [ADR 0059：WireGuard Windows 服务权限范围](0059-wireguard-windows-service-scope.md) |
+| 0060 | [ADR 0060：代理与隧道工作区](0060-proxy-tunnel-workspaces.md) |

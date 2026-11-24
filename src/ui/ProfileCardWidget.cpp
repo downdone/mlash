@@ -128,7 +128,8 @@ int ProfileCardWidget::fitText(int width) {
     const auto frame = contentsMargins();
     const auto insets = cardLayout_->contentsMargins();
     const int header = qMax(markSize,required.title+metadataGap+required.metadata);
-    const int action = reviewUpdate_->isHidden() ? 0 : reviewUpdate_->sizeHint().height();
+    const auto* visibleAction=reviewUpdate_->isHidden()?open_:reviewUpdate_;
+    const int action=visibleAction->isHidden()?0:visibleAction->sizeHint().height();
     int status = statusLine_->isHidden() ? 0 : qMax(12,status_->fontMetrics().height())+2*stateVerticalInset;
     if (!updateStatus_->parentWidget()->isHidden())
         status += stateGap+qMax(12,updateStatus_->fontMetrics().height())+2*stateVerticalInset;
@@ -176,6 +177,7 @@ ProfileCardWidget::ProfileCardWidget(QWidget* parent) : QFrame(parent) {
     };
     source_=makeTag("profileCardSource");
     time_=makeTag("profileCardTime");
+    time_->setProperty("profileCardMetadataTag",false);
     identity->addWidget(metadata_);
     header->addLayout(identity,1);
     header->addSpacing(toolInset);
@@ -241,6 +243,8 @@ ProfileCardWidget::ProfileCardWidget(QWidget* parent) : QFrame(parent) {
         return control;
     };
     reviewUpdate_ = command(reviewUpdateLabel,Action::ReviewUpdate);
+    open_=command("详情 ›",Action::Open);
+    open_->setObjectName("openProfileCardDetails");
     layout->addLayout(footer);
     connect(UiTheme::notifier(),&UiTheme::AppearanceNotifier::changed,this,&ProfileCardWidget::updateAppearance);
 }
@@ -275,7 +279,7 @@ void ProfileCardWidget::setProfile(const QModelIndex& index) {
     canRefresh_ = index.data(ProfileRowModel::CanRefresh).toBool();
     const auto timestamp=index.data(ProfileRowModel::UpdatedLabel).toString();
     source_->setText(tunnel?"WireGuard":index.data(ProfileRowModel::MixedEngines).toBool()
-        ?(remote?"Mihomo 订阅":"Mihomo 文件"):(remote?"订阅链接":"本地文件"));
+        ?(remote?"代理订阅":"代理配置"):(remote?"订阅链接":"本地文件"));
     source_->setToolTip(source);
     time_->setText(timestamp.isEmpty() ? QStringLiteral("尚未更新") : timestamp);
     const auto refreshHint = canRefresh_ ? QStringLiteral("检查更新") : QStringLiteral("此配置没有可刷新的来源");
@@ -283,6 +287,7 @@ void ProfileCardWidget::setProfile(const QModelIndex& index) {
     refresh_->setAccessibleDescription(refreshHint);
     const bool candidate = index.data(ProfileRowModel::HasCandidate).toBool();
     const bool current = index.data(ProfileRowModel::IsCurrent).toBool();
+    const bool running = index.data(ProfileRowModel::IsRunning).toBool();
     const bool failed = !index.data(ProfileRowModel::UpdateError).toString().isEmpty();
     const auto setState=[](QLabel* label,const QString& text,const QString& tone) {
         label->setText(text);
@@ -296,7 +301,8 @@ void ProfileCardWidget::setProfile(const QModelIndex& index) {
             label->style()->polish(label);
         }
     };
-    if (current) setState(status_,tunnel?"隧道已连接":"当前使用","success");
+    if (running) setState(status_,tunnel?"隧道已连接":"运行中","success");
+    else if (current) setState(status_,"已选配置","idle");
     else if (candidate && !failed) setState(status_,"待应用","warning");
     else if (failed) setState(status_,"更新失败","error");
     else setState(status_,tunnel?"未连接":"未启用","idle");
@@ -304,6 +310,8 @@ void ProfileCardWidget::setProfile(const QModelIndex& index) {
     setState(updateStatus_,failed && current?"更新失败":"待应用",failed && current?"error":"warning");
     updateStatus_->parentWidget()->setVisible(separateUpdate);
     reviewUpdate_->setVisible(candidate);
+    open_->setVisible(!candidate);
+    open_->setAccessibleName("打开配置详情 · "+title_->text());
     setWritable(writable_);
     setAccessibleName(title_->text());
     setAccessibleDescription(index.data(ProfileRowModel::Detail).toString());
@@ -352,6 +360,7 @@ QAbstractButton* ProfileCardWidget::button(Action action) const {
     case Action::Refresh: return refresh_;
     case Action::Menu: return menu_;
     case Action::ReviewUpdate: return reviewUpdate_;
+    case Action::Open: return open_;
     }
     return nullptr;
 }

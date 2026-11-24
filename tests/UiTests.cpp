@@ -138,6 +138,9 @@ private slots:
         auto* card=list->indexWidget(index);
         QVERIFY(card);
         QCOMPARE(card->findChild<QLabel*>("profileCardSource")->text(),QString("WireGuard"));
+        QCOMPARE(list->indexWidget(list->model()->index(0,0))->findChild<QLabel*>("profileCardStatus")->text(),QString("已选配置"));
+        QTRY_VERIFY(card->findChild<QPushButton*>("openProfileCardDetails")->isVisible());
+        QVERIFY(!list->model()->index(0,0).data(ProfileRowModel::IsRunning).toBool());
         for (int row:{0,1}) {
             auto* state=list->indexWidget(list->model()->index(row,0))->findChild<QLabel*>("profileCardStatus");
             QVERIFY(state);
@@ -152,6 +155,167 @@ private slots:
             return QDir().mkpath(output)&&window.grab().save(output+"/"+name+".png");
         };
         QVERIFY(capture("dual-profiles"));
+        auto* proxyChoice=window.findChild<QToolButton*>("proxyWorkspaceChoice");
+        auto* tunnelChoice=window.findChild<QToolButton*>("tunnelWorkspaceChoice");
+        auto* workMembers=window.findChild<QToolButton*>("workspaceMembers");
+        auto* workTraffic=window.findChild<QToolButton*>("workspaceTraffic");
+        auto* workLogs=window.findChild<QToolButton*>("workspaceLogs");
+        auto* fold=window.findChild<QToolButton*>("toggleSidebar");
+        auto* workPeers=window.findChild<QTableWidget*>("workspaceTunnelPeers");
+        QVERIFY(proxyChoice&&tunnelChoice&&workMembers&&workTraffic&&workLogs&&fold&&workPeers);
+        QSignalSpy navigatedWithoutOperations(&controller,&AppController::operationStarted);
+        auto& observed=const_cast<AppState&>(controller.state());
+        const auto originalCore=observed.core;
+        const auto originalReady=observed.ready;
+        auto& runningGroups=const_cast<QJsonObject&>(controller.proxies());
+        const auto originalGroups=runningGroups;
+        runningGroups.insert("日常选择",QJsonObject{{"type","Selector"},{"all",QJsonArray{"东京 01","香港 01"}},{"now","东京 01"}});
+        runningGroups.insert("东京 01",QJsonObject{{"type","Shadowsocks"}});
+        runningGroups.insert("香港 01",QJsonObject{{"type","VLESS"}});
+        observed.core=CoreState::Running;
+        observed.ready=true;
+        emit controller.stateChanged();
+        emit controller.proxiesChanged();
+        window.navigate(Route{ViewIds::Overview});
+        QVERIFY(window.findChild<QWidget*>("workspaceOverview")->isVisible());
+        QCOMPARE(window.findChild<QLabel*>("overviewProxyProfile")->text(),QString("Dashboard fixture"));
+        QVERIFY(window.findChild<QLabel*>("overviewProxyEndpoint")->text().startsWith("127.0.0.1:"));
+        QCOMPARE(window.findChild<QLabel*>("overviewTunnelProfile")->text(),QString("已保存 1 份"));
+        QCOMPARE(window.findChild<QLabel*>("overviewTunnelRoutes")->text(),QString("未生效"));
+        QCOMPARE(window.findChild<QLabel*>("overviewTunnelHandshake")->text(),QString("—"));
+        QCOMPARE(proxyChoice->property("observedStatus").toString(),QString("运行中"));
+        QCOMPARE(tunnelChoice->property("observedStatus").toString(),QString("未连接"));
+        QVERIFY(proxyChoice->accessibleName().contains("运行中"));
+        QVERIFY(capture("workspace-overview"));
+        auto* contentSurface=window.findChild<QWidget*>("contentSurface");
+        const auto edge=contentSurface->x();
+        tunnelChoice->click();
+        QCOMPARE(window.currentRoute(),workspaceRoute(WorkspaceArea::Tunnel,WorkspacePage::Run));
+        QCOMPARE(contentSurface->x(),edge);
+        QVERIFY(window.findChild<QLabel*>("workspaceTunnelPrefixes")->text().contains("配置值"));
+        QVERIFY(workPeers->isVisible()&&workPeers->isColumnHidden(2));
+        QVERIFY(capture("workspace-tunnel"));
+        workMembers->click();
+        QVERIFY(!workPeers->isColumnHidden(2));
+        QCOMPARE(workMembers->text(),QString("Peer"));
+        proxyChoice->click();
+        QCOMPARE(window.currentRoute(),workspaceRoute(WorkspaceArea::Proxy,WorkspacePage::Run));
+        auto* localToggle=window.findChild<QCheckBox*>("proxyWorkspaceToggle");
+        auto* localStatus=window.findChild<QWidget*>("mihomoHomeSection")->findChild<QLabel*>("engineStatus");
+        QVERIFY(localToggle->isVisible()&&localToggle->isChecked());
+        QVERIFY(!localStatus->isVisible());
+        QCOMPARE(localToggle->accessibleDescription(),QString("运行中"));
+        auto* systemProxy=window.findChild<QCheckBox*>("systemProxy");
+        auto* takeoverMenu=window.findChild<QAction*>("systemTakeoverInMenu");
+        QVERIFY(systemProxy&&!systemProxy->isVisible());
+        QVERIFY(takeoverMenu&&takeoverMenu->isVisible()&&takeoverMenu->isCheckable());
+        QCOMPARE(takeoverMenu->isChecked(),systemProxy->isChecked());
+        QCOMPARE(takeoverMenu->isEnabled(),systemProxy->isEnabled());
+        QVERIFY(takeoverMenu->text().contains("系统接管"));
+        auto* nodeList=window.findChild<QListView*>("nodeList");
+        QVERIFY(nodeList->model()->rowCount()>=3);
+        QVERIFY(!window.findChild<QPushButton*>("wireGuardHomeToggle")->isVisible());
+        QVERIFY(capture("workspace-proxy"));
+        auto* nodeSearch=window.findChild<QLineEdit*>("nodeSearch");
+        auto* searchToggle=window.findChild<QToolButton*>("nodeSearchToggle");
+        const int unfilteredCount=nodeList->model()->rowCount();
+        searchToggle->click();
+        nodeSearch->setText("东京");
+        QTRY_VERIFY(nodeList->model()->rowCount()>0&&nodeList->model()->rowCount()<unfilteredCount);
+        const int filteredCount=nodeList->model()->rowCount();
+        const auto selected=nodeList->model()->index(0,0);
+        nodeList->setCurrentIndex(selected);
+        workMembers->click();
+        auto* nodesPage=window.findChild<QWidget*>("proxyNodesPage");
+        QVERIFY(nodesPage->isVisible()&&nodesPage->isAncestorOf(nodeList)&&nodeList->isVisible());
+        QVERIFY(!window.findChild<QWidget*>("homeControlCard")->isVisible());
+        QCOMPARE(nodeSearch->text(),QString("东京"));
+        QCOMPARE(nodeList->model()->rowCount(),filteredCount);
+        QCOMPARE(nodeList->currentIndex(),selected);
+        QVERIFY(capture("workspace-proxy-nodes"));
+        window.findChild<QToolButton*>("workspaceRun")->click();
+        QVERIFY(!nodesPage->isVisible()&&nodeList->isVisible());
+        QCOMPARE(nodeSearch->text(),QString("东京"));
+        searchToggle->click();
+        workTraffic->click();
+        QVERIFY(window.findChild<QWidget*>("mihomoTrafficSection")->isVisible());
+        QVERIFY(!window.findChild<QLabel*>("wireGuardTraffic")->isVisible());
+        tunnelChoice->click();
+        QCOMPARE(window.currentRoute(),workspaceRoute(WorkspaceArea::Tunnel,WorkspacePage::Members));
+        workTraffic->click();
+        QVERIFY(window.findChild<QLabel*>("wireGuardTraffic")->isVisible());
+        QVERIFY(!window.findChild<QWidget*>("mihomoTrafficSection")->isVisible());
+        QVERIFY(!window.findChild<QLabel*>("windowsDirectTraffic")->isVisible());
+        controller.diagnostics()->append("wireguard","tunnel work area fixture");
+        controller.diagnostics()->append("core","proxy work area fixture");
+        workLogs->click();
+        auto* workLog=window.findChild<QPlainTextEdit*>("logView");
+        QTRY_VERIFY(workLog->toPlainText().contains("tunnel work area fixture"));
+        QVERIFY(!workLog->toPlainText().contains("proxy work area fixture"));
+        proxyChoice->click();
+        QCOMPARE(window.currentRoute(),workspaceRoute(WorkspaceArea::Proxy,WorkspacePage::Traffic));
+        workLogs->click();
+        QTRY_VERIFY(workLog->toPlainText().contains("proxy work area fixture"));
+        QVERIFY(!workLog->toPlainText().contains("tunnel work area fixture"));
+        QCOMPARE(navigatedWithoutOperations.size(),0);
+        window.setPage(1);
+        fold->click();
+        QVERIFY(proxyChoice->isVisible()&&tunnelChoice->isVisible());
+        QTRY_VERIFY(proxyChoice->geometry().bottom()<tunnelChoice->geometry().top());
+        QCOMPARE(proxyChoice->property("observedStatus").toString(),QString("运行中"));
+        QVERIFY(capture("workspace-folded"));
+        QTest::keyClick(proxyChoice,Qt::Key_Down);
+        QCOMPARE(window.currentRoute(),workspaceRoute(WorkspaceArea::Tunnel,WorkspacePage::Logs));
+        fold->click();
+        QCOMPARE(contentSurface->x(),edge);
+        if (!output.isEmpty()) {
+            UiTheme::setPreferences("dark",120);
+            window.resize(840,560);
+            window.navigate(workspaceRoute(WorkspaceArea::Proxy,WorkspacePage::Run));
+            const auto* runCard=window.findChild<QWidget*>("homeControlCard");
+            const auto* groupPicker=window.findChild<QToolButton*>("browseGroup");
+            QTRY_VERIFY(groupPicker->mapTo(&window,QPoint()).y() >= runCard->mapTo(&window,QPoint(0,runCard->height())).y());
+            QVERIFY(capture("workspace-proxy-compact"));
+            window.navigate(workspaceRoute(WorkspaceArea::Tunnel,WorkspacePage::Run));
+            QVERIFY(capture("workspace-tunnel-compact"));
+            UiTheme::setPreferences("system",100);
+            window.resize(1040,720);
+        }
+        window.navigate(workspaceRoute(WorkspaceArea::Proxy,WorkspacePage::Run));
+        observed.ready=false;
+        for (const auto& [phase,message]:QList<QPair<CoreState,QString>>{
+                 {CoreState::Starting,"正在启动"},{CoreState::Stopping,"正在停止"},{CoreState::Failed,"启动或运行失败"}}) {
+            observed.core=phase;
+            emit controller.stateChanged();
+            QVERIFY(localStatus->isVisible());
+            QCOMPARE(localStatus->text(),message);
+        }
+        observed.core=CoreState::Stopped;
+        emit controller.stateChanged();
+        QVERIFY(!localStatus->isVisible()&&!localToggle->isChecked());
+        observed.core=originalCore;
+        observed.ready=originalReady;
+        runningGroups=originalGroups;
+        emit controller.stateChanged();
+        emit controller.proxiesChanged();
+        auto& workspaceSettings=const_cast<Settings&>(controller.settings());
+        const bool originalTun=workspaceSettings.tunEnabled;
+        workspaceSettings.tunEnabled=true;
+        window.navigate(workspaceRoute(WorkspaceArea::Proxy,WorkspacePage::Run));
+        emit controller.stateChanged();
+        const auto emptyActions=window.findChild<QWidget*>("nodeSection")->findChildren<QPushButton*>("emptyStateAction");
+        QVERIFY(std::any_of(emptyActions.cbegin(),emptyActions.cend(),[](const auto* action) {
+            return action->isVisible()&&action->text()=="开启接管";
+        }));
+        workspaceSettings.tunEnabled=originalTun;
+        emit controller.stateChanged();
+        if (!originalTun) {
+            workMembers->click();
+            QVERIFY(std::any_of(emptyActions.cbegin(),emptyActions.cend(),[](const auto* action) {
+                return action->isVisible()&&action->text()=="启动代理";
+            }));
+        }
+        window.setPage(1);
         QApplication::setActiveWindow(&window);
         list->setCurrentIndex(index);
         list->setFocus();
@@ -178,12 +342,42 @@ private slots:
         window.setPage(0);
         QTRY_VERIFY(window.findChild<QPushButton*>("wireGuardHomeToggle")->isVisible());
         QVERIFY(window.findChild<QPushButton*>("mihomoLocalHomeToggle")->isVisible());
+        auto* mihomo=window.findChild<QWidget*>("mihomoHomeSection");
+        auto* tunnel=window.findChild<QWidget*>("wireGuardHomeSection");
+        auto* takeover=window.findChild<QWidget*>("homeControlCard");
+        QVERIFY(mihomo&&tunnel&&takeover);
+        QVERIFY(takeover->isAncestorOf(mihomo)&&!takeover->isAncestorOf(tunnel));
+        QVERIFY(mihomo->mapTo(&window,QPoint()).y()<tunnel->mapTo(&window,QPoint()).y());
+        auto* nodeArea=window.findChild<QWidget*>("nodeSection");
+        QVERIFY(nodeArea);
+        for (auto* label:nodeArea->findChildren<QLabel*>("emptyState"))
+            QVERIFY(label->text().contains("本地代理"));
+        for (auto* action:nodeArea->findChildren<QPushButton*>("emptyStateAction"))
+            QVERIFY(action->isHidden());
         QVERIFY(capture("dual-home"));
         window.navigate(Route{ViewIds::Data,kNoCategory,HomeAnchor::Control,int(ViewIds::DataTab::Traffic)});
         const auto* traffic=window.findChild<QLabel*>("wireGuardTraffic");
         QVERIFY(traffic&&traffic->isVisible()&&traffic->text().contains("未连接"));
         QVERIFY(window.findChild<QLabel*>("windowsDirectTraffic")->isVisible());
+        QCOMPARE(window.findChild<QWidget*>("mihomoTrafficSection")->findChild<QLabel*>("sectionTitle")->text(),QString("本地代理"));
+        auto* tunnelTraffic=window.findChild<QWidget*>("wireGuardTrafficSection");
+        QVERIFY(tunnelTraffic&&tunnelTraffic->isVisible());
+        QCOMPARE(tunnelTraffic->findChild<QLabel*>("sectionTitle")->text(),QString("分流隧道"));
         QVERIFY(capture("dual-traffic"));
+        if (!output.isEmpty()) {
+            UiTheme::setPreferences("dark",120);
+            window.resize(840,560);
+            QCoreApplication::processEvents();
+            QCOMPARE(window.size(),QSize(840,560));
+            QVERIFY(capture("dual-traffic-compact"));
+            window.setPage(0);
+            QVERIFY(capture("dual-home-compact"));
+            window.setPage(1);
+            QVERIFY(capture("dual-profiles-compact"));
+            window.navigate(Route{ViewIds::Data,kNoCategory,HomeAnchor::Control,int(ViewIds::DataTab::Traffic)});
+            UiTheme::setPreferences("system",100);
+            window.resize(1040,720);
+        }
         window.findChild<QPushButton*>("wireGuardTrafficDetails")->click();
         const auto visiblePeerTab=[&]() -> QTabWidget* {
             for (auto* tab:window.findChildren<QTabWidget*>("wireGuardDetailTabs"))
@@ -192,6 +386,13 @@ private slots:
         };
         QTRY_VERIFY(visiblePeerTab());
         auto* peerTab=visiblePeerTab();
+        auto* peers=peerTab->findChild<QTableWidget*>("wireGuardPeerTable");
+        QVERIFY(peers&&peers->rowCount()==1);
+        for (int col=0;col<4;++col) {
+            QVERIFY(int(peers->horizontalHeaderItem(col)->textAlignment())&int(col<2?Qt::AlignLeft:Qt::AlignRight));
+            QCOMPARE(peers->item(0,col)->textAlignment(),peers->horizontalHeaderItem(col)->textAlignment());
+        }
+        QVERIFY(peerTab->tabBar()->property("engineTabs").toBool());
         auto* peerWorkspace=peerTab->parentWidget();
         while (peerWorkspace&&!qobject_cast<TaskWorkspace*>(peerWorkspace)) peerWorkspace=peerWorkspace->parentWidget();
         QVERIFY(peerWorkspace);
@@ -201,7 +402,7 @@ private slots:
     }
     void wireGuardVersionsServiceAndLayout() {
         QTemporaryDir data;
-        QVERIFY(data.isValid()&&seedDashboardFixture(data.path()));
+        QVERIFY(data.isValid());
         auto platform=createPlatformServices();
         WireGuardStore store(data.path(),platform);
         const auto source=QByteArray("[Interface]\nAddress=10.42.0.2/32\nPrivateKey=")+QByteArray(32,'a').toBase64()+
@@ -217,16 +418,30 @@ private slots:
         AppController controller(data.path(),true,nullptr,platform);
         QSignalSpy ready(&controller,&AppController::initialized);
         controller.initialize(); QTRY_COMPARE(ready.size(),1);
-        MainWindow window(&controller); window.resize(1040,720); window.show(); window.setPage(1);
+        MainWindow window(&controller); window.resize(1040,720); window.show(); window.setPage(0);
+        auto* setup=window.findChild<QPushButton*>("mihomoLocalHomeToggle");
+        QVERIFY(setup&&setup->isVisible());
+        QCOMPARE(setup->text(),QString("导入配置"));
+        QVERIFY(window.findChild<QWidget*>("prototypeHomeEmpty")->isHidden());
+        window.setPage(1);
         auto* list=window.findChild<QListView*>("profileList");
-        QVERIFY(list&&list->model()->rowCount()==2);
-        const auto index=list->model()->index(1,0);
+        QVERIFY(list&&list->model()->rowCount()==1);
+        const auto index=list->model()->index(0,0);
         auto* card=qobject_cast<ProfileCardWidget*>(list->indexWidget(index));
         QVERIFY(card);
         card->button(ProfileCardWidget::Action::ReviewUpdate)->click();
         QTRY_VERIFY(window.findChild<QTabWidget*>("wireGuardDetailTabs"));
         auto* tabs=window.findChild<QTabWidget*>("wireGuardDetailTabs");
         QCOMPARE(tabs->currentIndex(),2);
+        auto* candidate=window.findChild<QPushButton*>("wireGuardConnectCandidate");
+        auto* previous=window.findChild<QPushButton*>("wireGuardPreviousVersion");
+        auto* topAction=window.findChild<QPushButton*>("wireGuardProfileConnect");
+        QVERIFY(candidate&&candidate->isVisible()&&previous&&previous->isVisible());
+        QVERIFY(topAction&&topAction->isHidden());
+        QVERIFY(window.findChild<QLabel*>("wireGuardProfileStatus")->text().contains("候选待启用"));
+        tabs->setCurrentIndex(0);
+        QVERIFY(topAction->isVisible()&&!candidate->isVisible());
+        tabs->setCurrentIndex(2);
         auto* changes=window.findChild<QLabel*>("wireGuardDifferences");
         QTRY_VERIFY(changes->text().contains("10.42.0.0/16")&&changes->text().contains("fd52::/48"));
         QVERIFY(changes->text().contains("密钥已变更"));
@@ -259,6 +474,10 @@ private slots:
             QCoreApplication::processEvents();
             QCOMPARE(window.size(),size);
             QVERIFY(changes->isVisible());
+            QTRY_VERIFY(changes->height()>=changes->heightForWidth(changes->width()));
+            const int requiredHeight=changes->heightForWidth(changes->width());
+            QVERIFY(requiredHeight>changes->fontMetrics().lineSpacing());
+            QVERIFY(changes->visibleRegion().boundingRect().height()>=requiredHeight);
             for (int tab:{2,0,1}) {
                 tabs->setCurrentIndex(tab);
                 QCoreApplication::processEvents();
@@ -540,7 +759,7 @@ private slots:
         previewModel.setProfiles({preview});
         previewModel.setState(preview.id,true);
         localCard->setProfile(previewModel.index(0,0));
-        QCOMPARE(usageState->text(),QString("当前使用"));
+        QCOMPARE(usageState->text(),QString("运行中"));
         QCOMPARE(updateState->text(),QString("更新失败"));
         QVERIFY(updateState->isVisible());
         const auto* localTitle=localCard->findChild<QLabel*>("profileCardTitle");
@@ -1131,23 +1350,21 @@ private slots:
         QVERIFY(sidebar && navigation); QCOMPARE(sidebar->width(),200);
         const auto firstNav=navigation->visualItemRect(navigation->item(0));
         const auto secondNav=navigation->visualItemRect(navigation->item(1));
-        const auto thirdNav=navigation->visualItemRect(navigation->item(2));
+        QCOMPARE(navigation->count(),2);
         QCOMPARE(firstNav.height(),38);
         QCOMPARE(secondNav.x(),firstNav.x());
-        QCOMPARE(thirdNav.x(),firstNav.x());
         QCOMPARE(secondNav.width(),firstNav.width());
-        QCOMPARE(thirdNav.width(),firstNav.width());
         QVERIFY(firstNav.width()>=navigation->viewport()->width()-8);
-        QVERIFY(firstNav.bottom()<secondNav.top() && secondNav.bottom()<thirdNav.top());
-        QCOMPARE(secondNav.top()-firstNav.bottom(),thirdNav.top()-secondNav.bottom());
-        QVERIFY(navigation->viewport()->rect().contains(thirdNav));
+        QVERIFY(firstNav.bottom()<secondNav.top());
+        QVERIFY(navigation->viewport()->rect().contains(secondNav));
         auto* brandHeader=window.findChild<QWidget*>("sidebarBrandHeader");
         auto* settingsNav=window.findChild<QToolButton*>("sidebarSettings");
         QVERIFY(brandHeader&&settingsNav);
         QVERIFY(!window.findChild<QLabel*>("sidebarVersion"));
         QVERIFY(brandHeader->y()<navigation->y());
         QVERIFY(settingsNav->y()>navigation->y()+firstNav.height()*3);
-        QCOMPARE(settingsNav->size(),QSize(32,32));
+        QCOMPARE(settingsNav->height(),32);
+        QVERIFY(settingsNav->width()>32);
         auto& preferences=const_cast<Settings&>(controller.settings());
         const auto appearance=preferences.appearance;
         const auto textScale=preferences.textScale;
@@ -1739,7 +1956,7 @@ private slots:
         // K5：指标视图移进「数据 › 流量」，首页不再有它；控件本身仍在，只需断言首屏不可见。
         auto* metrics = window.findChild<QWidget*>("homeMetrics"); QVERIFY(!metrics || !metrics->isVisible());
         auto* master=window.findChild<QCheckBox*>("systemProxy"); QVERIFY(master); QVERIFY(master->text().isEmpty());
-        QCOMPARE(master->accessibleName(),QString("代理总开关"));
+        QCOMPARE(master->accessibleName(),QString("代理系统接管"));
         QSignalSpy noStart(&controller,&AppController::operationStarted);
         // K5：空态下总开关禁用；节点区有唯一的就近导入动作。
         QVERIFY(!master->isEnabled()); QVERIFY(!master->isChecked());
@@ -2045,11 +2262,9 @@ private slots:
 
         // 六卡删除后，「当前成员」由控制区第一行与成员行勾选共同表达（H2/H3）。
         QVERIFY(!window.findChild<QLabel*>("homeStateLine"));
-        // K5：列表底部那一行提示只在内核未就绪时出现，就绪后为空。
+        // 节点空态在实际有节点后收起。
         QWidget* hintHost = window.findChild<QWidget*>("nodeSection"); QVERIFY(hintHost);
-        auto* selectionHint=window.findChild<QLabel*>("homeSelectionHint");
-        QVERIFY(selectionHint);
-        QVERIFY2(selectionHint->text().trimmed().isEmpty(), qUtf8Printable(selectionHint->text()));
+        for (auto* hint:hintHost->findChildren<QLabel*>("emptyState")) QVERIFY(hint->isHidden());
         window.setPage(0); window.resize(940,620); QCoreApplication::processEvents();
         auto* homeScroll=window.findChild<QScrollArea*>("homeScroll"); homeScroll->verticalScrollBar()->setValue(0);
         // K5：「更多运行信息」抽屉已删除；指标视图整体搬到「数据 › 流量」，所以它
@@ -2354,7 +2569,7 @@ private slots:
         QTemporaryDir data; AppController controller(data.path(),true); QSignalSpy initialized(&controller,&AppController::initialized); controller.initialize(); QTRY_COMPARE(initialized.size(),1);
         MainWindow window(&controller); window.resize(940,620); window.show(); QCoreApplication::processEvents();
         // ADR 0048 + K1：节点页并入首页、网站测试并入数据页签，页面栈只剩五个视图。
-        auto* stack=window.findChild<QStackedWidget*>("mainPages"); QVERIFY(stack); QCOMPARE(stack->count(),5);
+        auto* stack=window.findChild<QStackedWidget*>("mainPages"); QVERIFY(stack); QCOMPARE(stack->count(),ViewIds::Count);
         auto* nodes=window.findChild<QWidget*>("nodeSection"); auto* home=window.findChild<QScrollArea*>("homeScroll"); auto* views=window.findChild<QStackedWidget*>("nodeViews");
         QVERIFY(nodes && home && views); QCOMPARE(views->parentWidget(),nodes);
         int homeIndex=-1; for (int i=0;i<stack->count();++i) if (stack->widget(i)->isAncestorOf(home)) homeIndex=i;

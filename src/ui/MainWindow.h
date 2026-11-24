@@ -17,7 +17,7 @@ class QListView;
 class QTableView; class QTableWidget; class QLineEdit; class QPlainTextEdit; class QSpinBox; class QPushButton;
 class QAction; class QTabWidget; class QMenu; class QDialog;
 class QToolButton; class QStatusBar;
-class QTabBar; class QHBoxLayout; class QScrollArea;
+class QTabBar; class QHBoxLayout; class QBoxLayout; class QScrollArea;
 class QDragEnterEvent; class QDropEvent;
 namespace mlash { class AppController; class WebsiteTestsPage; class ImportDialog; class NodeRowModel; class ProfileRowModel; }
 namespace mlash { class ConnectionOptions; }
@@ -25,6 +25,7 @@ namespace mlash {
 // 抽屉组件只在使用它的实现文件中包含完整定义。
 namespace WindowParts { class DetailsDrawer; }
 class TaskWorkspace;
+class ProxyNodesPage;
 class MainWindow : public QMainWindow {
     Q_OBJECT
 public:
@@ -44,8 +45,11 @@ public:
     void presentTask(QDialog* editor, const QString& key={}, const QString& title={});
     QJsonObject nodeBookmark() const;
     void restoreNodeBookmark(const QJsonObject& value);
+    WorkspaceBookmark workspaceBookmark() const;
+    void restoreWorkspaceBookmark(const WorkspaceBookmark& value);
 signals:
     void guiReleaseRequested();
+    void displayRouteChanged();
 protected:
     void closeEvent(QCloseEvent* event) override;
     void resizeEvent(QResizeEvent* event) override;
@@ -57,6 +61,12 @@ private:
     QWidget* homePage(); QWidget* nodeSection(); QWidget* profilesPage(); QWidget* dataPage(); QWidget* settingsPage(); QWidget* rulesPage();
     // 数据页的四个面板由 dataPage() 组装后再拆进 QStackedWidget（K6）。
     QWidget* connectionsPanel(); QWidget* diagnosticsPanel(); QWidget* trafficPanel();
+    QWidget* overviewPage(); QWidget* tunnelPage();
+    QWidget* workspaceNavigation();
+    void updateWorkspaceNavigation();
+    void resizeWorkspaceNavigation();
+    void updateWorkspacePage();
+    void invokeTunnelAction(QWidget* anchor);
     // K6：数据页顶部的「复制诊断摘要」；只拼可公开的计数与状态词。
     void copyDiagnosticsSummary();
     void buildDataTabs(QWidget* page);
@@ -163,6 +173,17 @@ private:
     bool hasDisplayedSettings_ = false;
     Settings displayedSettings_;
     QListWidget* navigation_;
+    QWidget* workspaceSelector_ = nullptr;
+    QBoxLayout* workspaceSegments_ = nullptr;
+    std::array<QToolButton*,2> workspaceChoices_{};
+    std::array<QToolButton*,4> workspaceLinks_{};
+    WorkspaceBookmark workspace_;
+    QScrollArea* tunnelScroll_ = nullptr;
+    QWidget* tunnelControl_ = nullptr;
+    QWidget* legacyTunnelHome_ = nullptr;
+    QWidget* localProxyHome_ = nullptr;
+    QWidget* localProxyDivider_ = nullptr;
+    QWidget* proxyRunFields_ = nullptr;
     QToolButton* settingsNav_ = nullptr;
     bool sidebarCollapsed_ = false;
     QStackedWidget* pages_;
@@ -182,7 +203,10 @@ private:
     QLabel* statusLine1_ = nullptr;
     QLabel* statusLine2_ = nullptr;
     QPointer<QWidget> homeScroll_;  // 首页唯一滚动容器，供锚点滚动使用
-    QPointer<QWidget> nodeSection_;     // 首页节点区容器（R3 并入首页后由 homePage() 设置）
+    QStackedWidget* proxyPages_ = nullptr;
+    ProxyNodesPage* proxyNodesPage_ = nullptr;
+    QWidget* homeNodeHost_ = nullptr;
+    QPointer<QWidget> nodeSection_;
     WebsiteTestsPage* websitePage_;
     QStatusBar* operationStatus_;
     QLabel* operationNotice_ = nullptr;   // 状态栏「最近操作」段：跨页操作结果
@@ -199,7 +223,7 @@ private:
     QStringList pageFeedback_;   // 按页面序号缓存，切回该页时可见
     QString connectionFeedback_;  // 连接页当前操作的结论（与采样状态并存）
     OperationId noticeOperation_ = OperationId::Unspecified;
-    QLabel *homeSelection_, *proxyProfileHint_, *statusDot_;
+    QLabel *proxyProfileHint_, *statusDot_;
     QComboBox* profilesCombo_;
     QLabel *message_, *groupHint_;
     QLabel *homeCurrentNode_ = nullptr, *homeTakeoverStatus_ = nullptr;
@@ -231,6 +255,9 @@ private:
     QMenu* recentMenu_;
     QCheckBox *proxyEnabled_;   // 首页行尾的代理总开关（ADR 0048）
     QComboBox* logLevel_;
+    WorkspaceArea logArea_ = WorkspaceArea::Global;
+    std::array<QString,3> logQueries_{};
+    std::array<int,3> logLevels_{};
     QString selectedGroup_;
     QStringList groupHistory_;
     QPointer<QDialog> groupEditor_;

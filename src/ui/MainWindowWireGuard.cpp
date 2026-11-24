@@ -2,9 +2,12 @@
 #include "TaskDialog.h"
 #include "ActivityTableModel.h"
 #include "DialogDraftGuard.h"
+#include "ProxySwitch.h"
 #include "TunDialog.h"
 #include "ViewIds.h"
 #include "WindowUiFactories.h"
+#include "UiIcons.h"
+#include "WidgetStyle.h"
 #include "app/AppController.h"
 #include <QAbstractItemView>
 #include <QDateTime>
@@ -16,14 +19,18 @@
 #include <QLabel>
 #include <QLineEdit>
 #include <QListView>
+#include <QMenu>
 #include <QPlainTextEdit>
 #include <QPointer>
 #include <QPushButton>
+#include <QResizeEvent>
+#include <QScrollArea>
 #include <QScrollBar>
 #include <QStackedWidget>
 #include <QTabBar>
 #include <QTableWidget>
 #include <QTabWidget>
+#include <QTimer>
 #include <QVBoxLayout>
 
 namespace mlash {
@@ -52,16 +59,67 @@ QFormLayout* groupedFields(QVBoxLayout* parent) {
     form->setHorizontalSpacing(16);
     form->setRowWrapPolicy(QFormLayout::WrapLongRows);
     form->setFieldGrowthPolicy(QFormLayout::AllNonFixedFieldsGrow);
+    surface->setProperty("engineFields",true);
     parent->addWidget(surface);
     return form;
 }
 
-QLabel* valueRow(QFormLayout* form,const QString& name,const QString& object = {}) {
-    auto* value=textLabel();
+class FieldValue final : public QLabel {
+public:
+    FieldValue() {
+        setTextFormat(Qt::PlainText);
+        setWordWrap(true);
+        QSizePolicy policy(QSizePolicy::Ignored,QSizePolicy::Preferred);
+        policy.setHeightForWidth(true);
+        setSizePolicy(policy);
+    }
+
+    void setText(const QString& value) {
+        if (text()==value) return;
+        QLabel::setText(value);
+        scheduleFit();
+    }
+
+protected:
+    void showEvent(QShowEvent* event) override {
+        QLabel::showEvent(event);
+        scheduleFit();
+    }
+
+    void resizeEvent(QResizeEvent* event) override {
+        QLabel::resizeEvent(event);
+        if (event->oldSize().width()!=event->size().width()) scheduleFit();
+    }
+
+    void changeEvent(QEvent* event) override {
+        QLabel::changeEvent(event);
+        if (event->type()==QEvent::FontChange || event->type()==QEvent::StyleChange) scheduleFit();
+    }
+
+private:
+    void scheduleFit() {
+        // Wait for the viewport and style to settle before measuring wrapped text.
+        QTimer::singleShot(0,this,[this] {
+            if (isVisible()) setMinimumHeight(text().isEmpty()?0:heightForWidth(width()));
+        });
+    }
+};
+
+FieldValue* valueRow(QFormLayout* form,const QString& name,const QString& object = {}) {
+    auto* value=new FieldValue;
     value->setObjectName(object);
     value->setTextInteractionFlags(Qt::TextSelectableByMouse|Qt::TextSelectableByKeyboard);
     form->addRow(name,value);
     return value;
+}
+
+QScrollArea* tabViewport(QWidget* page) {
+    auto* scroll=new QScrollArea;
+    scroll->setFrameShape(QFrame::NoFrame);
+    scroll->setWidgetResizable(true);
+    scroll->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
+    scroll->setWidget(page);
+    return scroll;
 }
 
 QString scope(const QJsonObject& summary,const char* key) {
@@ -79,6 +137,255 @@ const WireGuardProfile* tunnelProfile(const AppController& controller,const QStr
     const auto entry=std::find_if(catalog.cbegin(),catalog.cend(),[&](const auto& item) { return item.id==id; });
     return entry==catalog.cend()?nullptr:&*entry;
 }
+
+bool requiresTunnelReview(const WireGuardProfile& profile) {
+    return profile.summary.value("full_v4").toBool() || profile.summary.value("full_v6").toBool()
+        || (!profile.active.isEmpty()&&profile.candidate!=profile.active);
+}
+}
+
+void MainWindow::invokeTunnelAction(QWidget* anchor) {
+    const auto seen=controller_->wireGuardObservation();
+    if (seen.value("active").toBool()||seen.value("cleanup_pending").toBool()) {
+        controller_->disconnectWireGuard();
+        return;
+    }
+    if (seen.value("error").toString().contains("服务")) {
+        openWireGuardService();
+        return;
+    }
+    const auto& catalog=controller_->wireGuardProfiles();
+    if (catalog.isEmpty()) {
+        navigate(Route{ViewIds::Profiles});
+        if (route_.view==ViewIds::Profiles) addUrl();
+        return;
+    }
+    const auto activate=[this](const QString& id) {
+        const auto* profile=tunnelProfile(*controller_,id);
+        if (!profile) return;
+        if (requiresTunnelReview(*profile)) {
+            showWireGuardProfile(id,!profile->active.isEmpty()&&profile->candidate!=profile->active?2:0);
+        } else controller_->connectWireGuard(id,profile->candidate);
+    };
+    if (catalog.size()==1) {
+        activate(catalog.first().id);
+        return;
+    }
+    auto* menu=new QMenu(anchor);
+    menu->setObjectName("wireGuardHomeChoices");
+    for (const auto& profile:catalog) {
+        const auto label=requiresTunnelReview(profile)?profile.name+" · 查看配置":profile.name;
+        connect(menu->addAction(label),&QAction::triggered,this,[activate,id=profile.id] { activate(id); });
+    }
+    connect(menu,&QMenu::aboutToHide,menu,&QObject::deleteLater);
+    WidgetStyle::popupMenu(menu,anchor->mapToGlobal(QPoint(0,anchor->height())));
+}
+
+QWidget* MainWindow::tunnelPage() {
+    auto* body=new QWidget;
+    auto* layout=new QVBoxLayout(body);
+    layout->setContentsMargins(0,0,0,0);
+    layout->setSpacing(UiTheme::PanelGap);
+    auto* panel=WindowParts::panel();
+    auto* controls=new QVBoxLayout(panel);
+    controls->setContentsMargins(12,0,12,0);
+    controls->setSpacing(0);
+    auto* header=new QWidget;
+    auto* headerLine=new QHBoxLayout(header);
+    headerLine->setContentsMargins(0,7,0,7);
+    auto* icon=new QLabel;
+    icon->setFixedSize(22,22);
+    const auto redraw=[icon] { icon->setPixmap(UiIcons::icon(UiIcons::Glyph::Link,UiTheme::Brand).pixmap(22,22)); };
+    redraw();
+    connect(UiTheme::notifier(),&UiTheme::AppearanceNotifier::changed,icon,redraw);
+    headerLine->addWidget(icon);
+    auto* identity=new QVBoxLayout;
+    identity->setSpacing(2);
+    auto* title=new QLabel("分流隧道");
+    title->setObjectName("sectionTitle");
+    identity->addWidget(title);
+    auto* status=new FieldValue;
+    status->setProperty("secondary",true);
+    status->setObjectName("workspaceTunnelStatus");
+    identity->addWidget(status);
+    headerLine->addLayout(identity,1);
+    auto* toggle=new WindowParts::ProxySwitch("");
+    toggle->setObjectName("tunnelWorkspaceToggle");
+    toggle->setAccessibleName("隧道连接");
+    headerLine->addWidget(toggle);
+    auto* action=new QPushButton;
+    action->setObjectName("tunnelWorkspaceAction");
+    action->setProperty("engineAction",true);
+    headerLine->addWidget(action);
+    controls->addWidget(header);
+    connect(toggle,&QCheckBox::clicked,this,[this,toggle] {
+        toggle->setChecked(controller_->wireGuardObservation().value("active").toBool());
+        invokeTunnelAction(toggle);
+    });
+    connect(action,&QPushButton::clicked,this,[this,action] { invokeTunnelAction(action); });
+    tunnelControl_=new QWidget;
+    auto* fields=new QVBoxLayout(tunnelControl_);
+    fields->setContentsMargins(0,0,0,0);
+    fields->setSpacing(0);
+    const auto addField=[fields](const QString& name,UiIcons::Glyph glyph,const char* key) {
+        auto* separator=new QFrame;
+        separator->setObjectName("homeControlSeparator");
+        separator->setFixedHeight(1);
+        fields->addWidget(separator);
+        auto* row=new QWidget;
+        row->setMinimumHeight(UiTheme::RowHeight);
+        auto* line=new QHBoxLayout(row);
+        line->setContentsMargins(0,4,0,4);
+        auto* icon=new QLabel;
+        icon->setFixedSize(22,22);
+        const auto redraw=[icon,glyph] { icon->setPixmap(UiIcons::icon(glyph,UiTheme::Brand).pixmap(22,22)); };
+        redraw();
+        QObject::connect(UiTheme::notifier(),&UiTheme::AppearanceNotifier::changed,icon,redraw);
+        line->addWidget(icon);
+        auto* label=new QLabel(name);
+        label->setObjectName("homeControlTitle");
+        line->addWidget(label);
+        auto* value=new FieldValue;
+        value->setObjectName(key);
+        value->setProperty("secondary",true);
+        value->setAlignment(Qt::AlignRight|Qt::AlignVCenter);
+        value->setTextInteractionFlags(Qt::TextSelectableByMouse);
+        line->addWidget(value,1);
+        fields->addWidget(row);
+        return value;
+    };
+    auto* addresses=addField("隧道地址",UiIcons::Glyph::Globe,"workspaceTunnelAddresses");
+    auto* routes=addField("分流网段",UiIcons::Glyph::Route,"workspaceTunnelPrefixes");
+    auto* observed=addField("系统路由",UiIcons::Glyph::Check,"workspaceTunnelObservedRoutes");
+    controls->addWidget(tunnelControl_);
+    layout->addWidget(panel);
+
+    auto* heading=new QHBoxLayout;
+    auto* peersTitle=new QLabel("Peer");
+    peersTitle->setObjectName("sectionTitle");
+    heading->addWidget(peersTitle,1);
+    auto* detail=new QPushButton("配置详情 ›");
+    detail->setProperty("quiet",true);
+    detail->setObjectName("workspaceTunnelProfileDetails");
+    heading->addWidget(detail);
+    connect(detail,&QPushButton::clicked,this,[this,detail] {
+        const auto id=detail->property("profileId").toString();
+        if (!id.isEmpty()) showWireGuardProfile(id,route_.anchor==HomeAnchor::Nodes?1:0);
+    });
+    layout->addLayout(heading);
+    auto* list=new QTableWidget(0,4);
+    list->setObjectName("workspaceTunnelPeers");
+    list->setHorizontalHeaderLabels({"Peer","最近握手","接收","发送"});
+    list->setEditTriggers(QAbstractItemView::NoEditTriggers);
+    list->setSelectionBehavior(QAbstractItemView::SelectRows);
+    list->setShowGrid(false);
+    list->setFrameShape(QFrame::NoFrame);
+    list->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
+    list->horizontalHeader()->setSectionResizeMode(QHeaderView::Stretch);
+    list->verticalHeader()->hide();
+    for (int column=0;column<list->columnCount();++column)
+        list->horizontalHeaderItem(column)->setTextAlignment(column<2?Qt::AlignLeft:Qt::AlignRight);
+    layout->addWidget(list);
+    auto* peerDetails=textLabel({},true);
+    peerDetails->setObjectName("workspaceTunnelPeerDetails");
+    peerDetails->hide();
+    layout->addWidget(peerDetails);
+    const auto displayPeer=[this,list,peerDetails] {
+        const int row=peerDetails->property("peerRow").isValid()?peerDetails->property("peerRow").toInt():-1;
+        const auto* peer=row>=0?list->item(row,0):nullptr;
+        const bool visible=route_.view==ViewIds::Tunnel&&route_.anchor==HomeAnchor::Control&&peer;
+        if (visible) {
+            peerDetails->setText(QString("%1 · 本次接收 %2 · 发送 %3").arg(peer->text(),list->item(row,2)->text(),list->item(row,3)->text()));
+        }
+        peerDetails->setVisible(visible);
+    };
+    connect(list,&QTableWidget::cellClicked,body,[peerDetails,displayPeer](int row,int) {
+        peerDetails->setProperty("peerRow",peerDetails->isVisible()&&peerDetails->property("peerRow").toInt()==row?-1:row);
+        displayPeer();
+    });
+    connect(list,&QTableWidget::cellActivated,body,[peerDetails,displayPeer](int row,int) {
+        peerDetails->setProperty("peerRow",row);
+        displayPeer();
+    });
+    connect(this,&MainWindow::displayRouteChanged,body,displayPeer);
+    auto* empty=textLabel("导入隧道配置后即可查看 Peer。",true);
+    empty->setObjectName("workspaceTunnelEmpty");
+    layout->addWidget(empty);
+    layout->addStretch(1);
+    tunnelScroll_=tabViewport(body);
+    tunnelScroll_->setObjectName("workspaceTunnelPage");
+
+    const auto refresh=[this,status,toggle,action,detail,addresses,routes,observed,list,empty,displayPeer] {
+        const auto seen=controller_->wireGuardObservation();
+        const auto& catalog=controller_->wireGuardProfiles();
+        const auto id=seen.value("profile_id").toString();
+        const auto* profile=!id.isEmpty()?tunnelProfile(*controller_,id):catalog.size()==1?&catalog.first():nullptr;
+        const auto summary=profile?profile->summary:QJsonObject{};
+        const auto& state=controller_->state();
+        const bool active=seen.value("active").toBool();
+        const bool cleanup=seen.value("cleanup_pending").toBool();
+        const auto phase=seen.value("phase").toString();
+        const auto error=seen.value("error").toString();
+        const auto blocked=seen.value("connect_block").toString();
+        const bool serviceIssue=error.contains("服务");
+        const bool review=profile&&requiresTunnelReview(*profile);
+        const bool transitional=!phase.isEmpty();
+        const bool canUse=!state.busy&&!state.exiting&&!transitional;
+        const bool canStart=canUse&&!state.readOnly&&blocked.isEmpty();
+        const QString message=phase=="connecting"?"正在连接":phase=="disconnecting"?"正在清理":cleanup?"待清理":
+            active?"已连接":!error.isEmpty()?error:!blocked.isEmpty()?blocked:catalog.isEmpty()?"还没有隧道配置":"未连接";
+        status->setText(profile?profile->name+" · "+message:message);
+        status->setToolTip(status->text());
+        toggle->setChecked(active);
+        const bool standard=!cleanup&&!serviceIssue&&(active||(profile&&!review&&blocked.isEmpty()));
+        toggle->setVisible(standard);
+        toggle->setEnabled(active?canUse:canStart);
+        toggle->setAccessibleDescription(message);
+        action->setVisible(!standard);
+        action->setText(cleanup?"重试清理":serviceIssue?"权限服务…":catalog.isEmpty()?"导入配置":review?"查看配置":"选择配置");
+        action->setEnabled(canUse&&(cleanup||serviceIssue||canStart||review||!catalog.isEmpty()));
+        detail->setProperty("profileId",profile?profile->id:QString{});
+        detail->setVisible(profile);
+
+        const bool candidate=profile&&!profile->active.isEmpty()&&profile->candidate!=profile->active;
+        addresses->setText(profile?scope(summary,"addresses")+QString(active&&!candidate?"":" · 配置值"):"—");
+        routes->setText(active?scope(seen,"routes"):profile?scope(summary,"routes")+" · 配置值":"—");
+        const auto observedCount=seen.value("routes").toArray().size();
+        observed->setText(active?QString("已回读 · %1 条").arg(observedCount):cleanup?"清理待确认":"未生效");
+        const auto peers=seen.value("observation").toObject().value("peers").toArray();
+        const int count=active?int(peers.size()):summary.value("peer_count").toInt();
+        list->setRowCount(count);
+        list->setVisible(count>0);
+        list->setFixedHeight((list->horizontalHeader()->isHidden()?0:list->horizontalHeader()->sizeHint().height())+
+            qMin(count,7)*list->verticalHeader()->defaultSectionSize()+2);
+        for (int index=0;index<count;++index) {
+            const auto peer=active?peers[index].toObject():QJsonObject{};
+            const QStringList cells{QString("Peer %1").arg(peer.value("peer_id").toInt(index+1)),
+                active?handshakeTime(peer):QString("隧道未连接"),
+                active?ActivityTableModel::formatBytes(peer.value("rx_bytes").toString().toDouble()):QString("—"),
+                active?ActivityTableModel::formatBytes(peer.value("tx_bytes").toString().toDouble()):QString("—")};
+            for (int column=0;column<cells.size();++column) {
+                auto* item=list->item(index,column);
+                if (!item) {
+                    item=new QTableWidgetItem;
+                    list->setItem(index,column,item);
+                }
+                const bool left=column==0 || (column==1&&!list->horizontalHeader()->isHidden());
+                item->setTextAlignment((left?Qt::AlignLeft:Qt::AlignRight)|Qt::AlignVCenter);
+                if (item->text()!=cells[column]) { item->setText(cells[column]); item->setToolTip(cells[column]); }
+            }
+        }
+        empty->setText(catalog.isEmpty()?"导入隧道配置后即可查看 Peer。":
+            profile?"暂无 Peer 数据。":"连接隧道或打开对应配置查看 Peer。");
+        empty->setVisible(count==0);
+        displayPeer();
+    };
+    connect(controller_,&AppController::wireGuardChanged,body,refresh);
+    connect(controller_,&AppController::profilesChanged,body,refresh);
+    connect(controller_,&AppController::stateChanged,body,refresh);
+    connect(UiTheme::notifier(),&UiTheme::AppearanceNotifier::changed,body,refresh);
+    refresh();
+    return tunnelScroll_;
 }
 
 void MainWindow::pasteWireGuard(const QString& id) {
@@ -157,7 +464,7 @@ void MainWindow::reviewWireGuardImport(const QString& path,QByteArray pasted,QDi
         if (result.ok && result.data.value("kind")=="mihomo") {
             if (!id.isEmpty()) {
                 presentTask(guard);
-                preview->setText("该文件是 Mihomo 配置。请选择 WireGuard CONF。");
+                preview->setText("该文件是代理配置。请选择 WireGuard CONF。");
                 return;
             }
             guard->accept();
@@ -221,6 +528,7 @@ void MainWindow::showWireGuardProfile(const QString& id,int tab) {
     dialog->setAttribute(Qt::WA_DeleteOnClose);
     dialog->setObjectName("wireGuardProfileDetail");
     dialog->setProperty("profileId",id);
+    dialog->setProperty("editorOwnsScrolling",true);
     dialog->setWindowTitle(name);
     auto* layout=new QVBoxLayout(dialog);
     layout->setContentsMargins(4,6,4,8);
@@ -251,6 +559,8 @@ void MainWindow::showWireGuardProfile(const QString& id,int tab) {
     tabs->setObjectName("wireGuardDetailTabs");
     tabs->setDocumentMode(true);
     tabs->tabBar()->setDrawBase(false);
+    tabs->tabBar()->setExpanding(false);
+    tabs->tabBar()->setProperty("engineTabs",true);
     layout->addWidget(tabs,1);
 
     auto* network=new QWidget;
@@ -272,7 +582,7 @@ void MainWindow::showWireGuardProfile(const QString& id,int tab) {
     targetResult->setObjectName("wireGuardTargetResult");
     targetForm->addRow(targetResult);
     networkLayout->addStretch();
-    tabs->addTab(network,"网络");
+    tabs->addTab(tabViewport(network),"网络");
 
     auto* peersPage=new QWidget;
     auto* peerLayout=new QVBoxLayout(peersPage);
@@ -283,6 +593,8 @@ void MainWindow::showWireGuardProfile(const QString& id,int tab) {
     auto* peerTable=new QTableWidget(0,4);
     peerTable->setObjectName("wireGuardPeerTable");
     peerTable->setHorizontalHeaderLabels({"Peer","最近握手","接收","发送"});
+    const auto peerAlignment=[](int column) { return Qt::AlignVCenter|(column<2?Qt::AlignLeft:Qt::AlignRight); };
+    for (int col=0;col<peerTable->columnCount();++col) peerTable->horizontalHeaderItem(col)->setTextAlignment(peerAlignment(col));
     peerTable->horizontalHeader()->setSectionResizeMode(QHeaderView::Stretch);
     peerTable->verticalHeader()->hide();
     peerTable->setEditTriggers(QAbstractItemView::NoEditTriggers);
@@ -300,20 +612,31 @@ void MainWindow::showWireGuardProfile(const QString& id,int tab) {
     auto* versionForm=groupedFields(versionsLayout);
     auto* versionStatus=valueRow(versionForm,"版本状态","wireGuardVersionStatus");
     auto* differences=valueRow(versionForm,"变化","wireGuardDifferences");
+    auto* versionConnect=new QPushButton("应用候选并连接");
+    versionConnect->setObjectName("wireGuardConnectCandidate");
+    versionConnect->setProperty("primary",true);
+    auto* candidateActions=new QHBoxLayout;
+    candidateActions->addWidget(versionConnect);
+    candidateActions->addStretch();
+    versionForm->addRow(candidateActions);
+    auto* previousForm=groupedFields(versionsLayout);
+    auto* previous=new QPushButton("连接此版本");
+    previous->setObjectName("wireGuardPreviousVersion");
+    auto* previousActions=new QHBoxLayout;
+    previousActions->addStretch();
+    previousActions->addWidget(previous);
+    previousForm->addRow("上次生效版本",previousActions);
     auto* file=new QPushButton("选择 CONF…");
     file->setObjectName("wireGuardReplaceFile");
     auto* paste=new QPushButton("粘贴配置…");
     paste->setObjectName("wireGuardReplacePaste");
-    auto* previous=new QPushButton("连接上次版本");
-    previous->setObjectName("wireGuardPreviousVersion");
     auto* versionActions=new QHBoxLayout;
     versionActions->addWidget(file);
     versionActions->addWidget(paste);
     versionActions->addStretch();
-    versionActions->addWidget(previous);
     versionsLayout->addLayout(versionActions);
     versionsLayout->addStretch();
-    tabs->addTab(versions,"版本");
+    tabs->addTab(tabViewport(versions),"版本");
 
     const auto checkTarget=[this,id,target,targetResult] {
         const auto* entry=tunnelProfile(*controller_,id);
@@ -334,8 +657,8 @@ void MainWindow::showWireGuardProfile(const QString& id,int tab) {
         targetResult->setText(found==list.cend()?source+"未覆盖此地址":source+"包含 "+*found);
     };
     connect(target,&QLineEdit::textChanged,dialog,checkTarget);
-    const auto redraw=[this,id,dialog,status,notice,tabs,toggle,previous,file,paste,addresses,routes,dns,observedRoutes,
-                       peerNote,peerTable,versionStatus,differences,checkTarget] {
+    const auto redraw=[this,id,dialog,status,notice,tabs,toggle,versionConnect,previous,previousForm,file,paste,
+                       addresses,routes,dns,observedRoutes,peerNote,peerTable,peerAlignment,versionStatus,differences,checkTarget] {
         const auto* current=tunnelProfile(*controller_,id);
         if (!current) { dialog->close(); return; }
         const auto observed=controller_->wireGuardObservation();
@@ -351,8 +674,9 @@ void MainWindow::showWireGuardProfile(const QString& id,int tab) {
             return !peer.toObject().value("last_handshake").toString().isEmpty();
         });
         const auto& state=controller_->state();
-        status->setText(phase=="connecting"?"正在连接隧道…":phase=="disconnecting"?"正在清理路由…":
-            own?(handshaken?"路由已生效 · Peer 已握手":"路由已生效 · 等待握手"):pending?"隧道待清理":"未连接");
+        const QString connection=phase=="connecting"?"正在连接隧道…":phase=="disconnecting"?"正在清理路由…":
+            own?(handshaken?"路由已生效 · Peer 已握手":"路由已生效 · 等待握手"):pending?"隧道待清理":"未连接";
+        status->setText(pendingVersion&&phase.isEmpty()?connection+" · 候选待启用":connection);
         const auto error=observed.value("error").toString();
         const QString reason=!error.isEmpty()?error:elsewhere?"请先断开正在使用的 WireGuard 配置":
             !own&&!block.isEmpty()?block:full?"此候选包含默认路由。当前仅支持 WireGuard 分流。":
@@ -363,12 +687,17 @@ void MainWindow::showWireGuardProfile(const QString& id,int tab) {
         const bool writable=!state.busy&&!state.exiting&&!state.readOnly;
         const bool canConnect=writable&&!elsewhere&&block.isEmpty()&&phase.isEmpty();
         toggle->setEnabled(!state.busy&&!state.exiting&&phase.isEmpty()&&(own||pending||(canConnect&&!full)));
+        const bool candidateOnPage=tabs->currentIndex()==2&&pendingVersion&&!own&&!pending;
+        toggle->setVisible(!candidateOnPage);
+        versionConnect->setVisible(candidateOnPage);
+        versionConnect->setEnabled(canConnect&&!full);
         file->setEnabled(writable);
         paste->setEnabled(writable);
         toggle->setProperty("version",current->candidate);
+        versionConnect->setProperty("version",current->candidate);
         const auto baseline=pendingVersion?current->active:current->lastGood;
         previous->setProperty("version",baseline);
-        previous->setVisible(!baseline.isEmpty());
+        previousForm->parentWidget()->setVisible(!baseline.isEmpty());
         previous->setEnabled(canConnect&&!own&&!pending);
 
         addresses->setText(scope(current->summary,"addresses"));
@@ -395,7 +724,11 @@ void MainWindow::showWireGuardProfile(const QString& id,int tab) {
                 own?ActivityTableModel::formatBytes(peer.value("tx_bytes").toString().toDouble()):QString("—")};
             for (int col=0;col<cells.size();++col) {
                 auto* cell=peerTable->item(index,col);
-                if (!cell) { cell=new QTableWidgetItem; peerTable->setItem(index,col,cell); }
+                if (!cell) {
+                    cell=new QTableWidgetItem;
+                    cell->setTextAlignment(peerAlignment(col));
+                    peerTable->setItem(index,col,cell);
+                }
                 if (cell->text()!=cells[col]) { cell->setText(cells[col]); cell->setToolTip(cells[col]); }
             }
         }
@@ -406,7 +739,7 @@ void MainWindow::showWireGuardProfile(const QString& id,int tab) {
         differences->setProperty("comparison",comparisonKey);
         differences->setText(baseline.isEmpty()?"首次保存暂无对照版本":"正在读取版本…");
         if (baseline.isEmpty()) return;
-        controller_->compareWireGuardVersions(id,[guard=QPointer<QLabel>(differences),comparisonKey](Result result) {
+        controller_->compareWireGuardVersions(id,[guard=QPointer<FieldValue>(differences),comparisonKey](Result result) {
             if (!guard||guard->property("comparison").toString()!=comparisonKey) return;
             if (!result.ok) { guard->setText(result.error); return; }
             QStringList changes;
@@ -441,6 +774,9 @@ void MainWindow::showWireGuardProfile(const QString& id,int tab) {
     });
     connect(previous,&QPushButton::clicked,dialog,[this,id,previous] {
         controller_->connectWireGuard(id,previous->property("version").toString());
+    });
+    connect(versionConnect,&QPushButton::clicked,dialog,[this,id,versionConnect] {
+        controller_->connectWireGuard(id,versionConnect->property("version").toString());
     });
     tabs->setCurrentIndex(tab);
     redraw();

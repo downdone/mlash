@@ -113,12 +113,10 @@ private slots:
             QCOMPARE(brand->font().pointSizeF(),19.2);
             const auto bounds=navigation->visualItemRect(navigation->item(0));
             const auto second=navigation->visualItemRect(navigation->item(1));
-            const auto third=navigation->visualItemRect(navigation->item(2));
             QCOMPARE(bounds.left(),second.left());
-            QCOMPARE(second.left(),third.left());
-            QCOMPARE(bounds.width(),third.width());
-            QVERIFY(bounds.bottom()<second.top() && second.bottom()<third.top());
-            QVERIFY(navigation->viewport()->rect().contains(third));
+            QCOMPARE(bounds.width(),second.width());
+            QVERIFY(bounds.bottom()<second.top());
+            QVERIFY(navigation->viewport()->rect().contains(second));
             QTest::mouseClick(navigation->viewport(),Qt::LeftButton,{},QPoint(bounds.right()-5,bounds.center().y()));
             QTRY_VERIFY(!navigation->property("keyboardFocus").toBool());
             const auto includesFocus=[](const QImage& image) {
@@ -138,6 +136,7 @@ private slots:
             save(&window,QString("vi-%1-keyboard-focus").arg(theme));
 
             const auto togglePosition=toggle->mapTo(sidebar,QPoint());
+            QVERIFY(togglePosition.x()>brand->parentWidget()->mapTo(sidebar,QPoint()).x());
             const auto settingsPosition=settings->mapTo(sidebar,QPoint());
             const int navigationTop=navigation->y();
             const auto initialHome=navigation->visualItemRect(navigation->item(0));
@@ -149,7 +148,7 @@ private slots:
             QVERIFY(toggle->hasFocus());
             QVERIFY(toggle->isVisible() && settings->isVisible() && navigation->isVisible());
             QVERIFY(!brand->isVisible());
-            QCOMPARE(toggle->mapTo(sidebar,QPoint()),togglePosition);
+            QTRY_COMPARE(toggle->mapTo(sidebar,QPoint()),QPoint((sidebar->width()-toggle->width())/2,togglePosition.y()));
             QCOMPARE(settings->mapTo(sidebar,QPoint()),settingsPosition);
             QCOMPARE(navigation->y(),navigationTop);
             for (int row=0;row<navigation->count();++row) {
@@ -163,7 +162,7 @@ private slots:
             }
             const auto home=navigation->visualItemRect(navigation->item(0));
             QCOMPARE(navigation->viewport()->mapTo(sidebar,home.topLeft()).y(),rowY);
-            QCOMPARE(window.currentRoute().view,int(ViewIds::Home));
+            QCOMPARE(window.currentRoute().view,int(ViewIds::Overview));
             const int contentLeft=content->x();
             const auto profiles=navigation->visualItemRect(navigation->item(1));
             QTest::mouseClick(navigation->viewport(),Qt::LeftButton,{},profiles.center());
@@ -172,10 +171,15 @@ private slots:
             save(&window,QString("vi-%1-collapsed").arg(theme));
 
             navigation->setFocus();
-            QTest::keyClick(navigation,Qt::Key_Down);
+            QTest::keyClick(navigation,Qt::Key_Up);
             QCOMPARE(window.currentRoute().view,int(ViewIds::Profiles));
             QTest::keyClick(navigation,Qt::Key_Return);
-            QTRY_COMPARE(window.currentRoute().view,int(ViewIds::Data));
+            QTRY_COMPARE(window.currentRoute().view,int(ViewIds::Overview));
+            auto* traffic=window.findChild<QToolButton*>("workspaceTraffic");
+            QVERIFY(traffic&&traffic->isVisible());
+            traffic->setFocus();
+            QTest::keyClick(traffic,Qt::Key_Space);
+            QCOMPARE(window.currentRoute(),workspaceRoute(WorkspaceArea::Proxy,WorkspacePage::Traffic));
             window.setPage(7);
             QCOMPARE(content->x(),contentLeft);
             settings->click();
@@ -195,7 +199,7 @@ private slots:
             QTRY_COMPARE(content->x(),sidebar->width());
             QVERIFY(navigation->isVisible());
             QCOMPARE(window.currentRoute().view,int(ViewIds::Settings));
-            QCOMPARE(toggle->mapTo(sidebar,QPoint()),togglePosition);
+            QTRY_COMPARE(toggle->mapTo(sidebar,QPoint()),togglePosition);
             QCOMPARE(settings->mapTo(sidebar,QPoint()),settingsPosition);
             window.navigate(Route{ViewIds::Home});
         }
@@ -225,8 +229,10 @@ private slots:
         QTest::keyClick(navigation,Qt::Key_Down);
         QTRY_COMPARE(navigation->currentRow(),1);
         QTest::keyClick(navigation,Qt::Key_Down);
-        QTRY_COMPARE(navigation->currentRow(),2);
+        QTRY_COMPARE(navigation->currentRow(),1);
         QTest::keyClick(navigation,Qt::Key_Up);
+        QTRY_COMPARE(navigation->currentRow(),0);
+        QTest::keyClick(navigation,Qt::Key_Down);
         QTRY_COMPARE(navigation->currentRow(),1);
         QCOMPARE(window.currentRoute().view,route);
         QTest::keyClick(navigation,Qt::Key_Return);
@@ -342,8 +348,8 @@ private slots:
                     QVERIFY(label && action && label->isVisible() && action->isVisible());
                     QVERIFY2(action->geometry().top()-label->geometry().bottom()<=12,
                         qPrintable(QString("empty-state gap: %1").arg(action->geometry().top()-label->geometry().bottom())));
-                    const int center=(label->geometry().top()+action->geometry().bottom())/2;
-                    QVERIFY(qAbs(center-view->viewport()->height()/2)<=12);
+                    QVERIFY(label->y()<=16);
+                    QCOMPARE(label->x(),action->x());
                 }
                 save(&window,QString("%1-%2x%3-page-%4").arg(scheme==Qt::ColorScheme::Dark?"dark":"light").arg(size.width()).arg(size.height()).arg(page));
             }
@@ -526,17 +532,68 @@ private slots:
         QTemporaryDir dir; auto platform=std::make_shared<ReviewPlatform>(); AppController controller(dir.path(),true,nullptr,platform);
         QSignalSpy initialized(&controller,&AppController::initialized),operations(&controller,&AppController::operationFinished); controller.initialize(); QTRY_COMPARE(initialized.size(),1);
         MainWindow window(&controller); window.show();
-        auto* navigation=window.findChild<QListWidget*>("navigation"); QCOMPARE(navigation->count(),3);
-        for (int row=0;row<3;++row) QCOMPARE(navigation->item(row)->text(),QStringList({"首页","配置","数据"})[row]);
+        auto* navigation=window.findChild<QListWidget*>("navigation"); QCOMPARE(navigation->count(),2);
+        for (int row=0;row<2;++row) QCOMPARE(navigation->item(row)->text(),QStringList({"总览","配置"})[row]);
         auto clickNavigation=[navigation](int row) { QTest::mouseClick(navigation->viewport(),Qt::LeftButton,{},navigation->visualItemRect(navigation->item(row)).center()); };
         auto* settingsNav=window.findChild<QToolButton*>("sidebarSettings"); QVERIFY(settingsNav);
         // K1：侧栏条目存的是视图 ID，点击按视图导航；分区页签宿主已随顶栏删除。
         QVERIFY(!window.findChild<QTabBar*>("sectionNavigation"));
         const int homePage=0, profilesPage=1, rulesPage=3, dataPage=4, logsPage=5, settingsPage=6;
-        clickNavigation(0); QCOMPARE(window.currentRoute().view,int(ViewIds::Home)); QCOMPARE(window.page(),homePage);
+        clickNavigation(0); QCOMPARE(window.currentRoute().view,int(ViewIds::Overview)); QCOMPARE(window.page(),homePage);
+        QCOMPARE(window.findChild<QLabel*>("overviewProxyEndpoint")->text(),QString("未监听"));
+        QCOMPARE(window.findChild<QLabel*>("overviewTunnelProfile")->text(),QString("还没有配置"));
+        auto* overview=window.findChild<QWidget*>("workspaceOverview");
+        auto* direct=overview->findChild<QLabel*>("overviewDirectStatus");
+        QTRY_VERIFY(direct->y()<overview->height()/2);
+        save(&window,"overview-empty");
+        auto* homeScroll=window.findChild<QScrollArea*>("homeScroll");
+        auto* runCard=window.findChild<QWidget*>("homeControlCard");
+        QVERIFY(homeScroll&&runCard);
+        window.navigate(workspaceRoute(WorkspaceArea::Proxy,WorkspacePage::Run));
+        QTRY_VERIFY(runCard->isVisible());
+        QTRY_COMPARE(runCard->mapTo(homeScroll->viewport(),QPoint()).y(),0);
+        auto* local=runCard->findChild<QWidget*>("mihomoHomeSection");
+        QVERIFY(!local->findChild<QLabel*>("engineStatus")->isVisible());
+        QVERIFY(local->findChild<QPushButton*>("mihomoLocalHomeToggle")->isVisible());
+        auto* routing=runCard->findChild<QPushButton*>("homeRouteRow");
+        QTRY_COMPARE(routing->mapTo(runCard,QPoint()).y(),local->geometry().bottom()+2);
+        save(&window,"proxy-no-config");
+        window.navigate(workspaceRoute(WorkspaceArea::Proxy,WorkspacePage::Members));
+        auto* nodesPage=window.findChild<QWidget*>("proxyNodesPage");
+        auto* nodesSetup=nodesPage->findChild<QWidget*>("proxyNodesSetup");
+        auto* nodesSetupAction=nodesSetup->findChild<QPushButton*>("proxyNodesSetupAction");
+        QVERIFY(nodesPage->isVisible()&&!runCard->isVisible()&&nodesSetupAction->isVisible());
+        QTRY_COMPARE(nodesSetup->y(),0);
+        QVERIFY(nodesSetup->height()<nodesPage->height()/2);
+        QCOMPARE(nodesSetupAction->text(),QString("导入配置"));
+        save(&window,"proxy-nodes-no-config");
+        nodesSetupAction->setFocus(Qt::TabFocusReason);
+        QTest::keyClick(nodesSetupAction,Qt::Key_Space);
+        QCOMPARE(window.currentRoute().view,int(ViewIds::Profiles));
+        QTRY_VERIFY(window.findChild<QLineEdit*>("profileImportInput")->isVisible());
+        window.setPage(2);
+        QVERIFY(runCard->isVisible()&&!nodesPage->isVisible());
+        auto route=workspaceRoute(WorkspaceArea::Proxy,WorkspacePage::Traffic);
+        window.navigate(route);
+        auto* trafficReason=window.findChild<QLabel*>("trafficNextReason");
+        QVERIFY(trafficReason->isVisible()&&trafficReason->alignment().testFlag(Qt::AlignLeft));
+        route.tab=int(ViewIds::DataTab::Connections);
+        window.navigate(route);
+        auto* table=window.findChild<QTableView*>("connectionsTable");
+        auto* connectionReason=table->findChild<QLabel*>("emptyState");
+        QTRY_VERIFY(connectionReason->isVisible()&&connectionReason->y()<=16);
+        route.tab=int(ViewIds::DataTab::Tests);
+        window.navigate(route);
+        auto* testReason=window.findChild<QLabel*>("websiteSetupReason");
+        QVERIFY(testReason->isVisible()&&testReason->alignment().testFlag(Qt::AlignLeft));
+        window.navigate(workspaceRoute(WorkspaceArea::Proxy,WorkspacePage::Logs));
+        auto* logReason=window.findChild<QLabel*>("logEmptyState");
+        QTRY_VERIFY(logReason->isVisible()&&logReason->y()<=16);
+        save(&window,"proxy-logs-empty");
         clickNavigation(1); QCOMPARE(window.currentRoute().view,int(ViewIds::Profiles)); QCOMPARE(window.page(),profilesPage);
         window.setPage(rulesPage); QCOMPARE(window.currentRoute().view,int(ViewIds::Rules));
-        clickNavigation(2); QCOMPARE(window.currentRoute().view,int(ViewIds::Data)); QCOMPARE(window.page(),dataPage);
+        window.findChild<QToolButton*>("workspaceTraffic")->click();
+        QCOMPARE(window.currentRoute(),workspaceRoute(WorkspaceArea::Proxy,WorkspacePage::Traffic)); QCOMPARE(window.page(),dataPage);
         window.setPage(logsPage); QCOMPARE(window.currentRoute().view,int(ViewIds::Data)); QCOMPARE(window.currentRoute().tab,int(ViewIds::DataTab::Logs));
         settingsNav->click(); QCOMPARE(window.currentRoute().view,int(ViewIds::Settings)); QCOMPARE(window.page(),settingsPage); QVERIFY(settingsNav->isChecked()); QCOMPARE(navigation->currentRow(),-1);
         clickNavigation(0); QCOMPARE(window.page(),homePage); QVERIFY(!settingsNav->isChecked()); window.setPage(0);
@@ -588,6 +645,11 @@ private slots:
         QVERIFY(!window.findChild<QPushButton*>("configureDns")); QVERIFY(!window.findChild<QPushButton*>("openOutboundFromSettings")); QVERIFY(!window.findChild<QPushButton*>("proxyManagement"));
         // K7：远程和本地使用同一张卡片网格；卡片激活配置，就近菜单进入内容工作区。
         Profile first; first.id=newId(); first.name="订阅甲"; first.sourceType="url"; first.source="https://example.test/a"; first.candidate=newId(); Profile second=first; second.id=newId(); second.name="订阅乙"; const_cast<QVector<Profile>&>(controller.profiles())={first,second}; controller.profilesChanged();
+        window.navigate(workspaceRoute(WorkspaceArea::Proxy,WorkspacePage::Members));
+        QVERIFY(nodesSetupAction->isVisible()&&!runCard->isVisible());
+        QCOMPARE(nodesSetupAction->text(),QString("选择配置"));
+        nodesSetupAction->click();
+        QCOMPARE(window.currentRoute().view,int(ViewIds::Profiles));
         auto* cards=window.findChild<QListView*>("profileList"); QVERIFY(cards);
         QTRY_COMPARE(cards->model()->rowCount(),2);
         QTest::mouseClick(qobject_cast<ProfileCardWidget*>(cards->indexWidget(cards->model()->index(0,0)))->button(ProfileCardWidget::Action::Menu),Qt::LeftButton);

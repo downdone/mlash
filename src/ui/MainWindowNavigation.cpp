@@ -72,18 +72,18 @@
 namespace mlash {
 using namespace WindowParts;
 void MainWindow::syncSectionNavigation(const Route& route) {
-    // 三个工作区入口与底部设置共用同一路由；规则深链归属配置。
-    const int row = route.view == ViewIds::Rules ? ViewIds::Profiles : route.view;
+    const int row=route.view==ViewIds::Rules?ViewIds::Profiles:
+        (route.area==WorkspaceArea::Global&&(route.view==ViewIds::Home||route.view==ViewIds::Data)?ViewIds::Overview:route.view);
     { const QSignalBlocker block(navigation_);
+      int current=-1;
       for (int i=0;i<navigation_->count();++i) {
           auto* item=navigation_->item(i);
-          item->setData(ActiveNavigationRole,item->data(Qt::UserRole).toInt()==row);
+          const bool active=item->data(Qt::UserRole).toInt()==row;
+          item->setData(ActiveNavigationRole,active);
+          if (active) current=i;
       }
-      if (row == ViewIds::Settings) {
-          navigation_->clearSelection();
-          navigation_->setCurrentRow(-1);
-      }
-      else for (int i = 0; i < navigation_->count(); ++i) if (navigation_->item(i)->data(Qt::UserRole).toInt() == row) { navigation_->setCurrentRow(i); break; } }
+      if (current<0) navigation_->clearSelection();
+      navigation_->setCurrentRow(current); }
     settingsNav_->setChecked(row==ViewIds::Settings);
     settingsNav_->setIcon(UiIcons::icon(UiIcons::Glyph::Settings,settingsNav_->isChecked()?UiTheme::Brand:UiTheme::Secondary));
     if (dataTabs_) {
@@ -91,11 +91,15 @@ void MainWindow::syncSectionNavigation(const Route& route) {
         const int tab = route.view == ViewIds::Data ? currentDataTab() : dataTabs_->currentIndex();
         if (tab >= 0 && tab < dataTabs_->count() && dataTabs_->currentIndex() != tab) dataTabs_->setCurrentIndex(tab);
     }
+    if (route.area!=WorkspaceArea::Global) {
+        workspace_.area=route.area;
+        workspace_.routes[route.area==WorkspaceArea::Tunnel?1:0]=route;
+    }
+    updateWorkspaceNavigation();
     updateTopbar();
     updateWindowTitle();
 }
-// 视图 ID 与页面栈下标一一对应（K 版五个视图）。保留成函数是为了让所有调用点
-// 继续经过同一处映射；不再有偏移。
+// 视图 ID 与页面栈下标一一对应。
 int MainWindow::stackIndex(int view) { return view; }
 void MainWindow::navigate(Route route) {
     // 旧编号只允许出现在 setPage()/GuiHost 这类整数入口，那里已经过 fromLegacyPage()。
@@ -156,6 +160,7 @@ void MainWindow::navigate(Route route) {
         { const QSignalBlocker block(dataTabs_); dataTabs_->setCurrentIndex(tab); }
     }
     route_ = route;
+    updateWorkspacePage();
 
     if (route.view != ViewIds::Data) {
         // K6：四个页签的「正在采样」状态必须随视图一起收尾，否则从旧入口
@@ -184,6 +189,7 @@ void MainWindow::enterView(int view, const Route& route) {
     switch (view) {
     case ViewIds::Home:   // 首页 / 节点：刷新运行状态，可见时启动 8 秒轮询
         updateHome();
+        updateActions();
         controller_->setHomeVisible(isVisible());
         controller_->refresh();
         if (isVisible()) refreshTimer_.start(8000);
@@ -209,7 +215,6 @@ void MainWindow::enterView(int view, const Route& route) {
         updateLogs();
         updateHome();
         if (dataTabs_ && dataTabs_->currentIndex() == int(ViewIds::DataTab::Tests)) websitePage_->setActive(isVisible(), selectedGroup_);
-        if (dataTabs_ && dataTabs_->currentIndex() == int(ViewIds::DataTab::Logs)) controller_->setDiagnosticsVisible(isVisible() && !logsPaused_);
         break;
     default:
         break;
@@ -259,12 +264,14 @@ QWidget* MainWindow::showTool(const QString& tool, const QString& objectKey, con
 void MainWindow::setPage(int index) { navigate(fromLegacyPage(index)); }
 Route MainWindow::currentRoute() const { return route_; }
 void MainWindow::applyHomeAnchor(HomeAnchor anchor) {
-    if (anchor != HomeAnchor::Nodes || !homeScroll_ || !nodeSection_) return;
+    if (route_.area==WorkspaceArea::Proxy || anchor != HomeAnchor::Nodes || !homeScroll_ || !nodeSection_) return;
     // 节点区已并入首页（ADR 0048）：入口 2 把共用的滚动视图带到节点区首行。
     // 布局尚未完成时 ensureWidgetVisible 会算错位置，所以等一轮事件循环。
     const auto scroll = qobject_cast<QScrollArea*>(homeScroll_.data());
     const QPointer<QWidget> section = nodeSection_;
-    QTimer::singleShot(0, this, [scroll, section] { if (scroll && section) scroll->ensureWidgetVisible(section, 0, 0); });
+    QTimer::singleShot(0, this, [scroll, section] {
+        if (scroll && section && scroll->isAncestorOf(section)) scroll->ensureWidgetVisible(section, 0, 0);
+    });
 }
 void MainWindow::showOutboundDiagnostics() { showTool("outbound",{},[this] { outboundDialog_=new OutboundDialog(controller_,this); return outboundDialog_.data(); }); }
 TaskWorkspace* MainWindow::taskWorkspace() {
@@ -342,7 +349,10 @@ void MainWindow::updateTopbar() {
     // With no configuration the Home empty state is the sole import action.
     const bool configActions=route_.view==ViewIds::Home && !controller_->profiles().isEmpty();
     if (auto* button=findChild<QToolButton*>("toolbarAdd")) { button->setVisible(configActions); button->setIcon(UiIcons::icon(UiIcons::Glyph::Plus,UiTheme::Brand)); }
-    WindowParts::updateTopbar(this, route_.view==ViewIds::Rules?QString("配置"):ViewIds::title(route_.view), ViewIds::subtitle(route_.view), status, dotState);
+    const auto scopedTitle=workspaceTitle(route_);
+    const auto title=!scopedTitle.isEmpty()?scopedTitle:
+        route_.view==ViewIds::Rules?QString("配置"):ViewIds::title(route_.view);
+    WindowParts::updateTopbar(this,title,ViewIds::subtitle(route_.view),status,dotState);
     if (topbarStatusText_) topbarStatusText_->setToolTip(sentence.line1);
 }
 void MainWindow::updateWindowTitle() {

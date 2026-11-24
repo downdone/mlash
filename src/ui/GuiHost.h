@@ -23,6 +23,7 @@ private:
     int memberView_ = -1;
     QByteArray geometry_;
     QJsonObject nodeBookmark_;
+    WorkspaceBookmark workspaceBookmark_;
     QPointer<MainWindow> window_;
     quint64 scheduleGeneration_ = 0;
 };

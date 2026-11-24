@@ -11,10 +11,42 @@ const char* viewName(int view) {
     case ViewIds::Rules: return "规则";
     case ViewIds::Data: return "数据";
     case ViewIds::Settings: return "设置";
+    case ViewIds::Overview: return "总览";
+    case ViewIds::Tunnel: return "隧道";
     default: return "";
     }
 }
 } // namespace
+
+Route workspaceRoute(WorkspaceArea area, WorkspacePage page) {
+    if (area==WorkspaceArea::Global) return Route{ViewIds::Overview};
+    Route target{area==WorkspaceArea::Proxy?ViewIds::Home:ViewIds::Tunnel};
+    target.area=area;
+    if (page==WorkspacePage::Members) target.anchor=HomeAnchor::Nodes;
+    if (page==WorkspacePage::Traffic || page==WorkspacePage::Logs) {
+        target.view=ViewIds::Data;
+        target.tab=int(page==WorkspacePage::Traffic?ViewIds::DataTab::Traffic:ViewIds::DataTab::Logs);
+    }
+    return target;
+}
+
+WorkspacePage workspacePage(const Route& route) {
+    if (route.view==ViewIds::Data)
+        return route.tab==int(ViewIds::DataTab::Logs)?WorkspacePage::Logs:WorkspacePage::Traffic;
+    return route.anchor==HomeAnchor::Nodes?WorkspacePage::Members:WorkspacePage::Run;
+}
+
+QString workspaceTitle(const Route& route) {
+    if (route.area==WorkspaceArea::Global) return {};
+    const bool tunnel=route.area==WorkspaceArea::Tunnel;
+    const QString name=tunnel?"隧道":"代理";
+    const auto label=[&] {
+        if (route.view==ViewIds::Data) return ViewIds::dataTabName(ViewIds::dataTabFromIndex(route.tab));
+        if (route.anchor==HomeAnchor::Nodes) return tunnel?QString("Peer"):QString("节点");
+        return QString("运行");
+    }();
+    return name+" / "+label;
+}
 
 Route fromLegacyPage(int page) {
     const auto target = ViewIds::fromLegacy(page);
@@ -28,9 +60,16 @@ Route fromLegacyPage(int page) {
 }
 
 bool isRoutableView(const Route& route) {
-    if (route.view == ViewIds::Home) return route.anchor == HomeAnchor::Control || route.anchor == HomeAnchor::Nodes;
+    if (route.area!=WorkspaceArea::Global && route.area!=WorkspaceArea::Proxy && route.area!=WorkspaceArea::Tunnel) return false;
+    if (route.area==WorkspaceArea::Proxy && route.view!=ViewIds::Home && route.view!=ViewIds::Data) return false;
+    if (route.area==WorkspaceArea::Tunnel && route.view!=ViewIds::Tunnel && route.view!=ViewIds::Data) return false;
+    if (route.area==WorkspaceArea::Tunnel && route.view==ViewIds::Data && route.tab!=int(ViewIds::DataTab::Traffic)
+        && route.tab!=int(ViewIds::DataTab::Logs)) return false;
+    if (route.view==ViewIds::Tunnel && route.area!=WorkspaceArea::Tunnel) return false;
+    if (route.view == ViewIds::Home || route.view==ViewIds::Tunnel)
+        return route.anchor == HomeAnchor::Control || route.anchor == HomeAnchor::Nodes;
     const bool known = route.view == ViewIds::Profiles || route.view == ViewIds::Rules
-        || route.view == ViewIds::Data || route.view == ViewIds::Settings;
+        || route.view == ViewIds::Data || route.view == ViewIds::Settings || route.view==ViewIds::Overview;
     if (!known) return false;
     if (route.tab >= 0 && route.tab >= ViewIds::DataTabCount) return false;
     return true;
@@ -42,6 +81,8 @@ int toLegacyPage(const Route& route) {
 }
 
 QString routeTitle(const Route& route, const QString& categoryName) {
+    const auto workspace=workspaceTitle(route);
+    if (!workspace.isEmpty()) return "Mlash · "+workspace;
     const QString name = QString::fromUtf8(viewName(route.view));
     if (name.isEmpty()) return "Mlash";
     if (route.view == ViewIds::Settings && !categoryName.isEmpty()) return QString("Mlash · %1 › %2").arg(name, categoryName);

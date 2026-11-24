@@ -48,6 +48,8 @@ QString title(int view) {
     case Data:     return QStringLiteral("数据");
     case Settings: return QStringLiteral("设置");
     case Rules:    return QStringLiteral("规则");
+    case Overview: return QStringLiteral("总览");
+    case Tunnel:   return QStringLiteral("隧道");
     default:       return QStringLiteral("Mlash");
     }
 }

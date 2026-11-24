@@ -51,14 +51,14 @@ WebsiteTestsPage::WebsiteTestsPage(AppController* controller,QWidget* parent):QW
     layout->addLayout(summary);
     auto* setup=new QWidget; setup->setObjectName("websiteSetup");
     auto* setupLayout=new QVBoxLayout(setup);
-    setupLayout->setContentsMargins(16,20,16,20);
+    setupLayout->setContentsMargins(14,10,14,10);
     auto* setupReason=new QLabel;
     setupReason->setObjectName("websiteSetupReason");
-    setupReason->setAlignment(Qt::AlignHCenter); setupReason->setWordWrap(true);
+    setupReason->setAlignment(Qt::AlignLeft|Qt::AlignVCenter); setupReason->setWordWrap(true);
     setupLayout->addWidget(setupReason);
     auto* next=new QPushButton;
     next->setObjectName("websiteNextStep"); next->setProperty("primary",true);
-    setupLayout->addWidget(next,0,Qt::AlignHCenter);
+    setupLayout->addWidget(next,0,Qt::AlignLeft);
     connect(next,&QPushButton::clicked,this,[this] {
         const auto& state=controller_->state();
         if (state.activeProfile.isEmpty()) emit pageRequested(1);

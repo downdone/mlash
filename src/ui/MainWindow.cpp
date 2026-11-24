@@ -1,6 +1,7 @@
 #include "app/AppController.h"
 #include "TaskDialog.h"
 #include "MainWindow.h"
+#include "ProxyNodesPage.h"
 #include "BrandSignature.h"
 #include "WindowChrome.h"
 #include "ElidedLabel.h"
@@ -131,13 +132,16 @@ void MainWindow::updateSidebar() {
     auto* mark=brand->findChild<QLabel*>("brandMark");
     auto* toggle=sidebar->findChild<QToolButton*>("toggleSidebar");
     auto* header=toggle->parentWidget();
-    const int brandWidth=expandedWidth-2*style::geometry.sidebarInset-sidebarControlOffset-toggle->width()-header->layout()->spacing();
+    const int headerInset=sidebarCollapsed_?sidebarControlOffset:0;
+    header->layout()->setContentsMargins(headerInset,0,headerInset,0);
+    const int brandWidth=expandedWidth-2*style::geometry.sidebarInset-toggle->width()-header->layout()->spacing();
     const auto wordmarkSize=wordmark->sizeHint();
     const bool showWordmark=wordmarkSize.width()<=brandWidth;
     wordmark->setVisible(showWordmark);
     mark->setVisible(!showWordmark || wordmarkSize.width()+mark->width()+brand->layout()->spacing()<=brandWidth);
     brand->setVisible(!sidebarCollapsed_);
-    header->setFixedHeight(qMax(toggle->height(),wordmarkSize.height()));
+    header->setFixedSize(desired-2*style::geometry.sidebarInset,qMax(toggle->height(),wordmarkSize.height()));
+    header->layout()->setAlignment(toggle,sidebarCollapsed_?Qt::AlignCenter:Qt::AlignVCenter);
 
     if (navigation_->property("collapsedSidebar").toBool()!=sidebarCollapsed_) {
         navigation_->setProperty("collapsedSidebar",sidebarCollapsed_);
@@ -150,7 +154,14 @@ void MainWindow::updateSidebar() {
     const QString label=sidebarCollapsed_?QStringLiteral("展开导航"):QStringLiteral("收起导航");
     toggle->setAccessibleName(label);
     toggle->setToolTip(label);
-    if (widthChanged && centralWidget()) centralWidget()->layout()->activate();
+    settingsNav_->setToolButtonStyle(sidebarCollapsed_?Qt::ToolButtonIconOnly:Qt::ToolButtonTextBesideIcon);
+    settingsNav_->setFixedWidth(sidebarCollapsed_?UiTheme::SidebarItemHeight:desired-2*style::geometry.sidebarInset-sidebarControlOffset);
+    resizeWorkspaceNavigation();
+    if (widthChanged && centralWidget()) {
+        centralWidget()->layout()->activate();
+        sidebar->layout()->activate();
+        header->layout()->activate();
+    }
 }
 MainWindow::MainWindow(AppController* controller, QWidget* parent) : QMainWindow(parent), controller_(controller), model_(this), filter_(this) {
     setAcceptDrops(true);
@@ -166,16 +177,15 @@ MainWindow::MainWindow(AppController* controller, QWidget* parent) : QMainWindow
     layout->setContentsMargins(0,0,0,0); layout->setSpacing(0);
     auto* sidebar = new QWidget; sidebar->setObjectName("sidebar"); sidebar->setFixedWidth(UiTheme::SidebarWidth); sidebar->setAttribute(Qt::WA_StyledBackground); auto* sideLayout = new QVBoxLayout(sidebar); sideLayout->setContentsMargins(design::ShadowrocketStyle::geometry.sidebarInset,design::ShadowrocketStyle::geometry.sidebarInset,design::ShadowrocketStyle::geometry.sidebarInset,design::ShadowrocketStyle::geometry.sidebarInset); sideLayout->setSpacing(design::ShadowrocketStyle::geometry.sidebarGap);
     auto* brandHeader=new QWidget(sidebar); brandHeader->setObjectName("sidebarBrandHeader");
-    auto* brandLayout=new QHBoxLayout(brandHeader); brandLayout->setContentsMargins(sidebarControlOffset,0,0,0); brandLayout->setSpacing(6);
+    auto* brandLayout=new QHBoxLayout(brandHeader); brandLayout->setContentsMargins(0,0,0,0); brandLayout->setSpacing(6);
+    brandLayout->addWidget(makeBrandSignature(brandHeader,28,"sidebarBrand"),1);
     auto* toggleSidebar=new QToolButton(brandHeader);
     toggleSidebar->setObjectName("toggleSidebar"); toggleSidebar->setProperty("quiet",true);
     toggleSidebar->setFixedSize(32,32); toggleSidebar->setIconSize(QSize(17,17));
     toggleSidebar->setFocusPolicy(Qt::StrongFocus);
-    brandLayout->addWidget(toggleSidebar,0,Qt::AlignLeft | Qt::AlignVCenter);
-    brandLayout->addWidget(makeBrandSignature(brandHeader,28,"sidebarBrand"),1);
-    brandLayout->addStretch(0);
+    brandLayout->addWidget(toggleSidebar,0,Qt::AlignVCenter);
     sideLayout->addWidget(brandHeader); sideLayout->addSpacing(6);
-    navigation_ = new QListWidget(sidebar); navigation_->setObjectName("navigation"); navigation_->addItems({"首页", "配置", "数据"});
+    navigation_ = new QListWidget(sidebar); navigation_->setObjectName("navigation"); navigation_->addItems({"总览", "配置"});
     navigation_->setItemDelegate(new SidebarNavigationDelegate(navigation_));
     navigation_->setViewMode(QListView::ListMode);
     navigation_->setSpacing(design::ShadowrocketStyle::geometry.sidebarGap);
@@ -183,7 +193,7 @@ MainWindow::MainWindow(AppController* controller, QWidget* parent) : QMainWindow
     navigation_->setFrameShape(QFrame::NoFrame); navigation_->setVerticalScrollBarPolicy(Qt::ScrollBarAlwaysOff); navigation_->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
     navigation_->setMouseTracking(true);
     navigation_->setAccessibleName("工作区导航");
-    const QList<int> pageOrder{ViewIds::Home,ViewIds::Profiles,ViewIds::Data};
+    const QList<int> pageOrder{ViewIds::Overview,ViewIds::Profiles};
     const int navigationRowHeight=design::ShadowrocketStyle::navigationRowHeight;
     for (int i=0;i<pageOrder.size();++i) {
         auto* item=navigation_->item(i);
@@ -192,6 +202,7 @@ MainWindow::MainWindow(AppController* controller, QWidget* parent) : QMainWindow
     }
     navigation_->setFixedHeight(navigation_->count()*(navigationRowHeight+2*navigation_->spacing()));
     sideLayout->addWidget(navigation_);
+    sideLayout->addWidget(workspaceNavigation());
     sideLayout->addStretch(1);
     // 常驻状态条（分层设计 P1）：四段文案由 statusSentence 统一产出，与托盘 tooltip 同源。
     statusButton_ = new QToolButton(sidebar); statusButton_->setObjectName("sidebarStatus"); statusButton_->setAccessibleName("当前运行状态，单击返回首页"); statusButton_->setCursor(Qt::PointingHandCursor);
@@ -201,7 +212,7 @@ MainWindow::MainWindow(AppController* controller, QWidget* parent) : QMainWindow
     statusLine1_ = new ElidedLabel(statusButton_); statusLine1_->setObjectName("sidebarStatusLine1"); statusLines->addWidget(statusLine1_);
     statusLine2_ = new ElidedLabel(statusButton_); statusLine2_->setObjectName("sidebarStatusLine2"); statusLines->addWidget(statusLine2_);
     statusLayout->addLayout(statusLines, 1); statusButton_->hide();
-    connect(statusButton_, &QToolButton::clicked, this, [this] { navigate(Route{ViewIds::Home, kNoCategory, HomeAnchor::Control}); });
+    connect(statusButton_, &QToolButton::clicked, this, [this] { navigate(Route{ViewIds::Overview}); });
     auto* divider=new QFrame(sidebar); divider->setObjectName("sidebarDivider"); divider->setFixedHeight(1); sideLayout->addWidget(divider); sideLayout->addSpacing(6);
     settingsNav_=new QToolButton(sidebar); settingsNav_->setObjectName("sidebarSettings"); settingsNav_->setText("设置");
     settingsNav_->setIconSize(QSize(18,18)); settingsNav_->setToolButtonStyle(Qt::ToolButtonIconOnly); settingsNav_->setCheckable(true);
@@ -218,14 +229,22 @@ MainWindow::MainWindow(AppController* controller, QWidget* parent) : QMainWindow
         updateSidebar();
     });
     connect(settingsNav_,&QToolButton::clicked,this,[this] { navigate(Route{ViewIds::Settings}); });
-    // K1/K6：页面栈只有五个视图，顺序与 ViewIds 一致；数据页内部再分四个页签。
+    // 视图栈顺序与 ViewIds 一致。工作区流量和日志复用同一数据页。
     pages_ = new QStackedWidget; pages_->setObjectName("mainPages");
     auto pagePolicy=pages_->sizePolicy(); pagePolicy.setRetainSizeWhenHidden(true); pages_->setSizePolicy(pagePolicy);
-    pages_->addWidget(homePage());                 // ViewIds::Home
+    proxyPages_=new QStackedWidget;
+    proxyPages_->setObjectName("proxyPages");
+    proxyPages_->addWidget(homePage());
+    proxyNodesPage_=new ProxyNodesPage;
+    connect(proxyNodesPage_,&ProxyNodesPage::profileSetupRequested,this,&MainWindow::openProfileSetup);
+    proxyPages_->addWidget(proxyNodesPage_);
+    pages_->addWidget(proxyPages_);                // ViewIds::Home
     pages_->addWidget(profilesPage());             // ViewIds::Profiles
     pages_->addWidget(rulesPage());                // ViewIds::Rules
     pages_->addWidget(dataPage());                 // ViewIds::Data
     pages_->addWidget(settingsPage());             // ViewIds::Settings
+    pages_->addWidget(overviewPage());             // ViewIds::Overview
+    pages_->addWidget(tunnelPage());               // ViewIds::Tunnel
     // K6：「测试」槽位是 dataPage() 里占位的空 QWidget。直接 addWidget 会把它留在末位，
     // 删掉占位控件后索引又会前移，页签与面板随即错位；所以按占位的位置 insertWidget。
     websitePage_=new WebsiteTestsPage(controller_);
@@ -399,7 +418,7 @@ MainWindow::MainWindow(AppController* controller, QWidget* parent) : QMainWindow
             void onEnter(const Route& route) override { window->enterView(view, route); }
             void onLeave() override { window->leaveView(view); }
         };
-        for (int view : {ViewIds::Home, ViewIds::Profiles, ViewIds::Rules, ViewIds::Data, ViewIds::Settings}) pageRouter_.registerPage(view, new Page(this, view));
+        for (int view=0;view<ViewIds::Count;++view) pageRouter_.registerPage(view, new Page(this, view));
     }
 }
 void MainWindow::applyAppearance() {
@@ -427,3 +446,4 @@ MainWindow::~MainWindow() {
     if (outboundDialog_) delete outboundDialog_.data();
     NodePresentation::clearTransientCache(); if (connectionOptions_) connectionOptions_->flushPreferences(); controller_->setHomeVisible(false); controller_->setWebsiteTestsVisible(false); controller_->clearWebsiteTests(); controller_->setRulesVisible(false); controller_->setConnectionsVisible(false); controller_->setDiagnosticsVisible(false); }
 }
+

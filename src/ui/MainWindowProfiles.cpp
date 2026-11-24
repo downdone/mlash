@@ -467,6 +467,9 @@ void MainWindow::wireProfileList(QListView* list) {
                 case Action::ReviewUpdate:
                     if (index.data(ProfileRowModel::HasCandidate).toBool()) openProfileTask(id,"candidate");
                     break;
+                case Action::Open:
+                    openProfileTask(id,"nodes");
+                    break;
                 case Action::Refresh:
                     if (writable() && index.data(ProfileRowModel::CanRefresh).toBool()) controller_->updateProfile(id);
                     break;
@@ -488,6 +491,10 @@ void MainWindow::wireProfileList(QListView* list) {
         const bool enabled=writable();
         for (int row=0;row<list->model()->rowCount();++row)
             if (auto* card=qobject_cast<ProfileCardWidget*>(list->indexWidget(list->model()->index(row,0)))) card->setWritable(enabled);
+    });
+    connect(controller_,&AppController::stateChanged,list,[this] {
+        const auto& state=controller_->state();
+        profileRowsModel_->setState(state.activeProfile,state.ready);
     });
     connect(qApp,&QApplication::focusChanged,list,[list](QWidget*,QWidget* focused) {
         const auto* card=focused?qobject_cast<ProfileCardWidget*>(focused->parentWidget()):nullptr;

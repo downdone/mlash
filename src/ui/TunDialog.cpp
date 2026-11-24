@@ -17,14 +17,43 @@
 #include <QHeaderView>
 #include <QVBoxLayout>
 #include <QFormLayout>
+#include <QFrame>
 #include <QPointer>
+#include <QStyle>
 namespace mlash {
 TunDialog::TunDialog(AppController* c,QWidget* parent):TaskDialog(parent),controller_(c),initial_(c->settings()) {
     setAttribute(Qt::WA_DeleteOnClose); setObjectName("tunDialog"); setWindowTitle("TUN 与权限服务"); resize(640,500);
     auto* outer=new QVBoxLayout(this); auto* scroll=new QScrollArea; scroll->setWidgetResizable(true); scroll->setFrameShape(QFrame::NoFrame); auto* body=new QWidget; auto* layout=new QVBoxLayout(body); layout->setContentsMargins(4,4,4,4); layout->setSpacing(10);
-    layout->addWidget(contextNote("Windows 服务管理需要管理员授权。","通过虚拟网卡接管流量，界面保持普通权限。安装、修复和移除服务需要 Windows 管理员授权。"));
-    status_=new QLabel("正在读取服务…"); status_->setTextFormat(Qt::PlainText); status_->setWordWrap(true); status_->setObjectName("tunServiceStatus"); layout->addWidget(status_);
-    auto* tools=new QHBoxLayout; install_=new QPushButton("安装服务…"); install_->setObjectName("installTunService"); repair_=new QPushButton("修复服务…"); repair_->setObjectName("repairTunService"); remove_=new QPushButton("移除服务…"); remove_->setObjectName("removeTunService"); refresh_=new QPushButton("刷新"); refresh_->setObjectName("refreshTunService"); tools->addWidget(install_); tools->addWidget(repair_); tools->addWidget(remove_); tools->addStretch(); tools->addWidget(refresh_); layout->addLayout(tools);
+    const auto group=[layout](const QString& name,const QString& key) {
+        auto* heading=new QLabel(name);
+        heading->setObjectName("sectionTitle");
+        layout->addWidget(heading);
+        auto* surface=new QFrame;
+        surface->setObjectName("panel");
+        surface->setProperty("taskGroup",key);
+        auto* content=new QVBoxLayout(surface);
+        content->setContentsMargins(14,10,14,10);
+        content->setSpacing(8);
+        layout->addWidget(surface);
+        return content;
+    };
+    auto* serviceGroup=group("权限服务","service");
+    status_=new QLabel("正在读取服务…");
+    status_->setTextFormat(Qt::PlainText);
+    status_->setWordWrap(true);
+    status_->setObjectName("tunServiceStatus");
+    serviceGroup->addWidget(status_);
+    auto* tools=new QHBoxLayout;
+    install_=new QPushButton("安装服务…"); install_->setObjectName("installTunService"); install_->setProperty("primary",true);
+    repair_=new QPushButton("修复服务…"); repair_->setObjectName("repairTunService");
+    remove_=new QPushButton("移除服务…"); remove_->setObjectName("removeTunService"); remove_->setProperty("quiet",true);
+    refresh_=new QPushButton("刷新"); refresh_->setObjectName("refreshTunService"); refresh_->setProperty("quiet",true);
+    tools->addWidget(install_); tools->addWidget(repair_); tools->addWidget(remove_); tools->addStretch(); tools->addWidget(refresh_);
+    serviceGroup->addLayout(tools);
+    auto* authorization=new QLabel("安装、修复和移除服务需要 Windows 管理员授权。");
+    authorization->setProperty("secondary",true);
+    authorization->setWordWrap(true);
+    serviceGroup->addWidget(authorization);
     auto* wireGuardRow=new QHBoxLayout;
     wireGuardStatus_=new QLabel;
     wireGuardStatus_->setObjectName("wireGuardServiceCapability");
@@ -35,23 +64,24 @@ TunDialog::TunDialog(AppController* c,QWidget* parent):TaskDialog(parent),contro
     wireGuardCleanup_=new QPushButton("确认清理");
     wireGuardCleanup_->setObjectName("verifyWireGuardCleanup");
     wireGuardRow->addWidget(wireGuardCleanup_);
-    layout->addLayout(wireGuardRow);
+    serviceGroup->addLayout(wireGuardRow);
     connect(wireGuardCleanup_,&QPushButton::clicked,this,[this] {
         controller_->disconnectWireGuard(!controller_->wireGuardObservation().value("cleanup_pending").toBool());
     });
     connect(c,&AppController::wireGuardChanged,this,&TunDialog::updateActions);
-    auto* form=new QFormLayout; form->setVerticalSpacing(10); enabled_=new QCheckBox("启用 TUN"); enabled_->setObjectName("tunEnabledDraft"); enabled_->setChecked(initial_.tunEnabled); form->addRow("Mihomo 流量接管",enabled_);
+    auto* tunGroup=group("代理流量接管","mihomo");
+    auto* form=new QFormLayout; form->setVerticalSpacing(10); enabled_=new QCheckBox("启用 TUN"); enabled_->setObjectName("tunEnabledDraft"); enabled_->setChecked(initial_.tunEnabled); form->addRow("接管方式",enabled_);
     stack_=new CompactComboBox; stack_->setObjectName("tunStack"); stack_->addItem("混合（推荐）","mixed"); stack_->addItem("系统","system"); stack_->addItem("gVisor","gvisor"); stack_->setCurrentIndex(stack_->findData(initial_.tunStack)); form->addRow("协议栈",stack_);
-    strict_=new QCheckBox("减少绕过虚拟网卡的流量"); strict_->setObjectName("tunStrictRoute"); strict_->setChecked(initial_.tunStrictRoute); strict_->setToolTip("可能影响局域网或部分应用，默认关闭"); form->addRow("严格路由",strict_); layout->addLayout(form);
-    auto* advancedToggle=new QPushButton("高级选项与诊断"); advancedToggle->setObjectName("tunAdvancedToggle"); advancedToggle->setCheckable(true); layout->addWidget(advancedToggle,0,Qt::AlignLeft); auto* advanced=new QWidget; auto* advancedLayout=new QVBoxLayout(advanced); advancedLayout->setContentsMargins(0,0,0,0); auto* advancedForm=new QFormLayout;
+    strict_=new QCheckBox("减少绕过虚拟网卡的流量"); strict_->setObjectName("tunStrictRoute"); strict_->setChecked(initial_.tunStrictRoute); strict_->setToolTip("可能影响局域网或部分应用，默认关闭"); form->addRow("严格路由",strict_); tunGroup->addLayout(form);
+    auto* advancedToggle=new QPushButton("高级选项与诊断"); advancedToggle->setObjectName("tunAdvancedToggle"); advancedToggle->setCheckable(true); tunGroup->addWidget(advancedToggle,0,Qt::AlignLeft); auto* advanced=new QWidget; auto* advancedLayout=new QVBoxLayout(advanced); advancedLayout->setContentsMargins(0,0,0,0); auto* advancedForm=new QFormLayout;
     mtu_=new QSpinBox; mtu_->setObjectName("tunMtu"); mtu_->setRange(1280,9000); mtu_->setButtonSymbols(QAbstractSpinBox::NoButtons); mtu_->setValue(initial_.tunMtu); mtu_->setMaximumWidth(130); advancedForm->addRow("MTU",mtu_);
     dnsHijack_=new QCheckBox("接管 DNS 53 端口（推荐）"); dnsHijack_->setObjectName("tunDnsHijack"); dnsHijack_->setChecked(initial_.tunDnsHijack); advancedForm->addRow("DNS",dnsHijack_);
     routes_=new QPlainTextEdit(initial_.tunExcludeRoutes.join('\n')); routes_->setObjectName("tunExcludeRoutes"); routes_->setPlaceholderText("每行一个网段，如 192.168.0.0/16 或 fd00::/8"); routes_->setFixedHeight(80); advancedForm->addRow("排除网段",routes_); advancedLayout->addLayout(advancedForm);
     auto* routeNote=new QLabel("这些网段不经过 TUN，沿用原网络路由。"); routeNote->setWordWrap(true); advancedLayout->addWidget(routeNote);
     auto* operations=new QHBoxLayout; auto* interfaces=new QPushButton("查看网络接口…"); interfaces->setObjectName("inspectNetworkInterfaces"); operations->addWidget(interfaces); cleanup_=new QPushButton("重试确认清理"); cleanup_->setObjectName("retryTunCleanup"); operations->addWidget(cleanup_); operations->addStretch(); advancedLayout->addLayout(operations);
-    details_=new QPlainTextEdit; details_->setObjectName("tunServiceDetails"); details_->setReadOnly(true); details_->setMinimumHeight(100); advancedLayout->addWidget(details_); layout->addWidget(advanced); advanced->hide(); connect(advancedToggle,&QPushButton::toggled,advanced,&QWidget::setVisible);
-    validation_=new QLabel; validation_->setObjectName("tunValidationError"); validation_->setTextFormat(Qt::PlainText); validation_->setWordWrap(true); layout->addWidget(validation_);
-    hint_=new QLabel("TUN 与系统代理可独立开启。"); hint_->setTextFormat(Qt::PlainText); hint_->setWordWrap(true); hint_->setObjectName("secondaryText"); layout->addWidget(hint_); layout->addStretch(); scroll->setWidget(body); outer->addWidget(scroll,1);
+    details_=new QPlainTextEdit; details_->setObjectName("tunServiceDetails"); details_->setReadOnly(true); details_->setMinimumHeight(100); advancedLayout->addWidget(details_); tunGroup->addWidget(advanced); advanced->hide(); connect(advancedToggle,&QPushButton::toggled,advanced,&QWidget::setVisible);
+    validation_=new QLabel; validation_->setObjectName("tunValidationError"); validation_->setTextFormat(Qt::PlainText); validation_->setWordWrap(true); tunGroup->addWidget(validation_);
+    hint_=new QLabel; hint_->setTextFormat(Qt::PlainText); hint_->setWordWrap(true); hint_->setObjectName("secondaryText"); layout->addWidget(hint_); layout->addStretch(); scroll->setWidget(body); outer->addWidget(scroll,1);
     auto* buttons=new QDialogButtonBox(QDialogButtonBox::Close); buttons->button(QDialogButtonBox::Close)->setText("关闭"); apply_=buttons->addButton("应用",QDialogButtonBox::AcceptRole); apply_->setObjectName("applyTunOptions"); apply_->setProperty("primary",true); outer->addWidget(buttons);
     connect(buttons,&QDialogButtonBox::rejected,this,&QDialog::reject); connect(refresh_,&QPushButton::clicked,this,&TunDialog::inspect);
     connect(install_,&QPushButton::clicked,this,[this] { waiting_=true; updateActions(); controller_->manageTunService(true); }); connect(repair_,&QPushButton::clicked,this,[this] { waiting_=true; updateActions(); controller_->repairTunService(); }); connect(remove_,&QPushButton::clicked,this,[this] { waiting_=true; updateActions(); controller_->manageTunService(false); }); connect(cleanup_,&QPushButton::clicked,this,[this] { waiting_=true; cleaning_=true; updateActions(); controller_->retryTunCleanup(); });
@@ -83,9 +113,20 @@ void TunDialog::updateActions() {
         !controller_->settings().tunEnabled&&(pendingWireGuard||supportsWireGuard));
     const bool idle=!state.busy&&!state.exiting&&!state.readOnly&&!waiting_;
     const bool removable=!active&&!pendingWireGuard&&!wireGuardBusy&&!controller_->settings().tunEnabled&&!state.tunObserved&&state.core!=CoreState::Failed;
+    install_->setVisible(known_&&!installed_);
+    repair_->setVisible(known_&&installed_);
+    remove_->setVisible(known_&&installed_);
+    const bool needsRepair=known_&&installed_&&(!supportsWireGuard||!service_.value("core_matches").toBool());
+    if (repair_->property("primary").toBool()!=needsRepair) {
+        repair_->setProperty("primary",needsRepair);
+        repair_->style()->unpolish(repair_);
+        repair_->style()->polish(repair_);
+    }
     install_->setEnabled(idle&&!loading_&&known_&&!installed_&&removable); repair_->setEnabled(idle&&!loading_&&known_&&installed_&&removable); remove_->setEnabled(idle&&!loading_&&known_&&installed_&&removable); refresh_->setEnabled(!loading_&&!waiting_);
     const bool pending=service_.value("session").toObject().value("cleanup_pending").toBool()||(service_.value("recovery_marker").toBool()&&!service_.value("session").toObject().value("active").toBool()); cleanup_->setEnabled(idle&&known_&&installed_&&!state.ready&&(pending||state.core==CoreState::Failed));
     const auto checked=normalizeTunRoutes(routes_->toPlainText()); const auto options=draft(); const bool stale=tunOptionsJson(initial_)!=tunOptionsJson(controller_->settings()); const bool changed=tunOptionsJson(options)!=tunOptionsJson(initial_); validation_->setText(!checked.ok?checked.error:stale?QString("设置已在其他窗口改变，请重新打开；此处草稿保持不变"):enabled_->isChecked()&&known_&&installed_&&!service_.value("client_core_matches").toBool()?QString("启用需要随包锁定版本，请先在设置恢复随包内核"):QString());
+    validation_->setVisible(!validation_->text().isEmpty());
+    hint_->setVisible(!hint_->text().isEmpty());
     const bool canEnableTun=!active&&!pendingWireGuard&&!wireGuardBusy;
     apply_->setEnabled(idle&&!stale&&checked.ok&&changed&&(!options.tunEnabled||(canEnableTun&&known_&&installed_&&service_.value("client_core_matches").toBool()))); enabled_->setEnabled(idle&&canEnableTun&&(installed_||initial_.tunEnabled)); for (auto* widget:QList<QWidget*>{stack_,strict_,mtu_,dnsHijack_,routes_}) widget->setEnabled(idle);
 }

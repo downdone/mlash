@@ -15,7 +15,7 @@ class WrapLayout;
 class ProfileCardWidget final : public QFrame {
     Q_OBJECT
 public:
-    enum class Action { Refresh, Menu, ReviewUpdate };
+    enum class Action { Refresh, Menu, ReviewUpdate, Open };
     explicit ProfileCardWidget(QWidget* parent = nullptr);
     void setProfile(const QModelIndex& index);
     void setSelected(bool selected);
@@ -42,7 +42,7 @@ private:
     TextHeights textHeights(int width) const;
     QLabel *mark_, *status_, *statusMark_, *updateStatus_, *updateMark_, *source_, *time_;
     ProfileCardText* title_;
-    QAbstractButton *refresh_, *menu_, *reviewUpdate_;
+    QAbstractButton *refresh_, *menu_, *reviewUpdate_, *open_;
     QWidget* metadata_;
     WrapLayout* tags_;
     QWidget* statusLine_;

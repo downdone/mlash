@@ -14,7 +14,7 @@ class ProfileRowModel final : public QAbstractListModel {
 public:
     // data() 的自定义角色；列固定为 1。
     enum Role { RowRole = Qt::UserRole + 1, IsCurrent, Kind, ProfileId, Detail, UsageRatio, UsageText,
-                SourceLabel, UpdatedLabel, CanRefresh, HasCandidate, UpdateError, MixedEngines };
+                SourceLabel, UpdatedLabel, CanRefresh, HasCandidate, UpdateError, MixedEngines, IsRunning };
     explicit ProfileRowModel(QObject* parent = nullptr) : QAbstractListModel(parent) {}
     void setProfiles(QVector<Profile> profiles,QVector<WireGuardProfile> tunnels={}) {
         beginResetModel(); profiles_=std::move(profiles); tunnels_=std::move(tunnels); endResetModel();
@@ -41,7 +41,8 @@ public:
             case Qt::DisplayRole: return tunnel.name;
             case ProfileId: return tunnel.id;
             case Kind: return QString("wireguard");
-            case IsCurrent: return tunnel.id==wireGuardId_;
+            case IsCurrent:
+            case IsRunning: return tunnel.id==wireGuardId_;
             case SourceLabel: return QString("WireGuard 隧道");
             case UpdatedLabel: return QDateTime::fromString(tunnel.updated,Qt::ISODate).toLocalTime().toString("MM-dd HH:mm");
             case HasCandidate: return !tunnel.active.isEmpty() && tunnel.candidate!=tunnel.active;
@@ -60,9 +61,10 @@ public:
         case Kind: return profile->sourceType == QStringLiteral("url") ? QStringLiteral("remote") : QStringLiteral("local");
         case MixedEngines: return !tunnels_.isEmpty();
         case IsCurrent: return active;
+        case IsRunning: return active&&ready_;
         case SourceLabel: {
             if (profile->sourceType != "url")
-                return (tunnels_.isEmpty()?QString():QString("Mihomo · "))+
+                return (tunnels_.isEmpty()?QString():QString("代理 · "))+
                     (profile->source.isEmpty() ? QStringLiteral("本地快照") : QFileInfo(profile->source).fileName());
             const QUrl source(profile->source);
             if (source.host().isEmpty()) return QStringLiteral("远程订阅");
@@ -70,7 +72,7 @@ public:
             publicUrl.setScheme(source.scheme());
             publicUrl.setHost(source.host());
             publicUrl.setPort(source.port());
-            return (tunnels_.isEmpty()?QString():QString("Mihomo · "))+publicUrl.toDisplayString();
+            return (tunnels_.isEmpty()?QString():QString("代理 · "))+publicUrl.toDisplayString();
         }
         case UpdatedLabel: return stamp.isValid() ? when : QString();
         case CanRefresh: return !profile->source.isEmpty();

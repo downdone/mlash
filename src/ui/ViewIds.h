@@ -10,11 +10,13 @@ inline constexpr int Profiles = 1;
 inline constexpr int Rules = 2;
 inline constexpr int Data = 3;
 inline constexpr int Settings = 4;
+inline constexpr int Overview = 5;
+inline constexpr int Tunnel = 6;
 // 数据页的四个页签。顺序与原型一致：流量 / 连接 / 测试 / 日志。
 enum class DataTab { Traffic = 0, Connections = 1, Tests = 2, Logs = 3 };
 inline constexpr int DataTabCount = 4;
 
-inline constexpr int Count = 5;
+inline constexpr int Count = 7;
 
 // 旧入口 0–7 → 新视图 + 数据页签 + 分类。旧编号只在这里出现一次，用于持久化与快捷键兼容。
 struct LegacyTarget { int view; DataTab tab; int category; };

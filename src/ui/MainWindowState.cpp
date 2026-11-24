@@ -173,11 +173,12 @@ void MainWindow::updateState() {
     const bool activeProfileExists=std::any_of(controller_->profiles().cbegin(),controller_->profiles().cend(),
         [&state](const Profile& profile) { return profile.id==state.activeProfile; });
     const auto wg=controller_->wireGuardObservation();
-    const bool wireGuardOwnsRoutes=wg.value("active").toBool()||wg.value("cleanup_pending").toBool();
+    const bool wireGuardOwnsRoutes=wg.value("active").toBool()||wg.value("cleanup_pending").toBool()||
+        !wg.value("phase").toString().isEmpty();
     proxyEnabled_->setEnabled(!wireGuardOwnsRoutes && !state.busy && !state.exiting && !state.readOnly
         && (activeProfileExists || state.proxy==ProxyState::Owned || state.tunObserved));
     { const QSignalBlocker block(proxyEnabled_); proxyEnabled_->setChecked(state.proxy == ProxyState::Owned || state.tunObserved); }
-    proxyEnabled_->setToolTip(wireGuardOwnsRoutes ? "WireGuard 并行期间使用 Mihomo 本地代理" :
+    proxyEnabled_->setToolTip(wireGuardOwnsRoutes ? "隧道运行期间使用本地代理" :
         "代理总开关：接管系统代理（必要时先启动内核）；只影响遵循系统代理设置的应用。外部代理/PAC 需要确认接管。");
     autoStart_->setToolTip(!state.autoStartKnown ? "系统自启状态无法确认；应用设置时重新读取" : state.autoStartConflict ? "系统自启项指向其他路径，修改会被拒绝" : state.autoStartEnabled ? "系统当前已启用 Mlash 自启；勾选修改后点击应用" : "系统当前未启用 Mlash 自启；勾选修改后点击应用");
     for (auto* control : proxyModes_) { const QSignalBlocker block(control); control->setChecked(control->property("mode").toString() == state.mode); control->setEnabled(state.ready && !state.busy && !state.exiting && !state.readOnly); }
@@ -185,7 +186,7 @@ void MainWindow::updateState() {
     // 「最近操作」段不再被 lastError 覆盖：告警有自己的段（P4.1 / N10）。
     if (feedbackError_.isEmpty() && !recentFeedback_ && noticeOperation_ == OperationId::Unspecified && !state.busy) { message_->clear(); message_->setToolTip({}); }
     findChild<QToolButton*>("statusDetails")->setVisible(!message_->text().isEmpty());
-    updateActions(); updateCurrentMember(); updateHome();
+    updateActions(); updateCurrentMember(); updateHome(); updateWorkspaceNavigation();
 }
 void MainWindow::updateActions() {
     // updateActions 依赖所有页面的控件：页面全部构造完成（updateState 的首次调用）之后才可能
@@ -263,21 +264,42 @@ if (rulesSkeleton_)             rulesSkeleton_->setVisible(loading);
     if (settingsDraftHint_) settingsDraftHint_->setText(settingsApplying_?"正在校验并应用…":!settingsFeedback_.isEmpty()?settingsFeedback_:networkChanges>0?QString("有 %1 项未保存的网络设置").arg(networkChanges):QString()); settingsDraftHint_->setToolTip(settingsDraftHint_->text());
     enable("importGeoData", idle); enable("previewActiveConfig", !state.busy && !state.exiting && !state.activeProfile.isEmpty());
     if (cancelTestAction_) cancelTestAction_->setEnabled(controller_->testingNodes());
-    if (nodeEmpty_) nodeEmpty_->setVisible(filter_.rowCount()==0);
-    if (nodeCardsEmpty_) nodeCardsEmpty_->setVisible(filter_.rowCount()==0); nodeEmpty_->setText(model_.rowCount()>0 ? "没有匹配的节点\n请调整搜索条件" : controller_->profiles().isEmpty()?"暂无节点\n请先添加订阅":state.activeProfile.isEmpty()?"请先使用订阅":!state.ready ? "内核未就绪" : "使用所选订阅后，选择策略组查看节点"); nodeCardsEmpty_->setText(nodeEmpty_->text());
-
-    // 空态动作随原因变化：无匹配清筛选、无订阅去添加、有订阅未使用去选择、其余重试（R7）。
     {
-        const bool noMatch = model_.rowCount() > 0, noProfiles = controller_->profiles().isEmpty();
-        const QString text = filter_.rowCount()>0 ? QString() : noMatch ? QString("清除搜索") : noProfiles ? QString("添加订阅…") : state.activeProfile.isEmpty() ? QString("选择订阅") : QString("重试");
-        const auto run = [this, noMatch, noProfiles] {
-            if (noMatch) search_->clear();
-            else if (noProfiles) addUrl();
-            else if (controller_->state().activeProfile.isEmpty()) navigate(Route{ViewIds::Profiles});
-            else controller_->refresh();
+        const bool empty=filter_.rowCount()==0;
+        const bool noMatch=model_.rowCount()>0&&empty;
+        const bool shutting=state.core==CoreState::Stopping;
+        const bool waiting=state.core==CoreState::Starting || (state.core==CoreState::Running&&!state.ready);
+        const bool dedicatedNodes=route_.area==WorkspaceArea::Proxy&&route_.anchor==HomeAnchor::Nodes;
+        const bool homeCanStart=!dedicatedNodes&&(route_.area==WorkspaceArea::Proxy || !controller_->wireGuardProfiles().isEmpty())&&!controller_->settings().tunEnabled;
+        QString reason,action;
+        if (noMatch) { reason="没有匹配的节点"; action="清除搜索"; }
+        else if (empty && !state.ready) {
+            reason=shutting?"代理正在停止":waiting?"代理正在启动节点服务":
+                state.core==CoreState::Failed?"代理启动或运行失败":"启动本地代理后即可浏览节点";
+            if (idle&&!homeCanStart&&!waiting&&!shutting&&!state.activeProfile.isEmpty())
+                action=controller_->settings().tunEnabled?"开启接管":"启动代理";
+        } else if (empty && state.ready) {
+            reason="当前策略组暂无节点";
+            if (idle) action="刷新节点";
+        }
+        const auto run = [this,noMatch] {
+            if (noMatch) { search_->clear(); return; }
+            if (controller_->state().ready) { controller_->refresh(); return; }
+            if (!controller_->settings().tunEnabled) controller_->startCore(false);
+            else {
+                proxyEnabled_->setFocus(Qt::ShortcutFocusReason);
+                proxyEnabled_->click();
+            }
         };
-        setEmptyStateAction(nodeList_, text, run);
-        setEmptyStateAction(nodeCards_, text, run);
+        nodeEmpty_->setText(reason);
+        nodeCardsEmpty_->setText(reason);
+        const int emptyHeight=nodeEmpty_->fontMetrics().lineSpacing()*2+(action.isEmpty()?20:60);
+        nodeViews_->setMaximumHeight(empty?emptyHeight:QWIDGETSIZE_MAX);
+        nodeSection_->findChild<QWidget*>("homeNodeEmptySpace")->setVisible(empty);
+        nodeEmpty_->setVisible(!reason.isEmpty());
+        nodeCardsEmpty_->setVisible(!reason.isEmpty());
+        setEmptyStateAction(nodeList_,action,run);
+        setEmptyStateAction(nodeCards_,action,run);
     }    const auto findProfile = [this](const QString& id) -> const Profile* { for (const auto& p : controller_->profiles()) if (p.id == id) return &p; return nullptr; };
     const auto* selectedSource = findProfile(profilesCombo_->currentData().toString());
     profilesCombo_->setEnabled(!state.exiting && !state.busy);
@@ -399,24 +421,25 @@ if (homeControlHint_)         homeControlHint_->setVisible(show);
     }}
 bool MainWindow::logMatches(const QString& line) const {
     if (!line.contains(logSearch_->text(),Qt::CaseInsensitive)) return false;
+    const auto group=QStringView(line).sliced(qMin(qsizetype{20},line.size()));
+    const bool tunnel=group.startsWith(u"[wireguard] ");
+    const bool proxy=group.startsWith(u"[core] ")||group.startsWith(u"[core-log] ");
+    if ((route_.area==WorkspaceArea::Tunnel&&!tunnel)||(route_.area==WorkspaceArea::Proxy&&!proxy)) return false;
     const auto filter=logFilter_->currentData().toString();
-    return filter=="all" || (filter=="wireguard" ? line.size()>20&&line.sliced(20).startsWith("[wireguard] ") : Diagnostics::levelOf(line)==filter);
+    return filter=="all" || (filter=="wireguard" ? tunnel : Diagnostics::levelOf(line)==filter);
 }
 void MainWindow::updateLogs() {
     const auto& all = logsPaused_ ? pausedLogs_ : controller_->diagnostics()->lines();
     QStringList filtered; for (const auto& line : all) if (logMatches(line)) filtered.append(line);
     if (logEmpty_) {
         QString reason;
-        if (filtered.isEmpty() && !all.isEmpty()) reason = QString("没有匹配的日志") + QChar(10) + QString("请调整搜索或级别");
-        else if (filtered.isEmpty() && !controller_->state().ready) reason = QString("内核未就绪") + QChar(10) + QString("启动内核后才会收到内核日志");
+        if (filtered.isEmpty() && (!logSearch_->text().isEmpty() || logFilter_->currentData()!="all")) reason = QString("没有匹配的日志") + QChar(10) + QString("请调整搜索或级别");
+        else if (filtered.isEmpty() && route_.area==WorkspaceArea::Tunnel) reason="还没有隧道日志";
+        else if (filtered.isEmpty() && !controller_->state().ready) reason = QString("代理未就绪") + QChar(10) + QString("启动后才会收到代理日志");
         else if (filtered.isEmpty() && logsPaused_) reason = QString("已暂停") + QChar(10) + QString("恢复显示后继续接收");
         else if (filtered.isEmpty()) reason = QString("还没有日志");
         logEmpty_->setText(reason);
         logEmpty_->setVisible(!reason.isEmpty());
-        if (!reason.isEmpty()) {
-            logEmpty_->setGeometry(QRect(QPoint(0, 0), logView_->viewport()->size()));
-            logEmpty_->raise();
-        }
     }
     if (filtered==displayedLogLines_) return;
     bool prefix=filtered.size()>=displayedLogLines_.size();
@@ -428,6 +451,7 @@ void MainWindow::updateLogs() {
     if (followLogs_) { const bool history=scroll->value()<scroll->maximum(); followLogs_->setEnabled(history); followLogs_->setVisible(history); }
 }
 void MainWindow::appendLogLine(const QString& line) {
+    if (logEmpty_) logEmpty_->hide();
     displayedLogLines_.append(line); if (displayedLogLines_.size()>2000) displayedLogLines_.removeFirst();
     auto* scroll=logView_->verticalScrollBar(); const int position=scroll->value();
     const bool follow=position==scroll->maximum() && !logView_->textCursor().hasSelection();

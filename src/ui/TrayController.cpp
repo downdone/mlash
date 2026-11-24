@@ -116,7 +116,7 @@ TrayController::TrayController(AppController* controller, QObject* parent)
     connect(&tray_, &QSystemTrayIcon::activated, this, [this](QSystemTrayIcon::ActivationReason reason) {
         if (reason==QSystemTrayIcon::DoubleClick) { clickTimer_.stop(); emit showWindow(); return; } if (reason!=QSystemTrayIcon::Trigger) return;
         const auto action=controller_->settings().trayClick;
-        if (action=="proxy-page") emit showRoute(Route{0, -1, HomeAnchor::Nodes});
+        if (action=="proxy-page") emit showRoute(workspaceRoute(WorkspaceArea::Proxy,WorkspacePage::Members));
         else if (action=="toggle-proxy") clickTimer_.start(QApplication::doubleClickInterval());
         else emit showWindow();
     });
@@ -278,13 +278,13 @@ void TrayController::rebuildMenu() {
                 connect(action, &QAction::triggered, this, [this, name, value] { controller_->selectMember(name, value); });
             }
             sub->addSeparator();
-            if (members.size()>quick.size()) connect(sub->addAction(QString("在主窗口查看全部 %1 个节点…").arg(members.size())),&QAction::triggered,this,[this] { emit showRoute(Route{0, -1, HomeAnchor::Nodes}); });
+            if (members.size()>quick.size()) connect(sub->addAction(QString("在主窗口查看全部 %1 个节点…").arg(members.size())),&QAction::triggered,this,[this] { emit showRoute(workspaceRoute(WorkspaceArea::Proxy,WorkspacePage::Members)); });
             auto* retest=sub->addAction("重测本组延迟"); retest->setObjectName("trayRetestGroup"); connect(retest,&QAction::triggered,this,[this,sub,name] { groupDwell_.stop(); if (activeGroupMenu_==sub && sub->isVisible()) controller_->testTrayGroup(name,true); });
             updateGroupMenu(); if (autoTestGroups_) groupDwell_.start();
         });
         connect(sub,&QMenu::aboutToHide,this,[this,sub] { if (activeGroupMenu_!=sub) return; groupDwell_.stop(); activeGroupMenu_=nullptr; controller_->cancelTrayTests(); });
     }
-    groups->addSeparator(); auto* browse=groups->addAction("打开完整节点页…"); connect(browse,&QAction::triggered,this,[this] { emit showRoute(Route{0, -1, HomeAnchor::Nodes}); });
+    groups->addSeparator(); auto* browse=groups->addAction("打开完整节点页…"); connect(browse,&QAction::triggered,this,[this] { emit showRoute(workspaceRoute(WorkspaceArea::Proxy,WorkspacePage::Members)); });
     auto* core = menu_.addAction(state.core == CoreState::Running ? "停止内核" : "启动内核"); core->setEnabled(enabled);
     connect(core, &QAction::triggered, this, [this] { if (controller_->state().core == CoreState::Running) controller_->stopCore(); else controller_->startCore(); });
     menu_.addSeparator();

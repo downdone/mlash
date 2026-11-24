@@ -79,6 +79,7 @@ QWidget* MainWindow::dataPage() {
     auto* page = new QWidget; auto* layout = new QVBoxLayout(page); layout->setContentsMargins(0,0,0,0); layout->setSpacing(UiTheme::PanelGap);
     auto* heading = new QHBoxLayout; heading->setSpacing(10);
     dataTabs_ = new QTabBar; dataTabs_->setObjectName("dataTabs"); dataTabs_->setExpanding(false); dataTabs_->setDrawBase(false);
+    dataTabs_->setProperty("engineTabs",true);
     for (int i = 0; i < ViewIds::DataTabCount; ++i) dataTabs_->addTab(ViewIds::dataTabName(ViewIds::dataTabFromIndex(i)));
     heading->addWidget(dataTabs_,0,Qt::AlignLeft); heading->addStretch();
     auto* copy = new QPushButton("复制诊断摘要"); copy->setObjectName("copyDiagnosticsSummary"); copy->setToolTip("复制当前流量、连接与日志的脱敏摘要，便于反馈问题");
@@ -100,6 +101,8 @@ void MainWindow::buildDataTabs(QWidget*) {
             && index != int(ViewIds::DataTab::Connections)) rememberConnectionPosition();
         dataPanels_->setCurrentIndex(index);
         route_.tab = index;
+        syncSectionNavigation(route_);
+        updateWorkspacePage();
         updateDataPanelVisibility();
         // 同一视图内换页签不走 PageRouter 的离开/进入（视图没变），
         // 所以这里显式再跑一次 enterView(Data) 让副作用按新页签重算。
@@ -122,17 +125,34 @@ void MainWindow::updateDataPanelVisibility() {
     const bool showing = isVisible() && route_.view == ViewIds::Data && (!contentStack_||contentStack_->currentIndex()==0);
     const int tab = currentDataTab();
     if (tab >= 0 && dataPanels_) dataPanels_->setCurrentIndex(tab);
-    controller_->setHomeVisible(showing && tab == int(ViewIds::DataTab::Traffic));
-    controller_->setConnectionsVisible(showing && tab == int(ViewIds::DataTab::Connections));
-    controller_->setDiagnosticsVisible(showing && tab == int(ViewIds::DataTab::Logs) && !logsPaused_);
-    websitePage_->setActive(showing && tab == int(ViewIds::DataTab::Tests), selectedGroup_);
+    const bool proxyData=route_.area!=WorkspaceArea::Tunnel;
+    if (showing&&proxyData&&tab==int(ViewIds::DataTab::Logs)) controller_->setDiagnosticsLevel(logFilter_->currentData().toString());
+    controller_->setHomeVisible(showing && proxyData && tab == int(ViewIds::DataTab::Traffic));
+    controller_->setConnectionsVisible(showing && proxyData && tab == int(ViewIds::DataTab::Connections));
+    controller_->setDiagnosticsVisible(showing && proxyData && tab == int(ViewIds::DataTab::Logs) && !logsPaused_);
+    websitePage_->setActive(showing && proxyData && tab == int(ViewIds::DataTab::Tests), selectedGroup_);
 }
 QWidget* MainWindow::trafficPanel() {
-    // This page is already the detail surface. Show its one metric source directly.
     auto* panel = new QWidget; panel->setObjectName("trafficPanel"); auto* layout = new QVBoxLayout(panel); layout->setContentsMargins(0,0,0,0); layout->setSpacing(12);
-    auto* proxyHeading=new QLabel("Mihomo 代理");
-    proxyHeading->setObjectName("sectionTitle");
-    layout->addWidget(proxyHeading);
+    const auto heading=[layout](const QString& title,UiIcons::Glyph glyph,const QString& key) {
+        auto* row=new QWidget;
+        row->setObjectName(key);
+        auto* line=new QHBoxLayout(row);
+        line->setContentsMargins(2,0,2,0);
+        line->setSpacing(8);
+        auto* icon=new QLabel;
+        icon->setFixedSize(18,18);
+        const auto redraw=[icon,glyph] { icon->setPixmap(UiIcons::icon(glyph,UiTheme::Brand).pixmap(18,18)); };
+        redraw();
+        connect(UiTheme::notifier(),&UiTheme::AppearanceNotifier::changed,icon,redraw);
+        line->addWidget(icon);
+        auto* label=new QLabel(title);
+        label->setObjectName("sectionTitle");
+        line->addWidget(label,1);
+        layout->addWidget(row);
+        return row;
+    };
+    auto* proxyHeading=heading("本地代理",UiIcons::Glyph::Globe,"mihomoTrafficSection");
     auto* metrics = new HomeMetricsView(controller_->homeMetrics()); connect(metrics,&HomeMetricsView::inspectRequested,this,&MainWindow::showOutboundDiagnostics); layout->addWidget(metrics);
     auto* links=WindowParts::panel();
     auto* linksLayout=new QVBoxLayout(links);
@@ -150,28 +170,48 @@ QWidget* MainWindow::trafficPanel() {
     inspectTunnel->setProperty("quiet",true);
     tunnelRow->addWidget(inspectTunnel);
     linksLayout->addLayout(tunnelRow);
-    auto* direct=new QLabel("Windows 直连 · 未统计",links);
+    auto* direct=new QLabel("Windows 直连 · 由系统选路，流量未采集");
     direct->setObjectName("windowsDirectTraffic");
     direct->setProperty("secondary",true);
     direct->setWordWrap(true);
-    linksLayout->addWidget(direct);
-    auto* proxyFoot=new QLabel("Mihomo 按代理连接统计 · 物理出口未确认",links);
+    auto* proxyFoot=new QLabel("按代理会话统计 · 物理出口未确认");
     proxyFoot->setObjectName("mihomoTrafficScope");
     proxyFoot->setProperty("secondary",true);
     proxyFoot->setWordWrap(true);
-    linksLayout->addWidget(proxyFoot);
     connect(inspectTunnel,&QPushButton::clicked,panel,[this,inspectTunnel] {
         const auto id=inspectTunnel->property("profileId").toString();
         if (!id.isEmpty()) showWireGuardProfile(id,1);
     });
-    const auto recordTunnel=[this,links,proxyHeading,wireTraffic,proxyFoot,inspectTunnel] {
+    auto* missing=new QLabel; missing->setObjectName("trafficNextReason"); missing->setWordWrap(true);
+    auto* next=new QPushButton; next->setObjectName("trafficNextStep"); next->setProperty("primary",true);
+    auto* empty=new QFrame; empty->setObjectName("panel"); auto* emptyLayout=new QHBoxLayout(empty);
+    emptyLayout->setContentsMargins(14,10,14,10);
+    missing->setAlignment(Qt::AlignLeft|Qt::AlignVCenter);
+    emptyLayout->addWidget(missing,1); emptyLayout->addWidget(next);
+    layout->addWidget(empty);
+    layout->addWidget(proxyFoot);
+    auto* tunnelHeading=heading("分流隧道",UiIcons::Glyph::Link,"wireGuardTrafficSection");
+    layout->addWidget(links);
+    layout->addWidget(direct);
+    const auto recordTunnel=[this,links,proxyHeading,tunnelHeading,direct,wireTraffic,proxyFoot,inspectTunnel] {
         const auto observation=controller_->wireGuardObservation();
         const auto& catalog=controller_->wireGuardProfiles();
         const bool cleanup=observation.value("cleanup_pending").toBool();
         const bool active=observation.value("active").toBool();
-        const bool visible=!catalog.isEmpty()||cleanup||active;
+        const auto phase=observation.value("phase").toString();
+        const bool combined=route_.area==WorkspaceArea::Global;
+        const bool proxy=route_.area!=WorkspaceArea::Tunnel;
+        const bool available=!catalog.isEmpty()||cleanup||active||!phase.isEmpty();
+        const bool visible=route_.area==WorkspaceArea::Tunnel || (combined&&available);
         links->setVisible(visible);
-        proxyHeading->setVisible(visible);
+        proxyHeading->setVisible(proxy&&(!combined||available));
+        tunnelHeading->setVisible(visible);
+        direct->setVisible(combined&&available);
+        proxyFoot->setVisible(proxy&&(!combined||available)&&controller_->state().ready);
+        const auto proxySample=QDateTime::fromString(controller_->homeMetrics()->snapshot().value("measured_utc").toString(),
+                                                     Qt::ISODateWithMs).toLocalTime();
+        proxyFoot->setText(QString(controller_->state().tunObserved?"含代理 TUN 流量 · 物理出口未确认":"按代理会话统计 · 物理出口未确认")+
+            (proxySample.isValid()?" · "+proxySample.toString("HH:mm:ss"):QString()));
         if (!visible) return;
         const auto peers=observation.value("observation").toObject().value("peers").toArray();
         double received=0,sent=0;
@@ -180,18 +220,11 @@ QWidget* MainWindow::trafficPanel() {
             received+=peer.value("rx_bytes").toString().toDouble();
             sent+=peer.value("tx_bytes").toString().toDouble();
         }
-        const auto phase=observation.value("phase").toString();
         const auto sample=QDateTime::fromString(observation.value("sampled_at").toString(),Qt::ISODate).toLocalTime();
         const QString summary=phase=="connecting"?"正在连接":phase=="disconnecting"?"正在清理":cleanup?"待清理":
             active&&sample.isValid()?QString("累计 ↓ %1  ↑ %2 · %3").arg(ActivityTableModel::formatBytes(received),
-                ActivityTableModel::formatBytes(sent),sample.toString("HH:mm:ss")):QString("未连接");
-        wireTraffic->setText("WireGuard 隧道 · "+summary);
-        const auto mihomoSample=QDateTime::fromString(controller_->homeMetrics()->snapshot().value("measured_utc").toString(),
-                                                      Qt::ISODateWithMs).toLocalTime();
-        proxyHeading->setText(controller_->state().tunObserved?"Mihomo 流量":"Mihomo 代理");
-        proxyFoot->setText(QString(controller_->state().tunObserved?"含 Mihomo TUN 流量 · 物理出口未确认":"按 Mihomo 连接统计 · 物理出口未确认")+
-            (mihomoSample.isValid()?" · "+mihomoSample.toString("HH:mm:ss"):QString()));
-        proxyFoot->setVisible(controller_->state().ready);
+                ActivityTableModel::formatBytes(sent),sample.toString("HH:mm:ss")):active?"已连接 · 等待采样":"未连接";
+        wireTraffic->setText(summary);
         const auto id=observation.value("profile_id").toString();
         const auto selected=id.isEmpty()&&catalog.size()==1?catalog.first().id:id;
         inspectTunnel->setProperty("profileId",selected);
@@ -201,43 +234,35 @@ QWidget* MainWindow::trafficPanel() {
     connect(controller_,&AppController::stateChanged,panel,recordTunnel);
     connect(controller_,&AppController::profilesChanged,panel,recordTunnel);
     connect(controller_->homeMetrics(),&HomeMetrics::changed,panel,recordTunnel);
+    connect(this,&MainWindow::displayRouteChanged,panel,recordTunnel);
     recordTunnel();
-    auto* missing=new QLabel; missing->setObjectName("trafficNextReason"); missing->setWordWrap(true);
-    auto* next=new QPushButton; next->setObjectName("trafficNextStep"); next->setProperty("primary",true);
-    auto* empty=new QFrame; empty->setObjectName("panel"); auto* emptyLayout=new QVBoxLayout(empty);
-    emptyLayout->setContentsMargins(16,20,16,20);
-    missing->setAlignment(Qt::AlignHCenter);
-    emptyLayout->addWidget(missing); emptyLayout->addWidget(next,0,Qt::AlignHCenter);
-    layout->addWidget(empty);
-    layout->addWidget(links);
     connect(next,&QPushButton::clicked,this,[this] {
         if (controller_->state().activeProfile.isEmpty()) openProfileSetup();
-        else navigate(Route{ViewIds::Home});
+        else navigate(workspaceRoute(WorkspaceArea::Proxy,WorkspacePage::Run));
     });
-    const auto refresh=[this,metrics,empty,emptyLayout,missing,next] {
+    const auto refresh=[this,metrics,empty,missing,next] {
         const auto& state=controller_->state();
         const bool hasProfile=!state.activeProfile.isEmpty();
-        const bool waiting=state.core==CoreState::Starting || state.core==CoreState::Stopping || state.busy;
+        const bool waiting=state.core==CoreState::Starting || state.core==CoreState::Stopping ||
+            (state.core==CoreState::Running&&!state.ready);
         const bool sampled=!controller_->homeMetrics()->snapshot().isEmpty();
-        metrics->setVisible(sampled);
-        empty->setVisible(!sampled);
-        const bool dual=!controller_->wireGuardProfiles().isEmpty();
-        emptyLayout->setDirection(dual?QBoxLayout::LeftToRight:QBoxLayout::TopToBottom);
-        emptyLayout->setContentsMargins(16,dual?10:20,16,dual?10:20);
-        emptyLayout->setStretchFactor(missing,dual?1:0);
-        missing->setAlignment(dual?Qt::AlignVCenter|Qt::AlignLeft:Qt::AlignCenter);
+        const bool proxy=route_.area!=WorkspaceArea::Tunnel;
+        metrics->setVisible(proxy&&sampled);
+        empty->setVisible(proxy&&!sampled);
         const auto copy=profileSetupCopy(!controller_->profiles().isEmpty());
         missing->setText(!hasProfile?copy.title:waiting?"正在等待连接…":
-            !state.ready?"前往首页开启代理后查看流量。":
+            !state.ready?"启动本地代理后即可查看流量。":
             controller_->homeMetrics()->error().isEmpty()?"正在采集流量…":"暂时无法读取流量，正在等待下次采集。");
-        next->setText(hasProfile?"前往首页":copy.action);
+        next->setText(hasProfile?(route_.area==WorkspaceArea::Proxy?"前往运行":"前往首页"):copy.action);
         next->setVisible(!sampled && (!hasProfile || (!waiting && !state.ready)));
     };
     connect(controller_,&AppController::stateChanged,panel,refresh);
     connect(controller_,&AppController::profilesChanged,panel,refresh);
     connect(controller_->homeMetrics(),&HomeMetrics::changed,panel,refresh);
+    connect(this,&MainWindow::displayRouteChanged,panel,refresh);
     refresh();
     homeOutboundSummary_ = new QLabel; homeOutboundSummary_->setObjectName("outboundSummary"); homeOutboundSummary_->setProperty("secondary", true); homeOutboundSummary_->setWordWrap(true); layout->addWidget(homeOutboundSummary_);
+    connect(this,&MainWindow::displayRouteChanged,homeOutboundSummary_,[this] { updateHomeOutbound(); });
     layout->addStretch();
     return panel;
 }
@@ -276,14 +301,30 @@ QWidget* MainWindow::diagnosticsPanel() {
     menu->addSeparator(); auto* directory=menu->addAction("日志目录");
     logView_->setToolTip("仅日志页可见时接收内核日志；最多保留 2000 行。");
     // 日志页的空/无匹配/未就绪不能表现为一块空白面板（状态呈现规格：禁止空表格）。
-    logEmpty_ = new QLabel(logView_); logEmpty_->setObjectName("logEmptyState"); logEmpty_->setAlignment(Qt::AlignCenter); logEmpty_->setWordWrap(true); logEmpty_->setTextFormat(Qt::PlainText); logEmpty_->setAttribute(Qt::WA_TransparentForMouseEvents); logEmpty_->hide(); followLogs_=new QPushButton("回到最新"); actions->addWidget(followLogs_); followLogs_->setObjectName("followLatestLogs"); followLogs_->setProperty("quiet",true); followLogs_->setToolTip("滚动到最新记录");
+    logEmpty_=new QLabel(logView_->viewport());
+    logEmpty_->setObjectName("logEmptyState");
+    logEmpty_->setWordWrap(true);
+    logEmpty_->setTextFormat(Qt::PlainText);
+    logEmpty_->setAttribute(Qt::WA_TransparentForMouseEvents);
+    auto* logPlaceholder=new QVBoxLayout(logView_->viewport());
+    logPlaceholder->setContentsMargins(12,12,12,0);
+    logPlaceholder->addWidget(logEmpty_);
+    logPlaceholder->addStretch();
+    logEmpty_->hide();
+    followLogs_=new QPushButton("回到最新"); actions->addWidget(followLogs_); followLogs_->setObjectName("followLatestLogs"); followLogs_->setProperty("quiet",true); followLogs_->setToolTip("滚动到最新记录");
     connect(followLogs_,&QPushButton::clicked,this,[this] { auto cursor=logView_->textCursor(); cursor.clearSelection(); logView_->setTextCursor(cursor); logView_->verticalScrollBar()->setValue(logView_->verticalScrollBar()->maximum()); });
     connect(logView_->verticalScrollBar(),&QScrollBar::valueChanged,this,[this](int value) { const bool history=value<logView_->verticalScrollBar()->maximum(); followLogs_->setEnabled(history); followLogs_->setVisible(history); });
     followLogs_->hide();
     connect(logSearch_, &QLineEdit::textChanged, this, &MainWindow::updateLogs);
     controller_->setDiagnosticsLevel("all");
-    connect(logFilter_, &QComboBox::currentIndexChanged, this, [this] { controller_->setDiagnosticsLevel(logFilter_->currentData().toString()); updateLogs(); });
-    connect(pause, &QPushButton::toggled, this, [this, pause](bool paused) { logsPaused_ = paused; pause->setText(paused ? "恢复显示" : "暂停显示"); pausedLogs_ = paused ? controller_->diagnostics()->lines() : QStringList{}; controller_->setDiagnosticsVisible(!paused && isVisible() && route_.view == ViewIds::Data && currentDataTab() == int(ViewIds::DataTab::Logs)); updateLogs(); });
+    connect(logFilter_, &QComboBox::currentIndexChanged, this, [this] { updateDataPanelVisibility(); updateLogs(); });
+    connect(pause, &QPushButton::toggled, this, [this, pause](bool paused) {
+        logsPaused_=paused;
+        pause->setText(paused?"恢复显示":"暂停显示");
+        pausedLogs_=paused?controller_->diagnostics()->lines():QStringList{};
+        updateDataPanelVisibility();
+        updateLogs();
+    });
     connect(clear, &QAction::triggered, this, [this] {
         pausedLogs_.clear();
         controller_->clearLogView();
@@ -392,7 +433,12 @@ QWidget* MainWindow::connectionsPanel() {
     connectionsFilter_.setSourceModel(&connectionsModel_); connectionsFilter_.setFilterKeyColumn(0); connectionsFilter_.setFilterRole(Qt::UserRole+2); connectionsFilter_.setSortRole(Qt::UserRole+1); connectionsFilter_.setFilterCaseSensitivity(Qt::CaseInsensitive); connect(connectionView_,&QTabBar::currentChanged,this,&MainWindow::updateConnections);
     connectionsTable_ = new QTableView; connectionsTable_->setObjectName("connectionsTable"); connectionsTable_->setModel(&connectionsFilter_); connectionsTable_->setEditTriggers(QAbstractItemView::NoEditTriggers); connectionsTable_->setSelectionBehavior(QAbstractItemView::SelectRows); connectionsTable_->setSelectionMode(QAbstractItemView::SingleSelection); connectionsTable_->verticalHeader()->hide(); styleTable(connectionsTable_); connectionsTable_->setSortingEnabled(true); connectionsTable_->sortByColumn(-1,Qt::AscendingOrder); content->addWidget(connectionsTable_, 1);
     connectionOptions_=new ConnectionOptions(controller_,connectionsTable_,&connectionsFilter_,search,nullptr); tools->addWidget(connectionOptions_); connectionOptions_->addViewAction(order); connect(connectionsTable_->horizontalHeader(),&QHeaderView::sortIndicatorChanged,order,[this,order] { order->setEnabled(connectionsFilter_.sortColumn()>=0); }); order->setEnabled(false);
-    connectionEmpty_=emptyState(connectionsTable_,"暂无活动连接");
+    connectionEmpty_=emptyState(connectionsTable_,"暂无活动连接",true);
+    connectionEmpty_->setAlignment(Qt::AlignLeft|Qt::AlignTop);
+    auto* placeholder=connectionsTable_->viewport()->layout();
+    placeholder->setContentsMargins(14,12,14,0);
+    placeholder->setAlignment(connectionEmpty_,Qt::AlignTop);
+    placeholder->setAlignment(emptyStateAction(connectionsTable_),Qt::AlignLeft);
     auto* bottom = new QHBoxLayout; connectionsHint_ = new ElidedLabel("内核未就绪"); connectionsHint_->setObjectName("connectionSamplingStatus"); connectionsHint_->setProperty("secondary",true); connectionsHint_->setSizePolicy(QSizePolicy::Ignored, QSizePolicy::Preferred); bottom->addWidget(connectionsHint_, 1); connectionDetailsButton_=actionButton(details,bottom,"connectionDetailsButton"); connectionCopyButton_=actionButton(copy,bottom,"connectionCopyButton"); closeConnection_ = button("断开选中", bottom); closeConnection_->setObjectName("closeSelectedConnection"); closeConnection_->setProperty("danger",true); closeConnection_->setEnabled(false); content->addLayout(bottom); connectionDetailsButton_->hide(); connectionCopyButton_->hide(); closeConnection_->hide();
     auto* inspectKey=new QShortcut(QKeySequence(Qt::Key_Return),connectionsTable_); inspectKey->setContext(Qt::WidgetWithChildrenShortcut); connect(inspectKey,&QShortcut::activated,this,[this] { connectionDetails(); });
     connect(connectionsTable_->selectionModel(), &QItemSelectionModel::selectionChanged, this, &MainWindow::updateActions);
@@ -426,7 +472,7 @@ void MainWindow::connectionDetails(bool copy) {
     if (copy) { QApplication::clipboard()->setText(text); return; }
     if (connectionDetail_) connectionDetail_->close(); const auto row=selected.first().data(Qt::UserRole+3).value<QJsonObject>(); const auto profile=controller_->state().activeProfile; QString version; for (const auto& item:controller_->profiles()) if (item.id==profile) version=item.active;
     auto* dialog=new ConnectionDetailsDialog(controller_,row,profile,version,this); connectionDetail_=dialog;
-    connect(dialog,&ConnectionDetailsDialog::browseGroup,this,[this,profile,version](const QString& group) { bool current=false; for (const auto& item:controller_->profiles()) if (item.id==profile) current=item.active==version; if (!current||controller_->state().activeProfile!=profile) return; const auto index=profilesCombo_->findData(profile); if (index<0) return; navigate(Route{ViewIds::Home,kNoCategory,HomeAnchor::Nodes}); if (route_.view!=ViewIds::Home || route_.anchor!=HomeAnchor::Nodes) return; profilesCombo_->setCurrentIndex(index); selectGroup(group); }); connect(dialog,&ConnectionDetailsDialog::createRule,this,&MainWindow::prefillConnectionRule);
+    connect(dialog,&ConnectionDetailsDialog::browseGroup,this,[this,profile,version](const QString& group) { bool current=false; for (const auto& item:controller_->profiles()) if (item.id==profile) current=item.active==version; if (!current||controller_->state().activeProfile!=profile) return; const auto index=profilesCombo_->findData(profile); if (index<0) return; const auto destination=workspaceRoute(WorkspaceArea::Proxy,WorkspacePage::Members); navigate(destination); if (route_!=destination) return; profilesCombo_->setCurrentIndex(index); selectGroup(group); }); connect(dialog,&ConnectionDetailsDialog::createRule,this,&MainWindow::prefillConnectionRule);
     auto* drawer=qobject_cast<DetailsDrawer*>(detailsDrawer_.data()); if (!drawer) { drawer=new DetailsDrawer(findChild<QWidget*>("contentSurface")); detailsDrawer_=drawer; }
     drawer->clearContent(); drawer->setHeader("连接详情","打开时的观察快照");
     dialog->setParent(drawer,Qt::Widget); dialog->setMinimumWidth(0); dialog->setSizePolicy(QSizePolicy::Ignored,QSizePolicy::Preferred);

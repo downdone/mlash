@@ -120,7 +120,7 @@ QWidget* MainWindow::settingsPage() {
     settingRow(generalRows,"启动内核","自动运行上次使用的订阅",startCore_,false,{},UiIcons::Glyph::Play);
     settingRow(generalRows,"启动时恢复代理开关","按上次的开关状态恢复，不接管其他程序的代理",restoreProxy_,false,{},UiIcons::Glyph::Refresh);
     lightweight_->setToolTip("托盘打开时重新创建界面；未保存内容会提示确认");
-    startupPage_=new CompactComboBox; startupPage_->setObjectName("startupPage"); for (const auto& pair:QList<QPair<QString,int>>{{"首页",0},{"订阅",1},{"节点",2},{"网站测试",7},{"规则",3},{"连接",4},{"日志",5},{"设置",6}}) startupPage_->addItem(pair.first,pair.second); startupPage_->setFixedWidth(120); settingRow(generalRows,"启动页面","首次打开主界面时显示",startupPage_,false,{},UiIcons::Glyph::Home);
+    startupPage_=new CompactComboBox; startupPage_->setObjectName("startupPage"); for (const auto& pair:QList<QPair<QString,int>>{{"总览",0},{"配置",1},{"节点",2},{"网站测试",7},{"规则",3},{"连接",4},{"日志",5},{"设置",6}}) startupPage_->addItem(pair.first,pair.second); startupPage_->setFixedWidth(120); settingRow(generalRows,"启动页面","首次打开主界面时显示",startupPage_,false,{},UiIcons::Glyph::Home);
     trayClick_=new CompactComboBox; trayClick_->setObjectName("trayClick"); trayClick_->addItem("显示主窗口","show"); trayClick_->addItem("打开节点页","proxy-page"); trayClick_->addItem("切换系统代理","toggle-proxy"); trayClick_->setFixedWidth(120); trayClick_->setToolTip("切换代理不会自动覆盖外部程序的代理"); settingRow(generalRows,"托盘单击","双击始终显示主界面",trayClick_,false,{},UiIcons::Glyph::List);
     auto* hotkeys=new QPushButton("配置…"); hotkeys->setObjectName("configureHotkeys"); settingRow(generalRows,"全局快捷键","从任意应用唤起Mlash",hotkeys,false,{},UiIcons::Glyph::Settings); connect(hotkeys,&QPushButton::clicked,this,[this] { showTool("hotkeys", {}, [this] { return new HotkeysDialog(controller_,this); }); });
     auto* protocol=new QPushButton("管理…"); protocol->setObjectName("configureUrlProtocol"); settingRow(generalRows,"链接导入","mlash协议与订阅确认",protocol,false,{},UiIcons::Glyph::Globe); connect(protocol,&QPushButton::clicked,this,[this] { showTool("protocol", {}, [this] { return new ProtocolSettingsDialog(controller_,this); }); });
@@ -129,7 +129,7 @@ QWidget* MainWindow::settingsPage() {
     const auto observeLocation=[this,locationHint,startupHelp] { const auto& state=controller_->state(); locationHint->setText(state.autoStartConflict?"登录启动指向另一目录。请先停用旧启动项，再在此配置；不会自动覆盖旧项。":""); locationHint->setVisible(state.autoStartConflict); startupHelp->setVisible(state.autoStartConflict); startupHelp->setToolTip(QCoreApplication::applicationDirPath()); }; connect(controller_,&AppController::stateChanged,locationHint,observeLocation); observeLocation();
 
     // —— 网络：TUN、系统代理排除、本地端口、连通测试地址 ——
-    auto* tun=new QPushButton("管理…"); tun->setObjectName("manageTunService"); settingRow(networkRows,"TUN 虚拟网卡","Mihomo TUN、WireGuard 与权限服务",tun,false,QStringLiteral("未启用"),UiIcons::Glyph::Layers); connect(tun,&QPushButton::clicked,this,[this] { showTool("tun", {}, [this] { return new TunDialog(controller_,this); }); });
+    auto* tun=new QPushButton("管理…"); tun->setObjectName("manageTunService"); settingRow(networkRows,"TUN 虚拟网卡","代理接管、分流隧道与权限服务",tun,false,QStringLiteral("未启用"),UiIcons::Glyph::Layers); connect(tun,&QPushButton::clicked,this,[this] { showTool("tun", {}, [this] { return new TunDialog(controller_,this); }); });
     auto* bypass=new QPushButton("编辑…"); bypass->setObjectName("configureProxyBypass"); settingRow(networkRows,"系统代理排除","主机、IP与本地地址",bypass,false,{},UiIcons::Glyph::Globe); connect(bypass,&QPushButton::clicked,this,[this] { showTool("bypass",{},[this] { return new ProxyBypassDialog(controller_,this); }); });
     mixedPort_ = new CompactSpinBox; mixedPort_->setObjectName("mixedPort"); mixedPort_->setFixedWidth(88); mixedPort_->setButtonSymbols(QAbstractSpinBox::NoButtons); mixedPort_->setToolTip("1024–65535；修改后重新校验和安全重启"); mixedPort_->setRange(1024,65535); settingRow(networkRows,"本地端口","HTTP / SOCKS5 共用，仅本机",mixedPort_,false,{},UiIcons::Glyph::Route);
     testUrl_ = new QLineEdit; testUrl_->setObjectName("connectivityTestUrl"); testUrl_->setToolTip("手动 HTTP 连通测试，5 秒超时，不表示所有目的地址可用"); settingRow(networkRows,"节点延迟测试地址","仅用于手动延迟测试",testUrl_,true,{},UiIcons::Glyph::Gauge);
@@ -246,7 +246,7 @@ QWidget* MainWindow::settingsPage() {
         task->setObjectName("aboutTask");
         auto* box=new QVBoxLayout(task);
         box->addWidget(makeBrandSignature(task,40,"aboutBrand"));
-        auto* text=new QLabel("版本 " MLASH_VERSION "\nQt " QT_VERSION_STR "\nMihomo 图形客户端",task);
+        auto* text=new QLabel("版本 " MLASH_VERSION "\nQt " QT_VERSION_STR "\n代理与隧道客户端",task);
         text->setProperty("secondary",true);
         text->setWordWrap(true);
         box->addWidget(text);

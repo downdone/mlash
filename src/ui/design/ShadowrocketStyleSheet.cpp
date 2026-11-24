@@ -71,6 +71,9 @@ QString templateStyleSheet() {
         QLabel#homeControlTitle { font-weight: 500; }
         QLabel#homeControlValue { color: @Secondary; }
         QLabel#homeControlChevron { color: @Secondary; font-size: @SectionPoints; }
+        QPushButton[engineAction="true"]:enabled { color: @Brand; background: @Selection; border-color: @Border; font-weight: 500; }
+        QPushButton[engineAction="true"]:hover:enabled { background: @Hover; }
+        QPushButton[engineAction="true"][keyboardFocus="true"]:focus:enabled { border-color: @Focus; }
         QWidget#homeControlRow[first="true"] { border: none; }
         /* K2：第 2 行是按钮（点开浮层菜单），其余两行是普通行；同一套行样式用 property 选中。 */
         QPushButton[controlRow="true"] { background: transparent; border: none; border-radius: 6px; padding: 0; text-align: left; }
@@ -105,7 +108,7 @@ QString templateStyleSheet() {
         QLabel[role="headline"] { font-size: @ValuePoints; font-weight: 600; }
         QLabel#settingsSubheading { font-size: @BodyPoints; font-weight: 600; padding-bottom: 3px; }
         QPushButton#proxyManagement::menu-indicator { image: none; width: 0; height: 0; }
-        QLabel#sectionTitle { font-size: @SectionPoints; font-weight: 600; }
+        QLabel#sectionTitle, QLabel#proxyNodesSetupTitle { font-size: @SectionPoints; font-weight: 600; }
         QLabel#settingName { font-weight: 500; }
         QWidget#settingRow[located="true"] { background: @Selection; border-radius: 6px; }
         QLabel[summaryTitle="true"] { font-size: @BodyPoints; font-weight: 600; }
@@ -124,9 +127,12 @@ QString templateStyleSheet() {
         QFrame#sidebarDivider { background: @Separator; border: none; }
         QListWidget#navigation { border: none; background: transparent; outline: none; }
         QToolButton#sidebarSettings, QToolButton#toggleSidebar { min-height: @NavButtonInnerHeight; max-height: @NavButtonInnerHeight; padding: 0; border: 1px solid transparent; border-radius: 7px; }
-        QToolButton#sidebarSettings { background: transparent; }
+        QToolButton#sidebarSettings { background: transparent; text-align: left; }
         QToolButton#sidebarSettings:hover { background: @Hover; }
         QToolButton#sidebarSettings:checked { background: @Selection; color: @Brand; border-color: transparent; font-weight: 600; }
+        QToolButton[workspaceLink="true"] { background: transparent; border: 1px solid transparent; padding: 0 7px; text-align: left; }
+        QToolButton[workspaceLink="true"]:hover { background: @Hover; }
+        QToolButton[workspaceLink="true"]:checked { background: @Selection; color: @Brand; font-weight: 600; }
         QToolButton#sidebarSettings:checked:hover { background: @Selection; }
         QToolButton#sidebarSettings[keyboardFocus="true"]:focus { border-color: @Focus; }
         QToolButton#nodeSearchToggle:enabled, QToolButton#nodeLocateButton:enabled, QToolButton#nodeToolsButton:enabled { color: @Secondary; }
@@ -183,6 +189,15 @@ QString templateStyleSheet() {
         QTabBar::tab:selected { background: @Surface; color: @Ink; font-weight: 600; }
         QTabBar::tab:hover:!selected { background: @Hover; }
         QTabBar[keyboardFocus="true"]::tab:selected { border-color: @Focus; }
+        QTabBar[engineTabs="true"] { background: transparent; }
+        QTabBar[engineTabs="true"]::tab { font-weight: 500; }
+        QTabBar[engineTabs="true"]::tab:selected { background: @Selection; border-color: @Border; font-weight: 600; }
+        QTabBar[engineTabs="true"][keyboardFocus="true"]::tab:selected { border-color: @Focus; }
+        QWidget[engineFields="true"] QLabel, QTabWidget#wireGuardDetailTabs QPushButton,
+        QPushButton#wireGuardOpenService, QLineEdit#wireGuardTarget,
+        QLabel#wireGuardProfileStatus, QTableWidget#wireGuardPeerTable { font-weight: 500; }
+        QTableWidget#wireGuardPeerTable::item { padding: 0 6px; }
+        QLineEdit#wireGuardTarget { placeholder-text-color: @Secondary; }
         /* K8：设置页三组平铺行，52px 高，行间只用分隔线（原型 .setting-row）。 */
         QWidget#settingRow { min-height: @SettingRowHeight; }
         QLabel#settingIcon { background: transparent; border-radius: 7px; }
@@ -239,11 +254,12 @@ QString templateStyleSheet() {
         QListView#profileList::item { border: none; background: transparent; }
         QFrame#profileCard { margin: 8px; border-color: @Border; border-radius: 10px; }
         QFrame#profileCard:hover { border-color: @Track; }
-        QFrame#profileCard[selected="true"] { border-color: @Brand; }
+        QFrame#profileCard[selected="true"] { background: @Selection; border-color: @Border; }
         QListView#profileList[keyboardFocus="true"]:focus QFrame#profileCard[selected="true"] { border: 1px solid @Focus; }
         QLabel#profileCardMark[summaryMark="true"] { background: @Selection; }
         QLabel#profileCardTitle[summaryTitle="true"] { font-size: @SectionPoints; }
         QLabel[profileCardMetadataTag="true"] { background: @Control; border-radius: 10px; color: @Secondary; padding: 2px 8px; font-size: @CaptionPoints; }
+        QLabel#profileCardTime { color: @Secondary; font-size: @CaptionPoints; padding: 2px 0px; }
         QWidget[profileCardStateTag="true"] { background: @Control; border-radius: 10px; }
         QWidget[profileCardStateTag="true"][tone="success"] { background: @ProfileActiveFill; }
         QLabel[cardState="true"] { color: @Secondary; font-size: @CaptionPoints; }

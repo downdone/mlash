@@ -195,6 +195,19 @@ private slots:
     void uiServiceLifecycleWithoutOsWrites() {
         QTemporaryDir data; auto platform=std::make_shared<TunPlatform>(); platform->installed=false; AppController c(data.path(),true,nullptr,platform); QSignalSpy initialized(&c,&AppController::initialized); c.initialize(); QTRY_COMPARE(initialized.size(),1);
         QPointer<TunDialog> dialog=new TunDialog(&c); dialog->show(); QTRY_VERIFY(dialog->findChild<QLabel*>("tunServiceStatus")->text().contains("未安装")); QVERIFY(!dialog->findChild<QPushButton*>("applyTunOptions")->isEnabled()); dialog->findChild<QPushButton*>("installTunService")->click(); QCOMPARE(platform->installs,0); QVERIFY(!dialog->findChild<QLabel*>("tunServiceStatus")->text().isEmpty());
+        auto* install=dialog->findChild<QPushButton*>("installTunService");
+        auto* repair=dialog->findChild<QPushButton*>("repairTunService");
+        auto* remove=dialog->findChild<QPushButton*>("removeTunService");
+        auto* refresh=dialog->findChild<QPushButton*>("refreshTunService");
+        QTRY_VERIFY(install->isVisible()&&repair->isHidden()&&remove->isHidden());
+        QVERIFY(install->property("primary").toBool());
+        platform->installed=true;
+        refresh->click();
+        QTRY_VERIFY(install->isHidden()&&repair->isVisible()&&remove->isVisible());
+        QCOMPARE(platform->installs,0);
+        platform->installed=false;
+        refresh->click();
+        QTRY_VERIFY(install->isVisible());
         c.repairTunService(); c.retryTunCleanup(); QCOMPARE(platform->installs,0); QSignalSpy saves(&c,&AppController::operationFinished); dialog->findChild<QPushButton*>("tunAdvancedToggle")->click(); auto* mtu=dialog->findChild<QSpinBox*>("tunMtu"); auto* routes=dialog->findChild<QPlainTextEdit*>("tunExcludeRoutes"); mtu->setValue(1400); routes->setPlainText("0.0.0.0/0"); QVERIFY(!dialog->findChild<QPushButton*>("applyTunOptions")->isEnabled()); QVERIFY(!dialog->findChild<QLabel*>("tunValidationError")->text().isEmpty()); routes->setPlainText("192.168.1.25/24"); platform->failState=true; dialog->findChild<QPushButton*>("applyTunOptions")->click(); QTRY_COMPARE(saves.size(),1); QVERIFY(!saves.last()[0].toBool()); QCOMPARE(mtu->value(),1400); QVERIFY(dialog->isVisible()); QCOMPARE(c.settings().tunMtu,1500); platform->failState=false; QTRY_VERIFY(dialog->findChild<QPushButton*>("applyTunOptions")->isEnabled()); dialog->findChild<QPushButton*>("applyTunOptions")->click(); QTRY_COMPARE(saves.size(),2); QVERIFY(saves.last()[0].toBool()); QCOMPARE(c.settings().tunMtu,1400); QCOMPARE(c.settings().tunExcludeRoutes,QStringList{"192.168.1.0/24"});
         QTRY_VERIFY(dialog->findChild<QPushButton*>("refreshTunService")->isEnabled()); const auto dir=qEnvironmentVariable("MLASH_UI_SCREENSHOTS"); if (!dir.isEmpty()) { QDir().mkpath(dir); dialog->grab().save(dir+"/tun-dialog.png"); }
         dialog->close(); QTRY_VERIFY(dialog.isNull()); AppState state; state.core=CoreState::Running; state.ready=true; state.proxy=ProxyState::Disabled; state.tunObserved=true; QCOMPARE(TrayController::appearance(state),QString("rule")); QVERIFY(TrayController::statusTooltip(state,Settings()).contains("TUN"));

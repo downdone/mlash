@@ -144,12 +144,11 @@ private slots:
         controller.importFile("Website fixture",path); QTRY_COMPARE(finished.size(),1); QVERIFY(finished.last()[0].toBool()); controller.activateProfile(controller.profiles().first().id); QTRY_COMPARE_WITH_TIMEOUT(finished.size(),2,15000); QVERIFY2(finished.last()[0].toBool(),qUtf8Printable(finished.last()[1].toString())); QTRY_VERIFY(controller.state().ready);
         auto* nodes=window->findChild<QComboBox*>("websiteNode"); QTRY_COMPARE(nodes->currentData().toString(),QString("n1")); QVERIFY(window->findChild<QPushButton*>("startWebsiteTests")->isEnabled()); QVERIFY(first.requests.isEmpty() && second.requests.isEmpty());
         QCOMPARE(controller.websiteNode("Nested"),QString("n1")); QVERIFY(controller.websiteNode("REJECT").isEmpty()); QVERIFY(controller.websiteNode("missing").isEmpty());
-        auto* navigation=window->findChild<QListWidget*>("navigation"); QCOMPARE(navigation->count(),3); QCOMPARE(navigation->item(1)->text(),QString("配置")); // ADR 0051：旧入口 3 进入配置域的规则任务，侧栏同步选中配置。
-        window->setPage(3); QCOMPARE(navigation->currentRow(),1); window->setPage(4); QCOMPARE(navigation->currentRow(),2); QCOMPARE(window->page(),4);
-        // K9：侧栏条目存的是视图 ID（0/1/3/4），点击必须按视图导航；若仍当旧编号解释，
-        // 「数据」会落到规则页、「设置」会落到数据页（旧 3=规则、旧 4=数据·连接）。
+        auto* navigation=window->findChild<QListWidget*>("navigation"); QCOMPARE(navigation->count(),2); QCOMPARE(navigation->item(1)->text(),QString("配置"));
+        window->setPage(3); QCOMPARE(navigation->currentRow(),1); window->setPage(4); QCOMPARE(navigation->currentRow(),0); QCOMPARE(window->page(),4);
+        // 全局入口按视图 ID 导航，工作区数据走有作用域的同一数据视图。
         for (int row=0;row<navigation->count();++row) { QTest::mouseClick(navigation->viewport(),Qt::LeftButton,{},navigation->visualItemRect(navigation->item(row)).center()); QCOMPARE(window->currentRoute().view,int(navigation->item(row)->data(Qt::UserRole).toInt())); }
-        QTest::mouseClick(navigation->viewport(),Qt::LeftButton,{},navigation->visualItemRect(navigation->item(2)).center()); QCOMPARE(window->currentRoute().view,int(ViewIds::Data));
+        window->findChild<QToolButton*>("workspaceTraffic")->click(); QCOMPARE(window->currentRoute(),workspaceRoute(WorkspaceArea::Proxy,WorkspacePage::Traffic));
         auto* settingsNav=window->findChild<QToolButton*>("sidebarSettings"); QVERIFY(settingsNav); settingsNav->click(); QCOMPARE(window->currentRoute().view,int(ViewIds::Settings)); QCOMPARE(window->page(),6); QVERIFY(settingsNav->isChecked()); QCOMPARE(navigation->currentRow(),-1);
         auto* startup=window->findChild<QComboBox*>("startupPage"); QCOMPARE(startup->itemData(3).toInt(),7); QCOMPARE(startup->itemData(4).toInt(),3); QCOMPARE(startup->itemData(7).toInt(),6); QCOMPARE(startup->currentData().toInt(),7);
         controller.startWebsiteTests("n1","github"); QCOMPARE(finished.size(),3); QVERIFY(first.requests.isEmpty());
