@@ -1,5 +1,12 @@
 package wireguard
 
+// CONTRACT owner=core layer=core
+// invariant: 控制帧为 4 字节小端长度加 UTF-8 JSON，版本 1；单帧上限 128 KiB
+// forbidden: 不得改为无长度前缀的流；不得回传原始密钥或 IpcGet 全量输出
+// lifecycle: 输入 EOF 时关闭设备；宿主关闭句柄后不得再写
+// tests: wireguard_profile_tests
+// spec: docs/design/mihomo-wireguard-dual-engine.md
+
 import (
 	"bytes"
 	"encoding/binary"

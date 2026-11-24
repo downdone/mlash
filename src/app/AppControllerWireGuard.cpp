@@ -1,4 +1,5 @@
 #include "AppController.h"
+#include "profile/ProfileStore.h"
 #include "Async.h"
 #include <QHostInfo>
 #include <QJsonArray>
@@ -22,10 +23,14 @@ QString AppController::wireGuardConnectBlock() const {
     return {};
 }
 
+SessionGate AppController::sessionGate() const {
+    return {wireGuard_.leasePending(), wireGuard_.active(), wireGuardPhase_==QStringLiteral("connecting")};
+}
+
 QJsonObject AppController::wireGuardObservation() const {
     auto seen=wireGuard_.observation();
     seen["active"]=wireGuard_.active();
-    seen["cleanup_pending"]=!wireGuard_.active()&&wireGuard_.leasePending()&&wireGuardPhase_!="connecting";
+    seen["cleanup_pending"]=sessionGate().cleanupPending();
     seen["profile_id"]=runningWireGuardProfile_;
     seen["phase"]=wireGuardPhase_;
     seen["error"]=wireGuardError_;
@@ -78,8 +83,9 @@ void AppController::connectWireGuard(const QString& id,const QString& expected) 
         return;
     }
     const auto block=wireGuardConnectBlock();
-    if (wireGuard_.leasePending()||!block.isEmpty()) {
-        emit operationFinished(false,wireGuard_.leasePending()?QString("请先断开当前隧道并确认清理"):block);
+    const auto gate=sessionGate();
+    if (gate.blocks(SessionIntent::TunnelConnect)||!block.isEmpty()) {
+        emit operationFinished(false,gate.blocks(SessionIntent::TunnelConnect)?gate.reason(SessionIntent::TunnelConnect):block);
         return;
     }
     if (!begin("正在连接 WireGuard")) return;
@@ -156,7 +162,8 @@ void AppController::connectWireGuard(const QString& id,const QString& expected) 
 }
 
 void AppController::disconnectWireGuard(bool verifyIdle) {
-    if (verifyIdle ? wireGuard_.active()||settings_.tunEnabled||state_.tunObserved : !wireGuard_.leasePending()) return;
+    const auto gate=sessionGate();
+    if (verifyIdle ? gate.tunnelActive||settings_.tunEnabled||state_.tunObserved : !gate.leaseHeld) return;
     if (verifyIdle&&smoke_) return;
     if (!begin("正在断开 WireGuard",false,true)) return;
     wireGuardPhase_="disconnecting";

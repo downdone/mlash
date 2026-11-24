@@ -5,6 +5,8 @@
 #include "profile/ProviderEdits.h"
 #include "profile/ProviderPolicy.h"
 #include "AppController.h"
+#include "platform/ProxyCoordinator.h"
+#include "profile/SubscriptionDownloader.h"
 #include "Async.h"
 #include "storage/Storage.h"
 #include "profile/BackupArchive.h"
@@ -84,7 +86,7 @@ void AppController::requestExit() {
         if (delayInFlight_ > 0) cancelTests();
         return;
     }
-    if (wireGuard_.leasePending()) {
+    if (sessionGate().leaseHeld) {
         if (!begin("正在确认 WireGuard 路由清理",false,true)) return;
         wireGuard_.stop([this](Result clean) {
             finish(clean);

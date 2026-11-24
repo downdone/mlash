@@ -6,6 +6,12 @@
 #include "profile/ProviderPolicy.h"
 #include "AppController.h"
 #include "Async.h"
+#include "platform/GlobalHotkeys.h"
+#include "platform/ProxyCoordinator.h"
+#include "profile/ProfileStore.h"
+#include "profile/SubscriptionDownloader.h"
+#include "profile/WebDavClient.h"
+#include "profile/WireGuardStore.h"
 #include "storage/Storage.h"
 #include "profile/BackupArchive.h"
 #include "profile/GeoData.h"
@@ -28,6 +34,9 @@
 #include <QNetworkReply>
 
 namespace mlash {
+// 前置声明的成员在此处销毁；析构必须定义在能看到完整类型的翻译单元。
+AppController::~AppController() = default;
+
 AppController::AppController(QString root, bool smoke, QObject* parent, std::shared_ptr<PlatformServices> platform, QList<WebsiteTarget> websiteTargets, std::unique_ptr<GlobalHotkeys> hotkeys,std::unique_ptr<WebDavClient> remoteClient,std::unique_ptr<TunSession> tun,std::unique_ptr<SubscriptionDownloader> sourceDownloader,std::unique_ptr<SubscriptionDownloader> officialDownloader)
     : QObject(parent), root_(std::move(root)), smoke_(smoke), platform_(platform ? std::move(platform) : createPlatformServices()), hotkeys_(hotkeys?std::move(hotkeys):createGlobalHotkeys()),remoteClient_(remoteClient?std::move(remoteClient):std::make_unique<WebDavClient>()),
       store_(std::make_shared<ProfileStore>(root_, platform_)),
@@ -195,6 +204,13 @@ void AppController::finish(Result r) {
     state_.lastError = r.ok ? readOnlyError_ : diagnostics_.sanitize(r.error);
     if (!r.ok) diagnostics_.append("error", r.error);
     const auto operation = std::exchange(transactionOperation_, OperationId::Unspecified);
+    // 失败若带有结构化码值，分类后单独发出，界面据此补充恢复提示；
+    // 不改 operationFinished 的签名，避免打碎既有调用点与信号断言。
+    if (!r.ok) {
+        const auto code = r.data.value("code").toString();
+        const auto category = categorizeError(code);
+        if (category != ErrorCategory::Unspecified) emit operationClassified(category, code);
+    }
     publish(); if (!backgroundOperation_) emit operationFinished(r.ok, r.ok ? r.data.value("notice").toString(r.data.value("cancelled").toBool() ? "测速已取消" : "操作完成") : state_.lastError, operation); backgroundOperation_ = false;
     if (exitPending_) { exitPending_ = false; QTimer::singleShot(0, this, &AppController::requestExit); }
     else if (crashPending_) { crashPending_ = false; const auto error = crashError_; QTimer::singleShot(0, this, [this, error] { handleCrash(error); }); }

@@ -6,6 +6,9 @@
 #include "profile/ProviderPolicy.h"
 #include "profile/NodeLinks.h"
 #include "AppController.h"
+#include "platform/ProxyCoordinator.h"
+#include "profile/ProfileStore.h"
+#include "profile/SubscriptionDownloader.h"
 #include "Async.h"
 #include "storage/Storage.h"
 #include "profile/BackupArchive.h"
@@ -460,7 +463,7 @@ void AppController::renameProfile(const QString& id, const QString& name) {
 
 void AppController::deleteProfile(const QString& id) {
     if (std::any_of(wireGuardProfiles_.begin(),wireGuardProfiles_.end(),[&](const auto& profile) { return profile.id==id; })) {
-        if (wireGuard_.leasePending()) { emit operationFinished(false,"先断开 WireGuard 并确认路由清理，再删除配置"); return; }
+        if (sessionGate().blocks(SessionIntent::ProfileDelete)) { emit operationFinished(false,sessionGate().reason(SessionIntent::ProfileDelete)); return; }
         if (!begin("正在删除 WireGuard 配置")) return;
         const auto store=wireGuardStore_;
         runTask(this,[store,id] { return store->updateProfile(id,std::nullopt); },[this](WireGuardCatalog saved) {

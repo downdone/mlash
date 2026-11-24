@@ -1,10 +1,10 @@
 #pragma once
 #include "domain/Types.h"
+#include "domain/ErrorCategory.h"
 #include "HomeMetrics.h"
 #include "ConnectivityProbe.h"
 #include "HomeNodeProbe.h"
 #include "OutboundDiagnostics.h"
-#include "platform/GlobalHotkeys.h"
 #include "ProfileMaintenance.h"
 #include "ConnectionSession.h"
 #include "WebsiteTests.h"
@@ -15,25 +15,30 @@
 #include "core/CoreManager.h"
 #include "core/MihomoClient.h"
 #include "core/WireGuardSession.h"
+#include "SessionGate.h"
 #include "core/CoreUpdate.h"
 #include "core/OfficialCoreSource.h"
 #include "AppUpdateSource.h"
-#include "profile/ProfileStore.h"
 #include "profile/WireGuardStore.h"
-#include "profile/SubscriptionDownloader.h"
-#include "profile/WebDavClient.h"
-#include "platform/ProxyCoordinator.h"
 #include "diagnostics/Diagnostics.h"
 #include <QTimer>
 #include <QJsonArray>
 #include <optional>
 
 namespace mlash {
+// 仅按指针持有的服务：前置声明即可，避免把它们的实现头传递给 38 个界面翻译单元。
+class ProfileStore;
+class SubscriptionDownloader;
+class WebDavClient;
+class GlobalHotkeys;
+class ProxyCoordinator;
 class AppController : public QObject {
     Q_OBJECT
 public:
     explicit AppController(QString root, bool smoke = false, QObject* parent = nullptr, std::shared_ptr<PlatformServices> platform = {}, QList<WebsiteTarget> websiteTargets = WebsiteTests::defaults(), std::unique_ptr<GlobalHotkeys> hotkeys = {},std::unique_ptr<WebDavClient> remoteClient={},std::unique_ptr<TunSession> tun={},std::unique_ptr<SubscriptionDownloader> sourceDownloader={},std::unique_ptr<SubscriptionDownloader> officialDownloader={});
     void initialize();
+    // 析构在 .cpp 定义：成员含前置声明类型，需要完整定义才能销毁。
+    ~AppController() override;
     void suppressAutomaticStartup() { startupSuppressed_=true; }
     const AppState& state() const { return state_; }
     const Settings& settings() const { return settings_; }
@@ -228,6 +233,8 @@ signals:
     // id 标明结果归属（P4.1 反馈路由）：页面级结果进页面提示，跨页结果进状态栏「最近操作」。
     // 默认参数保证未标注的旧调用点继续编译。
     void operationFinished(bool ok, const QString& message, OperationId id = OperationId::Unspecified);
+    // 仅在失败带有已登记的码值时发出；界面据此补充恢复提示，不改变可见文案。
+    void operationClassified(mlash::ErrorCategory category, const QString& code);
     void operationStarted(const QString& message, OperationId id = OperationId::Unspecified);
     void nodeDelay(const QString& name, int delay, const QString& error);
     void delayProgress(int done, int total);
@@ -371,6 +378,8 @@ private:
     QString runningWireGuardProfile_;
     QString wireGuardPhase_, wireGuardError_, wireGuardSample_;
     QString wireGuardConnectBlock() const;
+    // 租约闸门的唯一构造点：所有「是否被 WireGuard 租约拒绝」都经此判定。
+    SessionGate sessionGate() const;
     void finishWireGuard(Result result);
     std::shared_ptr<ProxyCoordinator> proxy_;
     Diagnostics diagnostics_;

@@ -1,5 +1,6 @@
 #include "Storage.h"
 #include "domain/ConnectionColumns.h"
+#include "domain/ConnectionViewPrefs.h"
 #include <QDir>
 #include <QFile>
 #include <QFileInfo>
@@ -19,14 +20,8 @@ Result normalizeProxyBypass(const QString& text) {
 }
 bool validAppearance(const QString& appearance,int scale) { return QStringList{"system","light","dark"}.contains(appearance)&&QList<int>{90,100,110,120}.contains(scale); }
 Result validateConnectionView(const QJsonObject& object) {
-    for (auto it=object.begin();it!=object.end();++it) if (!QStringList{"case_sensitive","whole_word","regex","columns"}.contains(it.key())) return Result::fail("连接视图包含未知字段");
-    for (const auto* key:{"case_sensitive","whole_word","regex"}) if (object.contains(key)&&!object.value(key).isBool()) return Result::fail("连接搜索选项类型无效");
-    if (object.contains("columns")) {
-        const auto count=object.value("columns").toArray().size();
-        if (!object.value("columns").isArray()||(count!=ConnectionColumns::LegacyCount&&count!=ConnectionColumns::Count)) return Result::fail("连接列配置须包含完整的七列旧版或十五列"); QSet<int> ids;
-        for (const auto& value:object.value("columns").toArray()) { const auto row=value.toObject(); const auto id=row.value("id").toInt(-1),width=row.value("width").toInt(-1); if (!value.isObject()||row.size()!=3||!row.value("id").isDouble()||row.value("id").toDouble()!=id||id<0||id>=count||ids.contains(id)||!row.value("width").isDouble()||row.value("width").toDouble()!=width||width<24||width>1000||!row.value("visible").isBool()||(id==0&&!row.value("visible").toBool())) return Result::fail("连接列宽、顺序或可见性无效"); ids.insert(id); }
-    }
-    return {};
+    // 规则由类型自身拥有（原则 9/10）；此处只转发，避免两份实现各自演化。
+    return ConnectionViewPrefs::fromJson(object).valid();
 }
 bool DownloadPolicy::valid() const {
     if (!QStringList{"direct", "core"}.contains(route) || timeoutSeconds < 5 || timeoutSeconds > 120 || userAgent.size() > 256) return false;

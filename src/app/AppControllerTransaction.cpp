@@ -1,4 +1,6 @@
 #include "AppController.h"
+#include "platform/ProxyCoordinator.h"
+#include "profile/ProfileStore.h"
 #include "Async.h"
 
 namespace mlash {
@@ -15,7 +17,7 @@ struct AppController::ActivationTransaction {
 };
 
 void AppController::transact(PreparedProfile prepared, Settings nextSettings) {
-    if (nextSettings.tunEnabled&&wireGuard_.leasePending()) { finish(Result::fail("WireGuard 持有系统路由，请先安全断开")); return; }
+    if (nextSettings.tunEnabled&&sessionGate().blocks(SessionIntent::ProfileActivation,true)) { finish(Result::fail(sessionGate().reason(SessionIntent::ProfileActivation,true))); return; }
     if (!changeBackupDone_ && settings_.localBackup.value("before_changes").toBool()) {
         protectMajorChange([this,prepared,nextSettings] { transact(prepared,nextSettings); });
         return;

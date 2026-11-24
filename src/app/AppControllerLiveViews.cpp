@@ -5,6 +5,7 @@
 #include "profile/ProviderEdits.h"
 #include "profile/ProviderPolicy.h"
 #include "AppController.h"
+#include "profile/ProfileStore.h"
 #include "Async.h"
 #include "storage/Storage.h"
 #include "profile/BackupArchive.h"

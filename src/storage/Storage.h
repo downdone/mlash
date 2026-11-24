@@ -1,4 +1,10 @@
 #pragma once
+// CONTRACT owner=storage layer=storage
+// invariant: writeAtomic 先写临时文件再原子替换；readFile 默认上限 8 MiB
+// forbidden: 不得在 GUI 线程做大文件读写；不得绕过 DPAPI 写明文索引
+// lifecycle: 只由有界 worker 调用，失败返回 Result 而不抛出
+// tests: backup_tests
+// spec: docs/architecture.md
 #include "domain/Types.h"
 #include <QByteArray>
 

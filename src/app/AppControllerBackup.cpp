@@ -1,4 +1,6 @@
 #include "AppController.h"
+#include "profile/ProfileStore.h"
+#include "profile/WebDavClient.h"
 #include "Async.h"
 #include "storage/Storage.h"
 #include "profile/BackupArchive.h"

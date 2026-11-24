@@ -5,6 +5,7 @@
 #include "profile/ProviderEdits.h"
 #include "profile/ProviderPolicy.h"
 #include "AppController.h"
+#include "platform/ProxyCoordinator.h"
 #include "Async.h"
 #include "storage/Storage.h"
 #include "profile/BackupArchive.h"
@@ -39,7 +40,7 @@ void AppController::startCore(bool allowProxyRestore) {
     prepareActivation(profiles_[i], profiles_[i].active.isEmpty() ? profiles_[i].candidate : profiles_[i].active, settings_);
 }
 void AppController::resumeDesiredProxy(Completion done) {
-    if (!settings_.desiredProxy || !state_.ready || !proxyRestoreAllowed_ || wireGuard_.leasePending()) { done({}); return; }
+    if (!settings_.desiredProxy || !state_.ready || !proxyRestoreAllowed_ || sessionGate().skipsProxyRestore()) { done({}); return; }
     const auto proxy = proxy_; const int port = settings_.mixedPort; const auto bypass=settings_.proxyBypass;
     runTask(this, [proxy, port,bypass] { return proxy->acquire(port,false,bypass); }, [this, done = std::move(done)](Result r) mutable { applyProxyObservation(r); publish(); done(r); });
 }
@@ -89,7 +90,7 @@ void AppController::inspectTunService(Completion done) {
 }
 void AppController::inspectNetworkInterfaces(Completion done) { const auto platform=platform_; runTask(this,[platform] { return platform->networkInterfaces(); },[done=std::move(done)](Result result) mutable { done(result); }); }
 void AppController::repairTunService() {
-    if (wireGuard_.leasePending()) { emit operationFinished(false,"请先断开 WireGuard 并确认路由清理"); return; }
+    if (sessionGate().blocks(SessionIntent::TunServiceMaintenance)) { emit operationFinished(false,sessionGate().reason(SessionIntent::TunServiceMaintenance)); return; }
     if (smoke_||state_.tunObserved||settings_.tunEnabled||state_.core==CoreState::Failed) { emit operationFinished(false,"请先关闭 TUN 并确认清理，再修复服务；冒烟模式不执行安装"); return; }
     if (!begin("正在修复 TUN 服务，请确认 Windows 管理员授权")) return;
     const auto platform=platform_; const auto helper=QCoreApplication::applicationDirPath()+"/MlashTunService.exe";
@@ -101,7 +102,7 @@ void AppController::retryTunCleanup() {
     core_.confirmTunCleanup([this](Result stopped) { if (!stopped.ok) { finish(stopped); return; } const auto proxy=proxy_; runTask(this,[proxy] { return proxy->release(); },[this](Result released) { applyProxyObservation(released); if (!released.ok) { finish(released); return; } auto next=settings_; next.tunEnabled=false; next.desiredProxy=false; saveSnapshot(next,profiles_,[this](Result saved) { finish(saved); }); }); });
 }
 void AppController::manageTunService(bool install) {
-    if (wireGuard_.leasePending()) { emit operationFinished(false,"请先断开 WireGuard 并确认路由清理"); return; }
+    if (sessionGate().blocks(SessionIntent::TunServiceMaintenance)) { emit operationFinished(false,sessionGate().reason(SessionIntent::TunServiceMaintenance)); return; }
     if (smoke_||state_.tunObserved||settings_.tunEnabled||state_.core==CoreState::Failed) { emit operationFinished(false,"请先关闭 TUN 并确认内核已停止，再安装或移除服务；隔离冒烟不执行系统安装"); return; }
     if (!begin(install?"正在安装 TUN 服务，请确认 Windows 管理员授权":"正在移除 TUN 服务，请确认 Windows 管理员授权")) return;
     const auto platform=platform_; const auto helper=QCoreApplication::applicationDirPath()+"/MlashTunService.exe";
@@ -112,7 +113,7 @@ void AppController::updateTunOptions(bool enabled,const QString& stack,bool stri
     auto next=settings_; next.tunEnabled=enabled; next.tunStack=stack; next.tunStrictRoute=strictRoute; updateTunSettings(next);
 }
 void AppController::updateTunSettings(const Settings& options,const QJsonValue& expected) {
-    if (options.tunEnabled&&wireGuard_.leasePending()) { emit operationFinished(false,"WireGuard 持有系统路由，请先安全断开"); return; }
+    if (options.tunEnabled&&sessionGate().blocks(SessionIntent::TunEnable)) { emit operationFinished(false,sessionGate().reason(SessionIntent::TunEnable)); return; }
     if (!expected.isUndefined()&&(!expected.isObject()||expected.toObject()!=tunOptionsJson(settings_))) { emit operationFinished(false,"TUN 设置已在其他窗口修改，请重新打开；当前草稿保留"); return; }
     auto next=settings_; next.tunEnabled=options.tunEnabled; next.tunStack=options.tunStack; next.tunStrictRoute=options.tunStrictRoute; next.tunExcludeRoutes=options.tunExcludeRoutes; next.tunMtu=options.tunMtu; next.tunDnsHijack=options.tunDnsHijack; const bool enabled=next.tunEnabled;
     if (!validTunOptions(next)) { emit operationFinished(false,"TUN 协议栈选项无效"); return; }
@@ -139,7 +140,7 @@ void AppController::updateTunSettings(const Settings& options,const QJsonValue& 
     });
 }
 void AppController::setSystemProxy(bool enabled, bool allowExternal) {
-    if (enabled&&wireGuard_.leasePending()) { emit operationFinished(false,"WireGuard 并行期间请使用 Mihomo 本地代理"); return; }
+    if (enabled&&sessionGate().blocks(SessionIntent::ProxyTakeover)) { emit operationFinished(false,sessionGate().reason(SessionIntent::ProxyTakeover)); return; }
     if (enabled && (!state_.ready || core_.state() != CoreState::Running)) { emit operationFinished(false, "内核尚未就绪，系统代理保持不变"); return; }
     if (!begin(enabled ? "正在接管系统代理" : "正在恢复系统代理")) return;
     proxyRestoreAllowed_ = true;

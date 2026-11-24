@@ -1,4 +1,5 @@
 #include "AppController.h"
+#include "profile/ProfileStore.h"
 #include "core/TunPolicy.h"
 #include "Async.h"
 #include "storage/Storage.h"
