@@ -24,6 +24,8 @@ mlash_ui_tests subscriptionCardEditingAndReturnPreserveObject quickImportCreates
 
 指标口径调整：`controller_header_dependents` 从债务指标改为快照。它数的是"包含控制器头的 TU 个数"，把一个文件拆成三个 TU 必然增加该值，却与重建成本无关；真正的成本指标是 `controller_header_closure`（每个 TU 拉进多少项目头）与 `controller_direct_includes`。
 
+`MainWindowWireGuard.cpp`（791 行）**未拆**：它依赖同文件的私有控件（`FieldValue`、`textLabel`、`groupedFields`、`tabViewport` 等），拆页必须先把这些内联类重构成独立模块。尝试后判定收益不抵风险——`FieldValue` 是带自适应高度的 `QLabel` 子类，外置会把 Qt 细节扩散到新头文件，且本轮已引入一次编译失败。`files_over_600_lines` 因此保留为 2（另一个是 `WireGuardService.cpp` 662 行，属单一服务的自洽实现）。若要继续，建议作为独立切片先做"页面共享控件模块"，再拆页。
+
 ## 提交基线与新克隆复核
 
 2026-11-24。提交拆成五片，其中**第一片单独承载此前未提交的 UI 工作**，后四片是本次整改。原分支 `feature/daymark-ui-alignment` 未改动，整改在新分支 `feature/showroom-overhaul` 上。
