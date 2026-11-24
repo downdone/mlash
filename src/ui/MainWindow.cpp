@@ -389,9 +389,21 @@ MainWindow::MainWindow(AppController* controller, QWidget* parent) : QMainWindow
         refreshStatusSegments();
         findChild<QToolButton*>("statusDetails")->show();
     });
+    connect(controller_, &AppController::operationClassified, this, [this](ErrorCategory category, const QString&) {
+        switch (category) {
+        case ErrorCategory::Rejected: statusCategoryHint_ = QStringLiteral("需要修正输入或配置"); break;
+        case ErrorCategory::Retryable: statusCategoryHint_ = QStringLiteral("可重试"); break;
+        case ErrorCategory::UserAction: statusCategoryHint_ = QStringLiteral("需要用户处理"); break;
+        case ErrorCategory::Reload: statusCategoryHint_ = QStringLiteral("需重新载入后再操作"); break;
+        case ErrorCategory::Internal: statusCategoryHint_ = QStringLiteral("内部错误"); break;
+        case ErrorCategory::Unspecified: statusCategoryHint_.clear(); break;
+        }
+    });
     connect(controller_, &AppController::operationFinished, this, [this](bool ok, const QString& text, OperationId id) {
-        if (id != OperationId::Unspecified) { routeOperationFeedback(ok, text, id); return; }
-        message_->setText(statusNoticeText(ok, text)); message_->setToolTip(text);
+        if (id != OperationId::Unspecified) { routeOperationFeedback(ok, text, id); statusCategoryHint_.clear(); return; }
+        message_->setText(statusNoticeText(ok, text));
+        message_->setToolTip(statusCategoryHint_.isEmpty() ? text : text + "\n" + statusCategoryHint_);
+        statusCategoryHint_.clear();
         feedbackTimer_.stop(); recentFeedback_=ok; feedbackError_=ok?QString():text; noticeOperation_=id; if (ok) feedbackTimer_.start();
         refreshStatusSegments();
         updateActions();
@@ -446,4 +458,3 @@ MainWindow::~MainWindow() {
     if (outboundDialog_) delete outboundDialog_.data();
     NodePresentation::clearTransientCache(); if (connectionOptions_) connectionOptions_->flushPreferences(); controller_->setHomeVisible(false); controller_->setWebsiteTestsVisible(false); controller_->clearWebsiteTests(); controller_->setRulesVisible(false); controller_->setConnectionsVisible(false); controller_->setDiagnosticsVisible(false); }
 }
-

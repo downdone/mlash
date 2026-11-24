@@ -297,6 +297,8 @@ private:
     QTimer feedbackTimer_;
     bool recentFeedback_ = false, settingsApplying_ = false;
     QString settingsFeedback_, feedbackError_;
+    // 结构化失败的恢复提示，只进状态栏 hint，不改变可见文案。
+    QString statusCategoryHint_;
     ActivityTableModel connectionsModel_{true, this}, rulesModel_{false, this};
     QSortFilterProxyModel connectionsFilter_{this};
     QSortFilterProxyModel rulesFilter_{this};

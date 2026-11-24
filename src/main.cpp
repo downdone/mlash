@@ -1,7 +1,12 @@
 #include "app/AppController.h"
+// 构造 AppController 需要这些参数类型的完整定义（默认实参的空 unique_ptr 也要可析构）。
+#include "platform/GlobalHotkeys.h"
+#include "profile/SubscriptionDownloader.h"
+#include "profile/WebDavClient.h"
 #include "app/Async.h"
 #include "storage/Storage.h"
 #include "ui/MainWindow.h"
+#include "ui/SmokeRunner.h"
 #include "ui/TrayController.h"
 #include "ui/GuiHost.h"
 #include "ui/WidgetStyle.h"
@@ -72,7 +77,6 @@ int main(int argc, char** argv) {
     std::unique_ptr<mlash::QualificationRun> measurement;
     bool smokeUiOk = true;
     QJsonArray smokePages;
-    std::function<void(int)> captureSmokePage;
     auto showWindow = [&] { gui.show(); };
     QObject::connect(&tray, &mlash::TrayController::showWindow, &app, showWindow);
     QObject::connect(&tray, &mlash::TrayController::showPage, &app, [&](int page) { gui.show(page); });
@@ -84,78 +88,18 @@ int main(int argc, char** argv) {
     QObject::connect(&controller, &mlash::AppController::initialized, &app, [&] {
         if (qualification) { measurement=std::make_unique<mlash::QualificationRun>(&controller,&gui,&tray,parser.value("qualification-report"),seconds,parser.isSet("qualification-gui")); measurement->start(startup.elapsed()); return; }
         if (smoke || !tray.available() || controller.profiles().isEmpty() || controller.settings().activeProfile.isEmpty() || !controller.state().lastError.isEmpty() ||
-            !(parser.isSet("silent") || controller.settings().silentStart)) gui.show(controller.settings().startupPage);
+            !(parser.isSet("silent") || controller.settings().silentStart)) {
+            if (smoke) gui.show(controller.settings().startupPage);
+            else gui.show();
+        }
         if (smoke) {
-            if (parser.isSet("runtime-report")) {
-                QJsonObject report{{"qt_version", QT_VERSION_STR}, {"ready_ms", static_cast<double>(startup.elapsed())},
-                    {"tls_available", QSslSocket::supportsSsl()}, {"tls_backend", QSslSocket::activeBackend()},
-                    {"plugin_paths", QJsonArray::fromStringList(QCoreApplication::libraryPaths())}};
-                const auto path = parser.value("runtime-report"); const auto bytes = QJsonDocument(report).toJson();
-                mlash::runTask(&controller, [path, bytes] { return mlash::writeAtomic(path, bytes); }, [&controller](mlash::Result r) { if (!r.ok) controller.diagnostics()->append("error", r.error); });
-            }
             const auto output = parser.value("screenshots-dir"); if (!output.isEmpty()) QDir().mkpath(output);
-            // 切页、确认路由、截图必须串行。独立定时器会在慢布局时把下一页误存成上一页。
-            captureSmokePage = [&,output](int page) {
-                if (page == 8) {
-                    if (output.isEmpty()) { controller.requestExit(); return; }
-                    const auto bytes=QJsonDocument(smokePages).toJson();
-                    mlash::runTask(&controller,[output,bytes] { return mlash::writeAtomic(output+"/page-routes.json",bytes); },
-                        [&](mlash::Result r) { if (!r.ok) smokeUiOk=false; controller.requestExit(); });
-                    return;
-                }
-                auto* window=gui.window();
-                if (!window) { smokeUiOk=false; controller.requestExit(); return; }
-                window->setPage(page);
-                QTimer::singleShot(80,&app,[&,page,output] {
-                    auto* readyWindow=gui.window();
-                    const auto expected=mlash::fromLegacyPage(page);
-                    if (!readyWindow || readyWindow->currentRoute()!=expected) {
-                        if (readyWindow) {
-                            const auto actual=readyWindow->currentRoute();
-                            qWarning("Smoke route mismatch for page %d: expected %d/%d/%d/%d, actual %d/%d/%d/%d",
-                                page,expected.view,expected.category,int(expected.anchor),expected.tab,
-                                actual.view,actual.category,int(actual.anchor),actual.tab);
-                        }
-                        smokeUiOk=false; controller.requestExit(); return;
-                    }
-                    if (!output.isEmpty() && !readyWindow->grab().save(output+QString("/page-%1.png").arg(page))) {
-                        smokeUiOk=false; controller.requestExit(); return;
-                    }
-                    const auto route=readyWindow->currentRoute();
-                    smokePages.append(QJsonObject{{"page",page},{"view",route.view},{"tab",route.tab}});
-                    if (page==6 && !output.isEmpty()) {
-                        auto* search=readyWindow->findChild<QLineEdit*>("settingsSearch");
-                        auto* stack=readyWindow->findChild<QStackedWidget*>("settingsTaskStack");
-                        auto* directory=readyWindow->findChild<QWidget*>("settingsDirectory");
-                        auto* appearance=readyWindow->findChild<QWidget*>("settingsAppearanceRow");
-                        if (!search || !stack || !directory || !appearance || !search->isVisible() ||
-                            stack->currentIndex()!=0 || !directory->isVisible()) {
-                            smokeUiOk=false; controller.requestExit(); return;
-                        }
-                        search->setText(QStringLiteral("外观"));
-                        auto* results=readyWindow->findChild<QWidget*>("settingsInlineResults");
-                        if (!results || !results->isVisible() || directory->isVisible() ||
-                            !readyWindow->grab().save(output+"/settings-search.png")) {
-                            smokeUiOk=false; controller.requestExit(); return;
-                        }
-                        QKeyEvent enter(QEvent::KeyPress,Qt::Key_Return,Qt::NoModifier);
-                        QApplication::sendEvent(search,&enter);
-                        if (stack->currentIndex()!=0 || !directory->isVisible() ||
-                            !appearance->isVisible() || !appearance->property("located").toBool()) {
-                            smokeUiOk=false; controller.requestExit(); return;
-                        }
-                        readyWindow->setPage(0);
-                        readyWindow->setPage(6);
-                        if (readyWindow->currentRoute()!=expected || stack->currentIndex()!=0 ||
-                            !directory->isVisible() || !search->isVisible() ||
-                            !readyWindow->grab().save(output+"/settings-return.png")) {
-                            smokeUiOk=false; controller.requestExit(); return;
-                        }
-                    }
-                    QTimer::singleShot(100,&app,[&,page] { captureSmokePage(page+1); });
-                });
-            };
-            QTimer::singleShot(250,&app,[&] { captureSmokePage(0); });
+            // 切页、校验、截图、写清单由 SmokeRunner 串行完成；写文件由这里注入，界面层不依赖存储层。
+            auto* runner = new mlash::SmokeRunner(&gui, {output, parser.value("runtime-report"),
+                static_cast<quint64>(startup.elapsed()),
+                [&controller](const QString& path, const QByteArray& bytes) { return mlash::writeAtomic(path, bytes); }}, &app);
+            QObject::connect(runner, &mlash::SmokeRunner::finished, &app, [&](bool ok) { smokeUiOk = ok; controller.requestExit(); });
+            QTimer::singleShot(250,&app,[runner] { runner->start(); });
         }
     });
     controller.initialize(); const int result = app.exec();

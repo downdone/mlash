@@ -1,4 +1,5 @@
 #include "app/AppController.h"
+#include "profile/RemoteBackup.h"
 #include "TaskWorkspace.h"
 #include "TaskDialog.h"
 #include "DialogDraftGuard.h"

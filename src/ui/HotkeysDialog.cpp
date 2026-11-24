@@ -1,4 +1,5 @@
 #include "app/AppController.h"
+#include "domain/HotkeyBindings.h"
 #include "DialogDraftGuard.h"
 #include "HotkeysDialog.h"
 #include "ContextNote.h"
