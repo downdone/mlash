@@ -9,6 +9,9 @@
 #include <QLineEdit>
 #include <QPushButton>
 #include <QUrlQuery>
+#include "platform/GlobalHotkeys.h"
+#include "profile/WebDavClient.h"
+#include "profile/SubscriptionDownloader.h"
 using namespace mlash;
 class ProtocolPlatform final:public PlatformServices {
 public:

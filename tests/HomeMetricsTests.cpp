@@ -14,6 +14,9 @@
 #include <QToolButton>
 #include <QTemporaryDir>
 #include <QScrollArea>
+#include "platform/GlobalHotkeys.h"
+#include "profile/WebDavClient.h"
+#include "profile/SubscriptionDownloader.h"
 using namespace mlash;
 class HomeMetricsTests final : public QObject {
     Q_OBJECT

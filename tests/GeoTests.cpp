@@ -9,6 +9,8 @@
 #include <QProcess>
 #include <QTableWidget>
 #include <QJsonDocument>
+#include "platform/GlobalHotkeys.h"
+#include "profile/WebDavClient.h"
 using namespace mlash;
 class GeoPlatform final : public PlatformServices {
 public:

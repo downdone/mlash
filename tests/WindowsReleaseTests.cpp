@@ -9,6 +9,9 @@
 #include <QJsonDocument>
 #include <QProcess>
 #include <QTcpServer>
+#include "platform/GlobalHotkeys.h"
+#include "profile/WebDavClient.h"
+#include "profile/SubscriptionDownloader.h"
 using namespace mlash;
 static QByteArray fixture() { return "mode: rule\nproxies: []\nproxy-groups: [{name: Test, type: select, proxies: [DIRECT, REJECT]}]\nrules: [\"MATCH,Test\"]\n"; }
 static QString corePath() { return qEnvironmentVariable("MLASH_TEST_CORE"); }

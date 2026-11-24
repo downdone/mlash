@@ -18,6 +18,9 @@
 #include <QScrollBar>
 #include "ui/HomeMetricsView.h"
 #include "storage/Storage.h"
+#include "platform/GlobalHotkeys.h"
+#include "profile/WebDavClient.h"
+#include "profile/SubscriptionDownloader.h"
 using namespace mlash;
 class OutboundTests final : public QObject {
     Q_OBJECT

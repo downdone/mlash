@@ -11,6 +11,9 @@
 #include <QTemporaryDir>
 #include <QComboBox>
 #include <QUrlQuery>
+#include "platform/GlobalHotkeys.h"
+#include "profile/WebDavClient.h"
+#include "profile/SubscriptionDownloader.h"
 using namespace mlash;
 class ProbePlatform final:public PlatformServices {
 public:

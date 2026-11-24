@@ -29,6 +29,9 @@
 #include <QTemporaryDir>
 #include <QTableWidget>
 #include <QDialogButtonBox>
+#include "platform/GlobalHotkeys.h"
+#include "profile/WebDavClient.h"
+#include "profile/SubscriptionDownloader.h"
 
 using namespace mlash;
 namespace {

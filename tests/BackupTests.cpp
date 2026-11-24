@@ -18,6 +18,9 @@
 #include "profile/LocalBackup.h"
 #include <QSpinBox>
 #include <QTableWidget>
+#include "platform/GlobalHotkeys.h"
+#include "profile/WebDavClient.h"
+#include "profile/SubscriptionDownloader.h"
 
 using namespace mlash;
 class BackupPlatform final : public PlatformServices {

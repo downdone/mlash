@@ -38,6 +38,9 @@
 #include <QScrollArea>
 #include <QScrollBar>
 #include <QStandardItemModel>
+#include "platform/GlobalHotkeys.h"
+#include "profile/WebDavClient.h"
+#include "profile/SubscriptionDownloader.h"
 using namespace mlash;
 class WorkspacePlatform final:public PlatformServices {
 public:

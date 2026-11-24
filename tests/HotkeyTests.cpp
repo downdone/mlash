@@ -16,6 +16,8 @@
 #include <QLineEdit>
 #include <QPushButton>
 #include <QLabel>
+#include "profile/WebDavClient.h"
+#include "profile/SubscriptionDownloader.h"
 using namespace mlash;
 class HotkeyPlatform final : public PlatformServices {
 public:

@@ -7,6 +7,9 @@
 #include <QJsonDocument>
 #include <QTemporaryDir>
 #include <QCryptographicHash>
+#include "platform/GlobalHotkeys.h"
+#include "profile/WebDavClient.h"
+#include "profile/SubscriptionDownloader.h"
 #ifdef Q_OS_WIN
 #include <QtZlib/zlib.h>
 #else

@@ -72,6 +72,9 @@
 #include <QScreen>
 #include <QVBoxLayout>
 #include <QCryptographicHash>
+#include "platform/GlobalHotkeys.h"
+#include "profile/WebDavClient.h"
+#include "profile/SubscriptionDownloader.h"
 
 using namespace mlash;
 static bool seedDashboardFixture(const QString& root) {

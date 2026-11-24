@@ -38,6 +38,9 @@
 #include <QTableView>
 #include <QUrlQuery>
 #include <QCryptographicHash>
+#include "platform/GlobalHotkeys.h"
+#include "profile/WebDavClient.h"
+#include "profile/SubscriptionDownloader.h"
 using namespace mlash;
 class DepthPlatform final : public PlatformServices {
 public:

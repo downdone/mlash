@@ -7,6 +7,10 @@
 #include <QPlainTextEdit>
 #include <QPushButton>
 #include <QLabel>
+#include "platform/GlobalHotkeys.h"
+#include "profile/WebDavClient.h"
+#include "profile/SubscriptionDownloader.h"
+#include "platform/ProxyCoordinator.h"
 using namespace mlash;
 class BypassPlatform final:public PlatformServices {
 public:

@@ -13,6 +13,9 @@
 #include <QPushButton>
 #include <QCheckBox>
 #include <yaml-cpp/yaml.h>
+#include "platform/GlobalHotkeys.h"
+#include "profile/WebDavClient.h"
+#include "profile/SubscriptionDownloader.h"
 
 using namespace mlash;
 class DnsPlatform final : public PlatformServices {

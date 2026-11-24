@@ -41,6 +41,8 @@ target_include_directories(mlash_qrcode PUBLIC "${qrcodegen_SOURCE_DIR}/cpp")
 
 add_library(mlash_domain STATIC
     src/domain/Types.h src/domain/ConnectionColumns.h
+    src/domain/CleanupState.h src/domain/ErrorCategory.h src/domain/ErrorCategory.cpp
+    src/domain/ConnectionViewPrefs.h src/domain/ConnectionViewPrefs.cpp
     src/domain/WebsiteTargets.h src/domain/WebsiteTargets.cpp
     src/domain/TunOptions.h src/domain/TunOptions.cpp
     src/domain/HotkeyBindings.h src/domain/HotkeyBindings.cpp)
@@ -100,7 +102,7 @@ else()
     target_compile_options(mlash_engine PRIVATE -Wall -Wextra -Wpedantic)
 endif()
 
-add_library(mlash_ui STATIC src/ui/Route.h src/ui/Route.cpp src/ui/ViewIds.h src/ui/ViewIds.cpp src/ui/StatusSentence.h src/ui/StatusSentence.cpp src/ui/FeedbackSync.h src/ui/FeedbackSync.cpp src/ui/PageLifecycle.h src/ui/PageLifecycle.cpp src/ui/ToolWindowRegistry.h src/ui/ToolWindowRegistry.cpp src/ui/StatusShape.h src/ui/StatusShape.cpp src/ui/SkeletonBlock.h src/ui/SkeletonBlock.cpp src/ui/UsageDelegate.h src/ui/UsageDelegate.cpp src/ui/MenuSection.h src/ui/ContextNote.h src/ui/SettingsSearch.h src/ui/SettingsSearch.cpp src/ui/CompactSpinBox.h src/ui/MainWindow.h src/ui/MainWindow.cpp src/ui/MainWindowChrome.cpp src/ui/MainWindowData.cpp src/ui/MainWindowFeedback.cpp src/ui/MainWindowState.cpp src/ui/MainWindowNavigation.cpp src/ui/MainWindowHome.cpp src/ui/MainWindowSettings.cpp src/ui/MainWindowProxy.cpp src/ui/MainWindowProfiles.cpp src/ui/DashboardCardButton.h src/ui/ChevronToolButton.h src/ui/MenuPushButton.h src/ui/WindowUiFactories.h src/ui/SettingRow.h src/ui/ProfileRowDelegate.h src/ui/ProfileCardWidget.h src/ui/ProfileCardWidget.cpp src/ui/GroupCardDelegate.h src/ui/NodeNameDelegate.h src/ui/NodeCardDelegate.h src/ui/NodeCardView.h src/ui/ProxySwitch.h src/ui/DetailsDrawer.h src/ui/NodeRowModel.h src/ui/NodeRowDelegate.h src/ui/NodeRowView.h src/ui/WindowChrome.h src/ui/NodeFilter.cpp
+add_library(mlash_ui STATIC src/ui/Route.h src/ui/Route.cpp src/ui/ViewIds.h src/ui/ViewIds.cpp src/ui/StatusSentence.h src/ui/StatusSentence.cpp src/ui/FeedbackSync.h src/ui/FeedbackSync.cpp src/ui/PageLifecycle.h src/ui/PageLifecycle.cpp src/ui/ToolWindowRegistry.h src/ui/ToolWindowRegistry.cpp src/ui/StatusShape.h src/ui/StatusShape.cpp src/ui/SkeletonBlock.h src/ui/SkeletonBlock.cpp src/ui/UsageDelegate.h src/ui/UsageDelegate.cpp src/ui/MenuSection.h src/ui/ContextNote.h src/ui/SettingsSearch.h src/ui/SettingsSearch.cpp src/ui/CompactSpinBox.h src/ui/MainWindow.h src/ui/MainWindow.cpp src/ui/MainWindowChrome.cpp src/ui/MainWindowData.cpp src/ui/MainWindowFeedback.cpp src/ui/MainWindowState.cpp src/ui/MainWindowNavigation.cpp src/ui/MainWindowHome.cpp src/ui/MainWindowSettings.cpp src/ui/MainWindowProxy.cpp src/ui/MainWindowProfiles.cpp src/ui/SmokeRunner.cpp src/ui/DashboardCardButton.h src/ui/ChevronToolButton.h src/ui/MenuPushButton.h src/ui/WindowUiFactories.h src/ui/SettingRow.h src/ui/ProfileRowDelegate.h src/ui/ProfileCardWidget.h src/ui/ProfileCardWidget.cpp src/ui/GroupCardDelegate.h src/ui/NodeNameDelegate.h src/ui/NodeCardDelegate.h src/ui/NodeCardView.h src/ui/ProxySwitch.h src/ui/DetailsDrawer.h src/ui/DetailsDrawer.cpp src/ui/NodeRowModel.h src/ui/NodeRowDelegate.h src/ui/NodeRowView.h src/ui/WindowChrome.h src/ui/NodeFilter.cpp
     src/ui/ProviderDefinitionDialog.h src/ui/YamlFormEditor.h src/ui/YamlFormEditor.cpp
     src/ui/ConnectionDetailsDialog.h src/ui/ConnectionDetailsDialog.cpp src/ui/ProviderDefinitionDialog.cpp src/ui/ProviderPolicyDialog.cpp
     src/ui/TaskWorkspace.h src/ui/TaskWorkspace.cpp
@@ -121,6 +123,8 @@ add_library(mlash_ui STATIC src/ui/Route.h src/ui/Route.cpp src/ui/ViewIds.h src
     src/ui/ProxyBypassDialog.h src/ui/ProxyBypassDialog.cpp
     src/ui/CoreUpdateDialog.h src/ui/CoreUpdateDialog.cpp
     src/ui/MainWindowWireGuard.cpp
+    src/ui/MainWindowWorkspaces.cpp
+    src/ui/ProxyNodesPage.h src/ui/ProxyNodesPage.cpp
     src/ui/AppUpdateDialog.h src/ui/AppUpdateDialog.cpp
     src/ui/RemoteBackupDialog.h src/ui/RemoteBackupDialog.cpp
     src/ui/GeoDataDialog.h src/ui/GeoDataDialog.cpp
@@ -188,6 +192,18 @@ if(BUILD_TESTING)
     target_link_libraries(mlash_page_router_tests PRIVATE Qt6::Core Qt6::Test)
     add_test(NAME page_router_tests COMMAND mlash_page_router_tests -o "${CMAKE_BINARY_DIR}/page-router-tests.xml,xml")
     set_tests_properties(page_router_tests PROPERTIES TIMEOUT 10 LABELS "unit;ui")
+    # Async.h 的线程与 QPointer 契约：只链接 Qt Core/Test，避免把引擎或界面拖进单元测试。
+    add_executable(mlash_async_tests tests/AsyncTaskTests.cpp)
+    target_include_directories(mlash_async_tests PRIVATE src)
+    target_link_libraries(mlash_async_tests PRIVATE Qt6::Core Qt6::Test)
+    add_test(NAME async_task_tests COMMAND mlash_async_tests -o "${CMAKE_BINARY_DIR}/async-task-tests.xml,xml")
+    set_tests_properties(async_task_tests PROPERTIES TIMEOUT 30 LABELS "unit")
+    # SessionGate 的租约语义：只链接 Qt Core/Test，不链接引擎或界面。
+    add_executable(mlash_session_gate_tests tests/SessionGateTests.cpp)
+    target_include_directories(mlash_session_gate_tests PRIVATE src)
+    target_link_libraries(mlash_session_gate_tests PRIVATE Qt6::Core Qt6::Test)
+    add_test(NAME session_gate_tests COMMAND mlash_session_gate_tests -o "${CMAKE_BINARY_DIR}/session-gate-tests.xml,xml")
+    set_tests_properties(session_gate_tests PROPERTIES TIMEOUT 10 LABELS "unit")
     add_executable(mlash_tun_tests tests/TunTests.cpp tests/MockHttp.cpp)
     target_link_libraries(mlash_tun_tests PRIVATE mlash_ui Qt6::Test)
     target_compile_definitions(mlash_tun_tests PRIVATE MLASH_SOURCE_DIR="${CMAKE_SOURCE_DIR}")
@@ -451,9 +467,26 @@ if(BUILD_TESTING)
     find_package(Python3 COMPONENTS Interpreter QUIET)
     if(Python3_Interpreter_FOUND)
         add_test(NAME architecture_boundaries COMMAND "${Python3_EXECUTABLE}" "${CMAKE_SOURCE_DIR}/tests/test_architecture_boundaries.py")
+        add_test(NAME architecture_boundaries_self_test COMMAND "${Python3_EXECUTABLE}" "${CMAKE_SOURCE_DIR}/tests/test_architecture_boundaries.py" --self-test)
+        add_test(NAME architecture_metrics COMMAND "${Python3_EXECUTABLE}" "${CMAKE_SOURCE_DIR}/scripts/measure-architecture.py" --check)
+        add_test(NAME architecture_metrics_self_test COMMAND "${Python3_EXECUTABLE}" "${CMAKE_SOURCE_DIR}/scripts/measure-architecture.py" --self-test)
+        add_test(NAME ui_tokens COMMAND "${Python3_EXECUTABLE}" "${CMAKE_SOURCE_DIR}/scripts/check_ui_tokens.py")
+        add_test(NAME ui_tokens_self_test COMMAND "${Python3_EXECUTABLE}" "${CMAKE_SOURCE_DIR}/scripts/check_ui_tokens.py" --self-test)
+        add_test(NAME contract_headers COMMAND "${Python3_EXECUTABLE}" "${CMAKE_SOURCE_DIR}/scripts/check_contract_headers.py")
+        add_test(NAME contract_headers_self_test COMMAND "${Python3_EXECUTABLE}" "${CMAKE_SOURCE_DIR}/scripts/check_contract_headers.py" --self-test)
+        add_test(NAME feature_outline COMMAND "${Python3_EXECUTABLE}" "${CMAKE_SOURCE_DIR}/scripts/check_feature_outline.py")
+        add_test(NAME feature_outline_self_test COMMAND "${Python3_EXECUTABLE}" "${CMAKE_SOURCE_DIR}/scripts/check_feature_outline.py" --self-test)
+        add_test(NAME documentation_links COMMAND "${Python3_EXECUTABLE}" "${CMAKE_SOURCE_DIR}/scripts/check_docs.py")
+        add_test(NAME document_privacy COMMAND "${Python3_EXECUTABLE}" "${CMAKE_SOURCE_DIR}/scripts/check_document_privacy.py")
+        add_test(NAME documentation_tools COMMAND "${Python3_EXECUTABLE}" -m unittest discover -s "${CMAKE_SOURCE_DIR}/tests" -p test_documentation_tools.py)
         add_test(NAME release_tools COMMAND "${Python3_EXECUTABLE}" "${CMAKE_SOURCE_DIR}/tests/test_release_tools.py")
         set_tests_properties(release_tools PROPERTIES TIMEOUT 20)
-        set_tests_properties(architecture_boundaries PROPERTIES LABELS "unit")
+        set_tests_properties(architecture_boundaries architecture_boundaries_self_test
+            architecture_metrics architecture_metrics_self_test
+            ui_tokens ui_tokens_self_test
+            contract_headers contract_headers_self_test
+            feature_outline feature_outline_self_test
+            documentation_links document_privacy PROPERTIES LABELS "unit" TIMEOUT 60)
         set_tests_properties(release_tools PROPERTIES LABELS "integration")
     endif()
     set_tests_properties(engine core_readiness_tests official_core_tests service_tests home_probe_tests

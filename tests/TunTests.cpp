@@ -9,6 +9,9 @@
 #include "ui/UiTheme.h"
 #include "ui/WidgetStyle.h"
 #include "MockHttp.h"
+#include "platform/GlobalHotkeys.h"
+#include "profile/WebDavClient.h"
+#include "profile/SubscriptionDownloader.h"
 #ifdef Q_OS_WIN
 #include "platform/windows/TunNative.h"
 #endif

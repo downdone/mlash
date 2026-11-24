@@ -55,6 +55,9 @@
 #include <QTabBar>
 #include <QTabWidget>
 #include <QListWidget>
+#include "platform/GlobalHotkeys.h"
+#include "profile/WebDavClient.h"
+#include "profile/SubscriptionDownloader.h"
 
 using namespace mlash;
 namespace {

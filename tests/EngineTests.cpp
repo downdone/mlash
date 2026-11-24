@@ -16,6 +16,10 @@
 #include <QSslSocket>
 #include <QRandomGenerator>
 #include <yaml-cpp/yaml.h>
+#include "platform/GlobalHotkeys.h"
+#include "profile/WebDavClient.h"
+#include "profile/SubscriptionDownloader.h"
+#include "platform/ProxyCoordinator.h"
 
 using namespace mlash;
 namespace {
@@ -74,6 +78,7 @@ private slots:
     void fixtureRewriteWaitsForShortReadHandle();
     void localMaintenancePreservesActive();
     void managedYamlPreservesRules();
+    void rejectedConfigEmitsErrorCategory();
     void halfCloseDefaultsAndSourceOverrides();
     void compatibilityReportNoSecrets();
     void customRulesOverlayAndIsolation();
@@ -345,6 +350,23 @@ void EngineTests::settingsRoundTrip() {
     auto object = settings.toJson(); object["mixed_port"] = -1; QCOMPARE(Settings::fromJson(object).mixedPort, 17890);
     QVERIFY(Settings::fromJson(QJsonObject{}).lightweight); settings.lightweight = false; QVERIFY(!Settings::fromJson(settings.toJson()).lightweight);
 }
+void EngineTests::rejectedConfigEmitsErrorCategory() {
+    QTemporaryDir data;
+    auto platform = std::make_shared<MemoryPlatform>();
+    AppController controller(data.path(), true, nullptr, platform);
+    QSignalSpy ready(&controller, &AppController::initialized);
+    QSignalSpy classified(&controller, &AppController::operationClassified);
+    controller.initialize();
+    QTRY_COMPARE(ready.size(), 1);
+    const auto path = data.filePath("bad.yaml");
+    QVERIFY(writeAtomic(path, minimalYaml() + "listeners:\n  - name: x\n  - port: 1234\n").ok);
+    controller.importFile("Bad", path);
+    QTRY_VERIFY_WITH_TIMEOUT(classified.size() >= 1, 5000);
+    // ConfigBuilder 的结构化码值全部属于「输入被拒绝」。
+    QCOMPARE(classified.last()[0].value<ErrorCategory>(), ErrorCategory::Rejected);
+    QVERIFY(!classified.last()[1].toString().isEmpty());
+}
+
 void EngineTests::managedYamlPreservesRules() {
     const auto source = minimalYaml() + "ipv6: false\ndns:\n  enable: true\n  enhanced-mode: fake-ip\n  nameserver: [https://dns.google/dns-query]\n";
     const auto built = ConfigBuilder::build(source, Settings{}, 19090, QString(64, 'a')); QVERIFY2(built.result.ok, qUtf8Printable(built.result.error));

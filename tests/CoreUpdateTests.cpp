@@ -13,6 +13,9 @@
 #include <QLabel>
 #include <QtEndian>
 #include <QTableWidget>
+#include "platform/GlobalHotkeys.h"
+#include "profile/WebDavClient.h"
+#include "profile/SubscriptionDownloader.h"
 using namespace mlash;
 class UpdatePlatform final:public PlatformServices {
 public:
