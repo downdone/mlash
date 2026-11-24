@@ -30,6 +30,8 @@ Mlash 源码归档执行文档隐私检查。第三方完整对应源码与声�
 
 ## 预发布核验
 
+包内冒烟必须用 `scripts/smoke-portable.ps1`：它解压 ZIP、检查 `platforms/` 存在，并把 PATH 收窄到系统目录后启动包内 EXE，避免从开发环境的 Qt 加载插件造成假绿。脚本断言退出码为 0 且路由清单为 8 条。
+
 每个预发布应包含：
 
 - Windows x64 便携 ZIP 与 SHA256。

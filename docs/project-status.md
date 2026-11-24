@@ -1,10 +1,41 @@
 # 项目状态
 
+## 整改进行中（样板间）
+
+按[架构优化项清单](design/architecture-optimization-program.md)的层级顺序整改，用户已授权并行切片；每片仍须独立过门禁并在[验证报告](verification-report.md)留痕。
+
+整改资产已提交到 `feature/showroom-overhaul` 分支（四片：domain 契约、UI 重构、门禁脚本、文档），原分支 `feature/daymark-ui-alignment` 保持在 `f18acad` 未动。新克隆可直接跑全部结构门禁，见验证报告首节。当前进度：L0–L4 完成；L5 进行中——内核补丁清单已按真实源码修正，便携包与包内冒烟通过（40 文件、8 条路由、exit 0），全量回归 76/77（1 项受 hosts 环境阻塞）。功能映射 G1 完成：35 条 U40 任务全部映射，`RESERVED` 从 21 条降到 6 条。
+
+C 项的评估结论：`hotkeys` 不需要类型迁移。它的校验（`parseHotkeys`）本就在 `domain/HotkeyBindings.cpp`，`ProfileStore` 只是调用；与 `connection_view` 不同，后者此前把规则写在存储层、现已迁入类型。因此 C 的"校验归类型自身"对两处设置都已成立，不为此改动持久化结构。
+
+已接线的契约（接线后旧实现删除，不再并存）：
+
+| 契约 | 接线点 | 证据 |
+|---|---|---|
+| `app/SessionGate.h` | 控制器统一构造点；13 处判断改为 `blocks()`/`skipsProxyRestore()`/`cleanupPending()` | `leasePending()` 直接调用点 13 → 2（度量脚本断言） |
+| `domain/CleanupState.h` | 由 `SessionGate::cleanupState()` 消费 | 闸门的清理判定只经枚举 |
+| `domain/ConnectionViewPrefs.h` | `Storage::validateConnectionView` 改为转发，旧内联校验删除 | `connection_view_tests` 通过（1 例受剪贴板环境影响） |
+| `domain/ErrorCategory.h` | `AppController::finish` 分类后发出 `operationClassified`；状态栏按类别补恢复提示（只进 tooltip，不改可见文案） | `rejectedConfigEmitsErrorCategory` 断言拒绝类配置导入产出 `Rejected` |
+
+未接线部分（按原则 6 登记）：
+
+| 契约 | 现状 | owner | 退出判据 |
+|---|---|---|---|
+| `ErrorCategory` 的 6 个运行时码值 | 已登记但全仓无生产者：`DOWNLOAD_FAILED`、`BUSY`、`PORT_CONFLICT`、`READ_ONLY`、`CLEANUP_REQUIRED`、`VERSION_CONFLICT` | app | 在对应真实失败点写入 `data["code"]`，并从 `measure-architecture.py` 的 `EXPECTED_UNWIRED_CODES` 逐条删除 |
+
+该债务由机器看守：脚本统计"在 `ErrorCategory.cpp` 之外不出现的已登记码值"，集合与 `EXPECTED_UNWIRED_CODES` 不一致即失败——**接线后不清债务表同样失败**。
+
 ## 当前版本
 
 - [源码版本](../CMakeLists.txt)为 **1.23.0**，汇总 U30–U40 界面改动。已分发 [v1.23.0 Windows x64 预发布](https://github.com/downdone/mlash/releases/tag/v1.23.0)，发行资格标记为 `release_qualified=false`。
 
 ## 当前任务
+
+**总览与代理页面精修已完成本地实现与验收。** 补足两条链路的运行摘要，修复稀疏页面排版和侧栏折叠入口，拆分代理节点页并精简运行首行，补充项目原则和设计方法。Windows 默认回归、两档原生缩放与便携包解压冒烟通过。 [设计与验收](design/mihomo-wireguard-ui.md#总览与页面定位精修) · [验证结果](verification-report.md#总览与代理页面精修)
+
+**代理与隧道一级工作区已完成本地实现与验收。** 分段导航、独立链路状态点、总览与按链路查看数据已接入 Qt。代理运行页收起系统接管行，入口归「更多」。Windows 默认回归、两档原生截图与便携包解压冒烟通过。 [设计与验收](design/mihomo-wireguard-ui.md#代理与隧道一级工作区) · [验证结果](verification-report.md#代理与隧道一级工作区)
+
+**双内核界面盲审整改已完成本地实现与验收。** 首页和流量按链路分组，配置卡区分选用与运行，完成服务、版本、节点空态、页签和 Peer 表格精修。Windows 默认回归通过，复核两档原生缩放截图并完成便携预览包解压冒烟。 [根因与设计](design/mihomo-wireguard-ui.md#独立盲审整改) · [验证结果](verification-report.md#双内核盲审整改)
 
 **双内核 Qt 界面已完成本地实现、回归和便携预览。** 同一配置列表按类型分流到专属详情，首页独立操作，数据页分开采样，设置支持权限状态与清理确认。完成宽窄两档、150%／200% DPI 原生截图和包内冒烟。系统网络仍待隔离 VM 验收。 [界面设计](design/mihomo-wireguard-ui.md#qt-交付设计) · [验证结果](verification-report.md#双内核-qt-界面交付)
 

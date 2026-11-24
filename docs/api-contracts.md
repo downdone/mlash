@@ -94,6 +94,21 @@ U06 增加按页可见性获取规则/连接（ADR 0009）。连接 GET 返回�
 不使用WebSocket或磁盘历史，不采集系统全局网络流量。ADR 0017接受同一连接页可见会话内最多1000条离开快照记录；差值速率遇首次/回退/超过10s缺口为未知。隐藏/离页清空并丢弃旧响应，不据此推断TCP原因。
 规则视图只在规则页的“当前内核规则”页签可见时读取；隐藏/离页/切回编辑器/GUI 销毁清空视图并丢弃旧可见性代次响应。规则保存的事务回读是独立的 Controller 操作，不依赖 GUI 是否继续存在。
 
+## 错误类别
+
+失败结果可携带结构化码值（`Result.data["code"]`）。码值说明"哪里错了"，类别说明"调用方该怎么做"，映射表在 `src/domain/ErrorCategory.h`，由 `categorizeError()` 查询；未登记的码值一律返回 `unspecified`，不猜测。
+
+| 类别 | 含义 | 典型码值 |
+|---|---|---|
+| `rejected` | 输入或配置被拒绝，用户需要修改内容 | `UNSUPPORTED_FIELD`、`PROXY_*`、`RULE_*`、`DNS_*`、`HALFCLOSE_*`、`YAML_SYNTAX`、`NODE_LINK`、`CUSTOM_RULE` |
+| `retryable` | 暂时性失败，可原样重试 | `DOWNLOAD_FAILED`、`BUSY` |
+| `user_action` | 需要用户处理环境或确认 | `PORT_CONFLICT`、`READ_ONLY`、`CLEANUP_REQUIRED` |
+| `reload` | 上下文已变化，需重新读取后再操作 | `VERSION_CONFLICT` |
+| `internal` | 程序缺陷或不可恢复状态 | 暂无 |
+| `unspecified` | 未登记，只能展示文本 | — |
+
+控制器在 `finish()` 中分类并发出 `operationClassified(category, code)`，不改变 `operationFinished` 的签名；界面按类别补充恢复提示。当前有 6 个码值只登记未接线（见[项目状态](project-status.md)），由度量脚本看守。
+
 ## 常见目标响应测试（U18）
 
 WebsiteTests 仅对具体叶子调用现有 `/proxies/{name}/delay`，url为内置HTTPS目标、timeout=5000，客户端6s；并发3、定义上限24，成功要求delay为0–65535整数。每目标结果/错误独立，不发nodeDelay；取消局部abort，代次和QPointer丢弃旧回调。无选择PUT、无组测速/解除固定DELETE。

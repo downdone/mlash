@@ -11,7 +11,7 @@ Windows GUI 入口在创建 `QApplication` 前选择 Qt Windows 插件的 FreeTy
 ```mermaid
 flowchart TD
   Domain[domain / 纯值对象与有界校验]
-  UI[Qt Widgets 四分区 / 五主视图 / 数据四页签 / 按需创建窗口] --> C[AppController 唯一状态写入者]
+  UI[Qt Widgets 总览 / 配置 / 代理与隧道 / 设置] --> C[AppController 唯一状态写入者]
   C --> Domain
   P --> Domain
   S --> Domain
@@ -37,7 +37,7 @@ flowchart TD
 便携包包含客户端、按需安装的 MlashTunService 和所管理的 mihomo；测试程序、Qt Test 和 yaml-cpp 源码不打包。
 Mlash.exe 的 FileDescription 和 ProductName 均为 Mlash。mihomo 仍是 QProcess 启动的独立子进程，
 普通模式使用 Windows Job 管理生命周期；TUN 模式由单独 SCM 权限服务拥有 Job。服务保留安装但核心绑定客户端心跳/管道，不能脱离客户端无限运行。任务管理器分组显示不是父子进程契约。
-界面不持有 Windows 句柄、文件事务或子进程；所有动作通过 Controller 方法。一级导航按首页/配置/数据/设置组织，内部使用五个主视图与数据四页签，历史八页入口由 ViewIds 适配；规则属于配置详情，跨页导航同步页签及分区，不增加持久化字段。
+界面不持有 Windows 句柄、文件事务或子进程。一级导航由全局入口与代理、隧道工作区组成。Route 的工作区作用域控制共享数据页的视图和采样，WorkspaceBookmark 作为 GuiHost 会话书签保存入口与滚动位置。历史八页入口由 ViewIds 适配，规则属于配置详情。切换工作区只更改界面路由，运行状态以 Controller 为准。 [ADR 0060](adr/0060-proxy-tunnel-workspaces.md)
 
 配置页由 `ProfileRowModel` 提供数据，`ProfileCardWidget` 在网格或单列中呈现远程或本地配置。卡片主体打开编辑工作区。使用和检查更新各有独立动作，查看更新进入候选比较及应用流程。`MainWindow` 负责将动作路由至 Controller 或对应工作区。内容工作区按配置 ID 管理节点、规则、DNS、拨号链、规则源和兼容性，各任务保留自身草稿。列表排序属于集合工具，回滚属于来源维护。
 
@@ -50,6 +50,8 @@ U18：整组延迟由 Controller 有界队列调度 12 个异步请求，MihomoC
 `mlash_domain` 是独立静态库，提供通用状态类型与不触发 I/O 的校验；`mlash_engine` 依赖它。原 `app/Types.h`、`app/ConnectionColumns.h` 转发头已移除，消费者直接包含 domain 契约。`CoreApi` 描述现有核心能力；`MihomoClient` 是唯一特化，在 `MihomoEndpoints.cpp` 集中定义 REST 方法与路径。版本、运行配置和代理组响应用 `CoreDtos` 严格解析；其他端点保留有界 `Result`/JSON。Controller 持有具体实现并负责业务回读，进程管理和只读采样依赖能力接口。UI 控件、节点模型和委托分别在所属头文件中；原 `MainWindowParts.h`、`WindowUiBasics.h`、`WindowUiIncludes.h` 聚合头已移除，主窗口实现按外壳、数据、反馈、状态、导航和各页面分文件。`PageRouter` 以 `QPointer` 观察由主窗口持有的页面生命周期对象，销毁后不再调用悬空指针。`ui/design` 提供只读语义规格与 Shadowrocket 取值，`UiTheme` 是 Qt 外观适配和兼容桥，页面分组仍由布局与交互契约定义，见 [ADR 0056](adr/0056-independent-ui-design-system.md)。此结构仍保留单个 `AppController` 状态写入者及现有轻量销毁语义，见 [ADR 0055](adr/0055-domain-contracts-and-ui-components.md)。
 
 UI 公开头只前向声明 `AppController`，在需要调用命令的实现文件中才包含完整定义。`MainWindow.h` 只暴露 domain 状态类型和页面成员，不把内核、存储、平台的实现头经 UI 头继续传递。
+
+控制器头同理：`AppController.h` 对仅按指针持有的服务（`ProfileStore`、`SubscriptionDownloader`、`WebDavClient`、`GlobalHotkeys`、`ProxyCoordinator`）只做前置声明，析构在 `.cpp` 定义；使用这些服务的翻译单元必须自己 include 对应头，不得依赖控制器的传递包含。度量脚本的 `controller_direct_includes` 与 `controller_header_closure` 看守这两件事。
 
 ## 2. 模块契约
 

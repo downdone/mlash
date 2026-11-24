@@ -1,5 +1,7 @@
 # U40 Mlash 功能清单与入口映射
 
+> **状态：U40 时期提案。** 下面的 35 条任务与「U40 主要入口」列记录 1.22.0 预览阶段的提案和当时拟议入口，不代表当前实现或当前编号。当前功能编号与主容器映射以[需求与验证映射](../requirements-traceability.md)为准：其中 32 条已映射到已登记容器（编号 `F-U40-01`–`F-U40-35`），`F14` 拨号链、`F32` 快捷键、`F33` 外观因缺容器标识暂未映射，等待决定是否新增登记值。
+
 按用户可完成的任务清点 1.22.0 Windows 工作区。组合在同一行的操作共享对象和归属。右列是 U40 提议的主要入口，用于核查能力迁移。当前实现和约束参照[交互契约](../ui-interactions.md)、[功能模块契约](../development/feature-contracts.md)、[需求映射](../requirements-traceability.md)及 [Controller 命令入口](../../src/app/AppController.h)。交付判据见[重新设计方案](u40-ios-daymark-polish.md)。
 
 | 编号 | 现有用户任务 | U40 主要入口 |
