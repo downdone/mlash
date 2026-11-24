@@ -2,16 +2,19 @@
 
 ## 提交基线与新克隆复核
 
-2026-11-24。把整改资产按四片提交到分支 `feature/showroom-overhaul`（原分支 `feature/daymark-ui-alignment` 未改动），并验证"新克隆能跑门禁"。
+2026-11-24。提交拆成五片，其中**第一片单独承载此前未提交的 UI 工作**，后四片是本次整改。原分支 `feature/daymark-ui-alignment` 未改动，整改在新分支 `feature/showroom-overhaul` 上。
 
 ```text
-870e0c3 feat(domain): add cleanup, error-category and connection-view contracts
-0c0cbe7 refactor(ui): extract smoke runner, drawer module and container registry
-3087cbb build: add architecture, contract and feature-mapping gates
-cb11c6b docs: record architecture principles, gates and verification evidence
+7d904ab feat(ui): finish dual-engine workspaces and overview pages      （33 文件，+1888/−289，整改前的 UI 工作）
+c8e4c52 feat(domain): add cleanup, error-category and connection-view contracts
+190fa82 refactor(ui): extract smoke runner, drawer module and container registry
+f1f8698 build: add architecture, contract and feature-mapping gates
+f5c6efe docs: record architecture principles, gates and verification evidence
 ```
 
-说明：工作树里混有本次整改之前就存在的 UI 改动（`MainWindowWorkspaces.cpp`、`ProxyNodesPage.*`、`adr/0060` 等），无法按作者拆分，因此按目录分片提交并在此声明。要撤销：`git switch feature/daymark-ui-alignment`（原分支仍指向 `f18acad`），或对新分支执行 `git reset --hard f18acad`。
+拆分约束与残留：`main.cpp`、`MainWindow.cpp`、`MainWindow.h`、`CMakeLists.txt`、四份测试文件与六份文档里两边改动交织，无法在不重写内容的前提下按作者完全切开。处理方式是：把三个 UI 文件与四份测试文件中**属于本次整改的编辑临时还原**后提交第一片（`MainWindow.cpp/h` 的状态栏分类分支、四个测试文件的直接 include 已还原），再在后续切片里重新应用；`main.cpp`、`CMakeLists.txt` 与文档的少量原有改动随对应切片提交。
+
+要撤销：`git switch feature/daymark-ui-alignment`（原分支仍指向 `f18acad`），或对整改分支执行 `git reset --hard f18acad`。
 
 新克隆复核（`git clone -b feature/showroom-overhaul`，706 个文件）实际输出：
 
