@@ -61,6 +61,8 @@ private slots:
         QVERIFY(gate.cleanupPending());
         gate.tunnelActive = true;
         QVERIFY(!gate.cleanupPending());
+        QCOMPARE(gate.cleanupState(), CleanupState::Active);
+        QVERIFY(!canStartSession(gate.cleanupState()));
         gate.tunnelActive = false;
         gate.connecting = true;
         QVERIFY(!gate.cleanupPending());

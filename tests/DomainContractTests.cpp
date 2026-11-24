@@ -50,11 +50,14 @@ private slots:
         QVERIFY(canStartSession(CleanupState::Confirmed));
         QVERIFY(!canStartSession(CleanupState::Pending));
         QVERIFY(!canStartSession(CleanupState::Failed));
+        // 隧道仍在运行时租约被占用，不能再开第二个会话。
+        QVERIFY(!canStartSession(CleanupState::Active));
     }
 
     void cleanupStateNamesAreStableAndDistinct() {
         const QList<CleanupState> all{CleanupState::None, CleanupState::Pending,
-                                      CleanupState::Confirmed, CleanupState::Failed};
+                                      CleanupState::Confirmed, CleanupState::Failed,
+                                      CleanupState::Active};
         QSet<QString> names;
         for (const auto state : all) {
             const auto name = cleanupStateName(state);

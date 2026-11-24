@@ -1,5 +1,30 @@
 # 验证报告
 
+## 复核整改：契约语义与文档事实
+
+2026-11-24。两轮独立复核（重构复核、缺口分析）之后的修正。
+
+代码修正：
+
+- `CleanupState` 增加 `Active`：原实现把"隧道仍在运行"映射成 `None`，而 `None` 被定义为"无租约、可直接开始"，于是 `canStartSession(cleanupState())` 在隧道运行时会返回允许——与文档"只看 canStartSession"直接矛盾。现在 `active` 被明确定义并拒绝；`SessionGate::cleanupState()` 返回 `none`/`pending`/`active`，`confirmed`/`failed` 仍来自服务回执。
+- 度量脚本新增 `error_codes_unregistered`：原检查只查"已登记码值有没有生产者"，不查"生产者写出的码值有没有登记"，因此随手新增 `reject("NEW_CODE")` 不会被发现。现在解析 `ConfigBuilder` 的 `reject("…")`、`RuleDraft` 的 `bad(…,"…")` 与 `NodeLinks` 的 `code` 键，缺登记即失败。
+
+文档修正（复核指出的不实表述）：
+
+- 删除"债务表清空"——6 个运行时码值仍无生产者，项目状态与脚本口径一致。
+- `connection_view_tests` 记录由"15 过 1 失败"更正为"16 项全部通过"（拆分后已复测）。
+- 项目状态的全量回归由"76/77（hosts 阻塞）"更正为"78/78（77 执行 + 1 按门禁跳过）"，并删除已被代码证伪的 hosts 归因。
+- 新克隆文件数 706 → 710；`main.cpp` 169 → 110；程序基线表按 `--json` 重算（314 文件 / 26,469 行 / 79 条 CTest / 41 个依赖 TU / 306 条跨模块边 / 33 个容器 / 35 条 U40 映射 / 6 条 RESERVED）；原则数量统一为十三条。
+
+实测：
+
+```text
+mlash_domain_contract_tests   15 passed, 0 failed
+mlash_session_gate_tests      12 passed, 0 failed
+measure-architecture --check  0 drift（新增 error_codes_unregistered=0）
+cmake --build … Mlash         exit=0
+```
+
 ## 最终回归与推送基线
 
 2026-11-24。整改完成后的完整回归：
@@ -57,7 +82,7 @@ f5c6efe docs: record architecture principles, gates and verification evidence
 
 要撤销：`git switch feature/daymark-ui-alignment`（原分支仍指向 `f18acad`），或对整改分支执行 `git reset --hard f18acad`。
 
-新克隆复核（`git clone -b feature/showroom-overhaul`，706 个文件）实际输出：
+新克隆复核（`git clone -b feature/showroom-overhaul`，710 个文件）实际输出：
 
 ```text
 python scripts/check_docs.py                     161 Markdown files, 0 findings
@@ -207,7 +232,7 @@ ctest --output-on-failure                77 项：76 通过、1 失败（system_
 
 ## ErrorCategory 接线：分类进入结果流
 
-2026-11-24。最后一条"已设计未实现"契约接线完成，债务表清空。
+2026-11-24。类别骨架与信号接线完成。**债务并未清空**：6 个运行时码值仍无生产者，登记在[项目状态](project-status.md)并由度量脚本看守。
 
 设计取舍：不改 `operationFinished` 签名——它被 100+ 处 `QSignalSpy` 断言依赖，加参数会成片打碎既有测试。改为**新增独立信号** `operationClassified(ErrorCategory, code)`，在 `finish()` 中仅当失败带有已登记码值时发出；状态栏按类别把恢复提示写进 tooltip，可见文案保持不变。
 
@@ -320,7 +345,7 @@ cmake --build build/windows-mingw --target mlash_tun_tests mlash_workflow_depth_
 
 mlash_tun_tests.exe                 Totals: 11 passed, 0 failed    （28767ms）
 mlash_workflow_depth_tests.exe      Totals: 17 passed, 0 failed    （15177ms）
-mlash_connection_view_tests.exe     Totals: 15 passed, 1 failed
+mlash_connection_view_tests.exe     Totals: 15 passed, 1 failed（当时）
   FAIL! connectionContextMenuKeepsItsOriginalIdentity (ConnectionViewTests.cpp:169)
   QWARN OleSetClipboard: Failed to set mime data on clipboard: COM error 0x800401d0
 ```

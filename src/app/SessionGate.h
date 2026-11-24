@@ -30,11 +30,11 @@ struct SessionGate {
     bool connecting = false;    // 正在建立隧道
 
     // 租约存在但隧道已停：清理结果尚未确认。
-    // Confirmed/Failed 由服务端清理回执决定，这两个布尔观测无法推导，故此处只可能得到
-    // None（无租约或隧道仍在跑）或 Pending（已停但未确认）。
+    // 隧道仍在运行或正在建立时是 Active（不能开始第二个会话），不是 None。
+    // Confirmed/Failed 由服务端清理回执决定，这三个布尔观测推不出来。
     CleanupState cleanupState() const {
         if (!leaseHeld) return CleanupState::None;
-        if (tunnelActive || connecting) return CleanupState::None;
+        if (tunnelActive || connecting) return CleanupState::Active;
         return CleanupState::Pending;
     }
 

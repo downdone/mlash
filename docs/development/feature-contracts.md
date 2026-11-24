@@ -8,9 +8,9 @@ UiTheme拥有语义视觉；WidgetStyle以单一应用级过滤器记录输入�
 
 ## 会话清理状态
 
-系统网络资源（TUN 接口、路由、DNS 租约）的清理状态由 `domain/CleanupState.h` 的枚举表达：`none`（无租约）、`pending`（有租约且隧道已停、尚未确认）、`confirmed`、`failed`。`SessionGate` 的 `cleanupState()` 由租约与运行标志推导，只可能得到 `none` 或 `pending`——`confirmed`/`failed` 来自服务的清理回执，观测布尔值推不出来。
+系统网络资源（TUN 接口、路由、DNS 租约）的清理状态由 `domain/CleanupState.h` 的枚举表达：`none`（无租约）、`pending`（有租约且隧道已停、尚未确认）、`active`（租约由正在运行或正在建立的隧道持有）、`confirmed`、`failed`。`SessionGate` 的 `cleanupState()` 由租约与运行标志推导，可能得到 `none`、`pending` 或 `active`；`confirmed`/`failed` 来自服务的清理回执，观测布尔值推不出来。
 
-能否开始新接管只看 `canStartSession(state)`：`pending` 与 `failed` 一律拒绝。三类语义分开，不合并成一个 `isBlocked()`：`blocks(intent)` 拒绝用户动作并给出就近原因；`skipsProxyRestore()` 是静默跳过（恢复代理意图在租约期间不执行，不算失败）；`cleanupPending()` 是派生观测，供界面显示"待清理"。契约头见 [`SessionGate.h`](../../src/app/SessionGate.h)。
+能否开始新接管只看 `canStartSession(state)`：只有 `none` 与 `confirmed` 允许，`pending`、`failed`、`active` 一律拒绝——隧道运行中不能开第二个会话。三类语义分开，不合并成一个 `isBlocked()`：`blocks(intent)` 拒绝用户动作并给出就近原因；`skipsProxyRestore()` 是静默跳过（恢复代理意图在租约期间不执行，不算失败）；`cleanupPending()` 是派生观测，供界面显示"待清理"。契约头见 [`SessionGate.h`](../../src/app/SessionGate.h)。
 
 ## 订阅批量维护
 

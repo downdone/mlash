@@ -34,7 +34,7 @@ LARGE_FILE_LINES = 600
 # 基线绑定工作树快照（2026-11-24，未提交状态）；提交后需在目标提交上重算并更新。
 BASELINE: dict[str, int] = {
     "source_files": 314,
-    "source_lines": 26469,
+    "source_lines": 26471,
     "controller_header_lines": 444,
     "controller_public_prototypes": 119,
     "controller_public_inline": 4,
@@ -59,6 +59,7 @@ BASELINE: dict[str, int] = {
     "controller_header_closure": 30,
     "controller_direct_includes": 19,
     "error_codes_unwired": 6,
+    "error_codes_unregistered": 0,
 }
 
 
@@ -190,6 +191,29 @@ def error_wiring(files: list[Path]) -> list[str]:
     return sorted(unwired)
 
 
+def unregistered_producer_codes() -> list[str]:
+    """生产者写出、但登记表没有的码值。
+
+    error_wiring() 只查"已登记码值有没有生产者"；反过来这个方向同样要守住，
+    否则新增一个随手写的 reject("NEW_CODE") 不会被任何检查发现。
+    """
+    registry = SRC / "domain" / "ErrorCategory.cpp"
+    known = set(re.findall(r'\{"([A-Z0-9_]+)",\s*ErrorCategory::', registry.read_text(encoding="utf-8")))
+    patterns = {
+        SRC / "profile" / "ConfigBuilder.cpp": r'reject\(\s*"([A-Z0-9_]+)"',
+        SRC / "profile" / "RuleDraft.cpp": r'bad\([^,]+,[^,]+,\s*"([A-Z0-9_]+)"',
+        SRC / "profile" / "NodeLinks.cpp": r'"code"\s*,\s*"([A-Z0-9_]+)"',
+    }
+    missing = set()
+    for path, pattern in patterns.items():
+        if not path.is_file():
+            continue
+        for code in re.findall(pattern, path.read_text(encoding="utf-8", errors="replace")):
+            if code not in known:
+                missing.add(code)
+    return sorted(missing)
+
+
 def debt_markers(files: list[Path]) -> dict[str, int]:
     """租约闸门直连点：应集中在 SessionGate 构造与适配器声明处（目标 ≤ 2）。"""
     calls = sum(
@@ -253,6 +277,7 @@ def collect() -> dict[str, int]:
     metrics["controller_header_closure"] = header_closure("src/app/AppController.h")
     metrics["controller_direct_includes"] = direct_project_includes("src/app/AppController.h")
     metrics["error_codes_unwired"] = len(error_wiring(files))
+    metrics["error_codes_unregistered"] = len(unregistered_producer_codes())
     coverage = module_coverage(files)
     metrics["qobject_headers_without_impl"] = coverage["qobject_headers_without_impl"]
     metrics["files_over_600_lines"] = coverage["files_over_600_lines"]

@@ -11,6 +11,7 @@ enum class CleanupState : quint8 {
     Pending = 1,    // 存在租约但未确认清理，必须先确认
     Confirmed = 2,  // 清理已确认，可开始
     Failed = 3,     // 清理失败，需人工处理
+    Active = 4,     // 租约由正在运行的隧道持有，不能开始第二个会话
 };
 
 constexpr bool canStartSession(CleanupState state) noexcept {
@@ -24,6 +25,7 @@ inline QString cleanupStateName(CleanupState state) {
     case CleanupState::Pending: return QStringLiteral("pending");
     case CleanupState::Confirmed: return QStringLiteral("confirmed");
     case CleanupState::Failed: return QStringLiteral("failed");
+    case CleanupState::Active: return QStringLiteral("active");
     }
     return QStringLiteral("unknown");
 }

@@ -4,7 +4,7 @@
 
 按[架构优化项清单](design/architecture-optimization-program.md)的层级顺序整改，用户已授权并行切片；每片仍须独立过门禁并在[验证报告](verification-report.md)留痕。
 
-整改资产已提交到 `feature/showroom-overhaul` 分支（四片：domain 契约、UI 重构、门禁脚本、文档），原分支 `feature/daymark-ui-alignment` 保持在 `f18acad` 未动。新克隆可直接跑全部结构门禁，见验证报告首节。当前进度：L0–L4 完成；L5 进行中——内核补丁清单已按真实源码修正，便携包与包内冒烟通过（40 文件、8 条路由、exit 0），全量回归 76/77（1 项受 hosts 环境阻塞）。功能映射 G1 完成：35 条 U40 任务全部映射，`RESERVED` 从 21 条降到 6 条。
+整改资产已提交到 `feature/showroom-overhaul` 分支（共 10 个提交：1 个既有 UI 工作 + 9 个整改/测试/文档），原分支 `feature/daymark-ui-alignment` 保持在 `f18acad` 未动。新克隆可直接跑全部结构门禁，见验证报告首节。当前进度：L0–L4 完成；L5 进行中——内核补丁清单已按真实源码修正，便携包与包内冒烟通过（40 文件、8 条路由、exit 0），全量回归 78/78（77 项执行，`system_test_guard` 按门禁跳过）。功能映射 G1 完成：35 条 U40 任务全部映射，`RESERVED` 从 21 条降到 6 条。
 
 C 项的评估结论：`hotkeys` 不需要类型迁移。它的校验（`parseHotkeys`）本就在 `domain/HotkeyBindings.cpp`，`ProfileStore` 只是调用；与 `connection_view` 不同，后者此前把规则写在存储层、现已迁入类型。因此 C 的"校验归类型自身"对两处设置都已成立，不为此改动持久化结构。
 
@@ -14,7 +14,7 @@ C 项的评估结论：`hotkeys` 不需要类型迁移。它的校验（`parseHo
 |---|---|---|
 | `app/SessionGate.h` | 控制器统一构造点；13 处判断改为 `blocks()`/`skipsProxyRestore()`/`cleanupPending()` | `leasePending()` 直接调用点 13 → 2（度量脚本断言） |
 | `domain/CleanupState.h` | 由 `SessionGate::cleanupState()` 消费 | 闸门的清理判定只经枚举 |
-| `domain/ConnectionViewPrefs.h` | `Storage::validateConnectionView` 改为转发，旧内联校验删除 | `connection_view_tests` 通过（1 例受剪贴板环境影响） |
+| `domain/ConnectionViewPrefs.h` | `Storage::validateConnectionView` 改为转发，旧内联校验删除 | `connection_view_tests` 16 项全部通过 |
 | `domain/ErrorCategory.h` | `AppController::finish` 分类后发出 `operationClassified`；状态栏按类别补恢复提示（只进 tooltip，不改可见文案） | `rejectedConfigEmitsErrorCategory` 断言拒绝类配置导入产出 `Rejected` |
 
 未接线部分（按原则 6 登记）：
